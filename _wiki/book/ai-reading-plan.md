@@ -3,7 +3,7 @@ layout  : wiki
 title   : 2026년 AI 책 읽기
 summary : AI 관련 도서 읽기 및 현황 정리
 date    : 2026-01-01 09:19:27 +0900
-updated : 2026-01-01 10:02:14 +0900
+updated : 2026-01-01 10:04:23 +0900
 tag     : book ai llm learning
 toc     : true
 public  : true
@@ -28,7 +28,38 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 ## 📊 진행 현황
 - 전체 책 수: **24권**
 - 완료: **1권**
-- 진행률: **0%** <progress value="1" max="24" style="width:300px;height:20px;"></progress> 
+- 진행률: **0%**
+
+<div class="gauge">
+  <progress value="5" max="24"></progress>
+  <div class="label">21%</div>
+</div>
+
+<style>
+.gauge{
+  position:relative;
+  width:300px;
+  height:20px;
+}
+.gauge progress{
+  width:100%;
+  height:100%;
+}
+.gauge .label{
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:12px;
+  font-weight:bold;
+  color:black;
+}
+</style>
+
 
 ---
 
