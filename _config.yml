@@ -1,15 +1,15 @@
 # Site settings
 title: 기록 남기기
-url: "https://kcs0213.github.io"
+url: "https://johklo.github.io"
 baseurl: ""
 description: >
     JK Blog
 
 # My information
-email: johnkim3@yahoo.com
+email: john.chu.kim@yahoo.com
 author: John Kim
 profile: John
-github_username: kcs0213
+github_username: johklo
 comment-support: utterances
 
 # Build settings
@@ -40,7 +40,7 @@ disqus:
   id: roundrush
   shortname: roundrush
 utterances:
-  repo: kcs0213/kcs0213.github.io
+  repo: johklo/johklo.github.io
   issue-term: url
   label: Comment
   branch: master
@@ -52,9 +52,9 @@ google_analytics:
 google_adsense:
   client: SAMPLE-VALUE
 
-blame: "https://github.com/kcs0213/kcs0213.github.io/blame/master/_wiki"
-edit: "https://github.com/kcs0213/kcs0213.github.io/edit/master/_wiki"
-issue: "https://github.com/kcs0213/kcs0213.github.io/issues/new"
+blame: "https://github.com/johklo/johklo.github.io/blame/master/_wiki"
+edit: "https://github.com/johklo/johklo.github.io/edit/master/_wiki"
+issue: "https://github.com/johklo/johklo.github.io/issues/new"
 
 timezone: "Asia/Seoul"
 
