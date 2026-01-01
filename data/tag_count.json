@@ -1,11 +1,15 @@
 [
  {
+  "name": "ai",
+  "size": 1
+ },
+ {
   "name": "blog",
   "size": 5
  },
  {
   "name": "book",
-  "size": 4
+  "size": 5
  },
  {
   "name": "devops",
@@ -17,6 +21,14 @@
  },
  {
   "name": "latex",
+  "size": 1
+ },
+ {
+  "name": "learning",
+  "size": 1
+ },
+ {
+  "name": "llm",
   "size": 1
  }
 ]
