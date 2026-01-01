@@ -3,7 +3,7 @@ layout  : wiki
 title   : 2026년 AI 책 읽기
 summary : AI 관련 도서 읽기 및 현황 정리
 date    : 2026-01-01 09:19:27 +0900
-updated : 2026-01-01 09:44:39 +0900
+updated : 2026-01-01 10:02:14 +0900
 tag     : book ai llm learning
 toc     : true
 public  : true
@@ -27,19 +27,8 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 
 ## 📊 진행 현황
 - 전체 책 수: **24권**
-- 완료: **0권**
-- 진행률: **0%**
-
-<progress value="0" max="24" style="width:300px;height:20px;"></progress>
-
----
-
-## ✔ 체크 규칙
-| 상태 | 의미 |
-|------|------|
-| [ ]  | 아직 안 읽음 |
-| [-]  | 일부 읽음 / 진행 중 |
-| [x]  | 완독 |
+- 완료: **1권**
+- 진행률: **0%** <progress value="1" max="24" style="width:300px;height:20px;"></progress> 
 
 ---
 
@@ -54,7 +43,7 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 ---
 
 ### 🔹 Development / Engineering / Applications
-- [ ] AI Engineering  
+- [x] AI Engineering  
 - [ ] The Agentic AI Bible  
 - [ ] AI Agents in Action  
 - [ ] Quick Start Guide to Large Language Models  
@@ -62,7 +51,7 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 - [ ] Building LLM Powered Applications  
 - [ ] Generative AI with LangChain  
 - [ ] LangChain Crash Course 
-- [ ] The AI Engineering Bible
+- [-] The AI Engineering Bible
 
 ---
 
