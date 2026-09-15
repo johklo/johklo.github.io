@@ -1,6 +1,7 @@
 {
-  "salt": "xwexIMJ4/xZ2wsBfHnIujQ==",
-  "iv": "oalYrFibrvJTFKs0",
+  "salt": "Sm3WK18Z1rHiAlN/3bxO7g==",
+  "iv": "zwlNjPAkOU/FY55c",
   "iterations": 310000,
-  "algorithm": "AES-256-GCM / PBKDF2-SHA256"
+  "algorithm": "AES-256-GCM / PBKDF2-SHA256",
+  "hint": "평소 쓰는 암호"
 }
