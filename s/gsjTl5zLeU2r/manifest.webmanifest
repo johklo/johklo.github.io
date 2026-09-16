@@ -1,0 +1,20 @@
+{
+  "name": "감정평가사 1차 기출 풀이",
+  "short_name": "감평 기출",
+  "description": "감정평가사 1차 역대 기출문제를 오프라인에서 풀 수 있는 학습 앱",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1f2933",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
