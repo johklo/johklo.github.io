@@ -1,6 +1,6 @@
 {
-  "salt": "PrGVaR+lTWT9uOnQ1ds0mA==",
-  "iv": "CsQhJeuRbw4o0y7w",
+  "salt": "nXdjqx+N3Ghc/MUHqYisqA==",
+  "iv": "RHBV4OMLDAPdeBRQ",
   "iterations": 310000,
   "algorithm": "AES-256-GCM / PBKDF2-SHA256"
 }
