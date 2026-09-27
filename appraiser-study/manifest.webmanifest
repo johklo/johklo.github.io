@@ -1,0 +1,20 @@
+{
+  "name": "공부노트 — 감정평가사 2027",
+  "short_name": "공부노트",
+  "description": "강의 읽기, 수식과 개념 암기, 기출과 모의고사를 연결하는 개인 학습실",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f2e9",
+  "theme_color": "#f5f2e9",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
