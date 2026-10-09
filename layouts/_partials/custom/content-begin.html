@@ -1,11 +1,16 @@
 {{- if .IsSection -}}
   {{- with .Description }}<p class="section-desc">{{ . }}</p>{{ end -}}
-  {{- with .File -}}
-    {{- $dir := strings.TrimSuffix "/" (replace .Dir "\\" "/") -}}
-    {{- $tpl := printf "---\ntitle: \"새 문서\"\ndescription: \"\"\ndate: %s\ntags: []\n---\n\n## 개요\n\n" (now.Format "2006-01-02") -}}
-    {{- $query := replace (querify "filename" "new-doc.md" "value" $tpl) "+" "%20" -}}
-    <p class="new-doc">
-      <a href="https://github.com/johklo/johklo.github.io/new/master/content/{{ $dir }}?{{ $query | safeURL }}" target="_blank" rel="noopener">+ 이 카테고리에 새 문서 만들기</a>
-    </p>
-  {{- end -}}
+{{- end -}}
+{{- with .File -}}
+  {{- $repo := "https://github.com/johklo/johklo.github.io" -}}
+  {{- $path := replace .Path "\\" "/" -}}
+  <p class="doc-actions">
+    <a href="{{ $repo }}/edit/master/content/{{ $path }}" target="_blank" rel="noopener">✎ 이 문서 수정하기</a>
+    {{- if $.IsSection }}
+      {{- $dir := strings.TrimSuffix "/" (replace .Dir "\\" "/") -}}
+      {{- $tpl := printf "---\ntitle: \"새 문서\"\ndescription: \"\"\ndate: %s\ntags: []\n---\n\n## 개요\n\n" (now.Format "2006-01-02") -}}
+      {{- $query := replace (querify "filename" "new-doc.md" "value" $tpl) "+" "%20" }}
+      <a href="{{ $repo }}/new/master/content/{{ $dir }}?{{ $query | safeURL }}" target="_blank" rel="noopener">+ 이 카테고리에 새 문서 만들기</a>
+    {{- end }}
+  </p>
 {{- end -}}
