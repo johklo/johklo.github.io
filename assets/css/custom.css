@@ -22,3 +22,9 @@ body {
 .content ul.section-list a {
   font-weight: 600;
 }
+
+.content .new-doc {
+  margin: 0.5rem 0 1.5rem;
+  font-size: 0.875rem;
+}
+

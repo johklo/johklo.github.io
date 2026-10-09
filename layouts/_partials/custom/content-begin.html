@@ -1,3 +1,11 @@
-{{- if and .IsSection .Description -}}
-  <p class="section-desc">{{ .Description }}</p>
+{{- if .IsSection -}}
+  {{- with .Description }}<p class="section-desc">{{ . }}</p>{{ end -}}
+  {{- with .File -}}
+    {{- $dir := strings.TrimSuffix "/" (replace .Dir "\\" "/") -}}
+    {{- $tpl := printf "---\ntitle: \"새 문서\"\ndescription: \"\"\ndate: %s\ntags: []\n---\n\n## 개요\n\n" (now.Format "2006-01-02") -}}
+    {{- $query := replace (querify "filename" "new-doc.md" "value" $tpl) "+" "%20" -}}
+    <p class="new-doc">
+      <a href="https://github.com/johklo/johklo.github.io/new/master/content/{{ $dir }}?{{ $query | safeURL }}" target="_blank" rel="noopener">+ 이 카테고리에 새 문서 만들기</a>
+    </p>
+  {{- end -}}
 {{- end -}}
