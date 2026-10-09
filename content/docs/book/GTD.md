@@ -1,5 +1,5 @@
 ---
-title: (책) Gething Things Done
+title: (책) Getting Things Done
 description: Getting Things Done
 date: 2025-01-03T01:25:00Z
 lastmod: 2025-01-05T01:25:00Z
