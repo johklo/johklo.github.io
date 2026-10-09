@@ -9,7 +9,7 @@ Source for <https://johklo.github.io/>, built with Hugo and the [Hextra](https:/
 | `content/_index.md` | Landing page: projects, docs index, Insight posts, repositories. |
 | `content/docs/` | Notes in Tech / AI / Business / Book / Insight. Each folder is a sidebar category; its `_index.md` is the category page. |
 | `content/about.md` | About page. |
-| `static/appraiser-study/`, `static/s/` | Prebuilt static apps, copied to the site as-is. |
+| `static/notes/`, `static/s/` | Prebuilt static apps, copied to the site as-is. |
 | `static/images/` | Images uploaded from the editor. |
 | `.pages.yml` | Pages CMS editor configuration. |
 | `static/google*.html`, `static/robots.txt` | Search Console verification and crawl policy. |
