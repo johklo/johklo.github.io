@@ -1,0 +1,166 @@
+# Pages CMS configuration: https://pagescms.org/docs/configuration/
+# Edit at https://app.pagescms.org/johklo/johklo.github.io/master (sign in with GitHub).
+media:
+  input: static/images
+  output: /images
+  rename: safe
+  categories: [image]
+
+settings:
+  commit:
+    templates:
+      create: "docs: create {path}"
+      update: "docs: update {path}"
+      delete: "docs: delete {path}"
+      rename: "docs: rename {oldPath} -> {newPath}"
+
+components:
+  title:
+    type: string
+    label: 제목
+    required: true
+  description:
+    type: string
+    label: 한 줄 설명
+  date:
+    type: date
+    label: 작성일
+    options:
+      time: true
+      format: "yyyy-MM-dd'T'HH:mm:ssXXX"
+  lastmod:
+    type: date
+    label: 수정일
+    default: ""
+    options:
+      time: true
+      format: "yyyy-MM-dd'T'HH:mm:ssXXX"
+  tags:
+    type: string
+    label: 태그
+    list: true
+  weight:
+    type: number
+    label: 사이드바 순서 (작을수록 위)
+  math:
+    type: boolean
+    label: 수식 사용
+  draft:
+    type: boolean
+    label: 초안 (게시 안 함)
+  aliases:
+    type: string
+    label: 예전 주소 (리다이렉트)
+    list: true
+  body:
+    type: rich-text
+    label: 본문
+    options:
+      format: markdown
+      switcher: true
+  rawbody:
+    type: code
+    label: 본문 (Markdown)
+    options:
+      language: markdown
+
+content:
+  - name: docs
+    label: 문서
+    type: group
+    items:
+      - name: tech
+        label: Tech
+        type: collection
+        path: content/docs/tech
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: &view
+          fields: [title, date]
+          primary: title
+          sort: [date, title]
+          default: { sort: date, order: desc }
+        fields: &doc_fields
+          - { name: title, component: title }
+          - { name: description, component: description }
+          - { name: date, component: date }
+          - { name: lastmod, component: lastmod }
+          - { name: tags, component: tags }
+          - { name: weight, component: weight }
+          - { name: math, component: math }
+          - { name: draft, component: draft }
+          - { name: aliases, component: aliases }
+          - { name: body, component: body }
+      - name: ai
+        label: AI
+        type: collection
+        path: content/docs/ai
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *view
+        fields: *doc_fields
+      - name: business
+        label: Business
+        type: collection
+        path: content/docs/business
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *view
+        fields: *doc_fields
+      - name: book
+        label: Book
+        type: collection
+        path: content/docs/book
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *view
+        fields: *doc_fields
+      - name: insight
+        label: Insight
+        type: collection
+        path: content/docs/insight
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *view
+        fields: *doc_fields
+
+  - name: pages
+    label: 기본 · 카테고리 페이지
+    type: group
+    items:
+      - name: home
+        label: 홈
+        type: file
+        path: content/_index.md
+        fields:
+          - { name: title, component: title }
+          - { name: description, component: description }
+          - { name: toc, type: boolean, label: 목차 표시 }
+          - { name: body, component: rawbody }
+      - name: about
+        label: About
+        type: file
+        path: content/about.md
+        fields:
+          - { name: title, component: title }
+          - { name: body, component: body }
+      - name: docs-index
+        label: Docs 첫 페이지
+        type: file
+        path: content/docs/_index.md
+        fields: &index_fields
+          - { name: title, component: title }
+          - { name: description, component: description }
+          - { name: weight, type: number, label: 카테고리 순서 }
+          - name: sidebar
+            type: object
+            label: 사이드바
+            fields:
+              - { name: open, type: boolean, label: 펼쳐서 표시 }
+          - { name: aliases, component: aliases }
+          - { name: body, component: rawbody }
+      - { name: tech-index, label: Tech 카테고리 페이지, type: file, path: content/docs/tech/_index.md, fields: *index_fields }
+      - { name: ai-index, label: AI 카테고리 페이지, type: file, path: content/docs/ai/_index.md, fields: *index_fields }
+      - { name: business-index, label: Business 카테고리 페이지, type: file, path: content/docs/business/_index.md, fields: *index_fields }
+      - { name: book-index, label: Book 카테고리 페이지, type: file, path: content/docs/book/_index.md, fields: *index_fields }
+      - { name: insight-index, label: Insight 카테고리 페이지, type: file, path: content/docs/insight/_index.md, fields: *index_fields }

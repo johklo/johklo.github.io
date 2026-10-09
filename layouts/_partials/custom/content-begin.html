@@ -4,22 +4,28 @@
 {{- with .File -}}
   {{- $path := replace .Path "\\" "/" -}}
   {{- $parts := split (strings.TrimSuffix ".md" $path) "/" -}}
-  {{- /* Map the source file to its Sveltia CMS entry (see static/admin/config.yml). */ -}}
-  {{- $cms := "" -}}
+  {{- /* Map the source file to its Pages CMS entry (see .pages.yml). */ -}}
+  {{- $cms := "https://app.pagescms.org/johklo/johklo.github.io/master" -}}
+  {{- $edit := "" -}}
   {{- $new := "" -}}
-  {{- if eq $path "_index.md" }}{{ $cms = "pages/entries/home" -}}
-  {{- else if eq $path "about.md" }}{{ $cms = "pages/entries/about" -}}
-  {{- else if eq $path "docs/_index.md" }}{{ $cms = "pages/entries/docs" -}}
+  {{- if eq $path "_index.md" }}{{ $edit = printf "%s/file/home" $cms -}}
+  {{- else if eq $path "about.md" }}{{ $edit = printf "%s/file/about" $cms -}}
+  {{- else if eq $path "docs/_index.md" }}{{ $edit = printf "%s/file/docs-index" $cms -}}
   {{- else if and (eq (len $parts) 3) (eq (index $parts 0) "docs") -}}
-    {{- $cms = printf "%s/entries/%s" (index $parts 1) (index $parts 2) -}}
-    {{- if $.IsSection }}{{ $new = printf "/admin/#/collections/%s/new" (index $parts 1) }}{{ end -}}
+    {{- $cat := index $parts 1 -}}
+    {{- if $.IsSection -}}
+      {{- $edit = printf "%s/file/%s-index" $cms $cat -}}
+      {{- $new = printf "%s/collection/%s/new" $cms $cat -}}
+    {{- else -}}
+      {{- $edit = printf "%s/collection/%s/edit/%s" $cms $cat (urlquery (printf "content/%s" $path)) -}}
+    {{- end -}}
   {{- end }}
   <p class="doc-actions">
-    {{- with $cms }}
-      <a href="{{ printf "/admin/#/collections/%s" . | safeURL }}">✎ 이 문서 수정하기</a>
+    {{- with $edit }}
+      <a href="{{ . | safeURL }}" target="_blank" rel="noopener">✎ 이 문서 수정하기</a>
     {{- end }}
     {{- with $new }}
-      <a href="{{ . | safeURL }}">+ 이 카테고리에 새 문서 만들기</a>
+      <a href="{{ . | safeURL }}" target="_blank" rel="noopener">+ 이 카테고리에 새 문서 만들기</a>
     {{- end }}
     <a class="doc-actions__alt" href="https://github.com/johklo/johklo.github.io/edit/master/content/{{ $path }}" target="_blank" rel="noopener">GitHub에서 수정</a>
   </p>
