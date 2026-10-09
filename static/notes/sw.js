@@ -4,7 +4,7 @@
  * 비행기 모드·지하철에서도 풀 수 있게 하는 것이 목적이다.
  */
 const SCOPE_PATH = new URL(self.registration.scope).pathname;
-const PREFIX = `studynotes:${SCOPE_PATH}:`;
+const PREFIX = `appraiser-study:${SCOPE_PATH}:`;
 const CACHE = `${PREFIX}v2`;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg'];
 
