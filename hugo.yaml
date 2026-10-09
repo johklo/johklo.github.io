@@ -1,0 +1,126 @@
+baseURL: "https://johklo.github.io/"
+title: "John Kim · Cloud & Tech"
+theme: hextra
+
+locale: ko
+defaultContentLanguage: ko
+hasCJKLanguage: true
+enableRobotsTXT: false  # static/robots.txt is used as-is
+enableGitInfo: true
+timeZone: Asia/Seoul
+
+# Explicit mounts keep the legacy Jekyll `data/` folder out of Hugo's data.
+module:
+  mounts:
+    - source: content
+      target: content
+    - source: layouts
+      target: layouts
+    - source: assets
+      target: assets
+    - source: static
+      target: static
+
+outputs:
+  home: [html]
+  page: [html]
+  section: [html, rss]
+
+markup:
+  highlight:
+    noClasses: false
+  goldmark:
+    renderer:
+      unsafe: true
+    extensions:
+      passthrough:
+        enable: true
+        delimiters:
+          block: [['\[', '\]'], ['$$', '$$']]
+          inline: [['\(', '\)']]
+
+taxonomies:
+  tag: tags
+
+menu:
+  main:
+    - identifier: docs
+      name: Docs
+      pageRef: /docs
+      weight: 1
+    - identifier: blog
+      name: Blog
+      pageRef: /blog
+      weight: 2
+    - identifier: about
+      name: About
+      pageRef: /about
+      weight: 3
+    - name: Search
+      weight: 4
+      params:
+        type: search
+    - name: GitHub
+      weight: 5
+      url: "https://github.com/johklo"
+      params:
+        icon: github
+
+params:
+  description: Cloud and tech work, published in the open.
+
+  navbar:
+    displayTitle: true
+    displayLogo: false
+    width: wide
+
+  theme:
+    default: system
+    displayToggle: true
+
+  footer:
+    enable: true
+    displayCopyright: false
+    displayPoweredBy: true
+    width: normal
+
+  displayUpdatedDate: true
+  dateFormat: "2006-01-02"
+
+  search:
+    enable: true
+    type: flexsearch
+    flexsearch:
+      index: content
+      tokenize: full
+
+  editURL:
+    enable: true
+    base: "https://github.com/johklo/johklo.github.io/edit/master/content"
+
+  blog:
+    list:
+      displayTags: true
+      sortBy: date
+      sortOrder: desc
+      pagerSize: 20
+    article:
+      displayPagination: true
+
+  toc:
+    displayTags: true
+
+  highlight:
+    copy:
+      enable: true
+      display: hover
+
+  page:
+    width: wide
+
+  math:
+    engine: mathjax
+
+  comments:
+    enable: false
+    type: giscus

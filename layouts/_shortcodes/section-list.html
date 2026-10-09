@@ -1,0 +1,14 @@
+{{- /* Lists child sections and pages of a section as "Title : description", like the reference docs index.
+  Usage: {{< section-list >}} or {{< section-list path="/docs" >}} */ -}}
+{{- $page := .Page -}}
+{{- with .Get "path" }}{{ $page = site.GetPage . }}{{ end -}}
+{{- with $page -}}
+<ul class="section-list">
+  {{- range (.Sections | append .RegularPages) }}
+    <li>
+      <a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a>
+      {{- with .Description }}<span class="section-list__desc"> : {{ . }}</span>{{ end }}
+    </li>
+  {{- end }}
+</ul>
+{{- end -}}

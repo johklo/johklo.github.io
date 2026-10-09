@@ -1,32 +1,27 @@
 # johklo.github.io
 
-The landing page for <https://johklo.github.io/>.
-
-It is a single static page that points at the Azure work — led by the
-[Azure Product Updates Digest](https://johklo.github.io/azure-updates-digest/).
+Source for <https://johklo.github.io/>, built with Hugo and the [Hextra](https://github.com/imfing/hextra) theme.
 
 ## What is here
 
 | Path | Purpose |
 | --- | --- |
-| `index.html` | The landing page. Self-contained: styles are inline, no build step. |
-| `.nojekyll` | Serves the files as-is; GitHub Pages skips Jekyll processing. |
-| `robots.txt` | Crawl policy. |
-| `google*.html` | Google Search Console site-ownership verification. |
-| `LICENSE` | MIT. |
+| `content/_index.md` | Landing page: projects, docs index, recent posts, repositories. |
+| `content/docs/` | Notes. Each folder is a sidebar category; its `_index.md` is the category page. |
+| `content/blog/` | Blog posts. |
+| `content/about.md` | About page. |
+| `static/appraiser-study/`, `static/s/` | Prebuilt static apps, copied to the site as-is. |
+| `static/google*.html`, `static/robots.txt` | Search Console verification and crawl policy. |
+| `layouts/`, `assets/css/custom.css` | Small theme overrides (section list shortcode, Pretendard font). |
+| `themes/hextra` | Hextra theme, pinned as a git submodule. |
+| `.github/workflows/hugo.yml` | Builds and deploys to GitHub Pages on every push to `master`. |
 
-## History
-
-This repository previously held a personal Jekyll wiki and blog. That content — and
-its full commit history — now lives in a separate private repository, and this
-repository was restarted from a single commit so the notes are no longer published
-here.
+Old `/wiki/...` URLs redirect to their new `/docs/...` or `/blog/...` pages through each page's `aliases`.
 
 ## Local preview
 
-No toolchain is needed:
-
 ```bash
-python -m http.server 4000
-# then open http://localhost:4000
+git submodule update --init
+hugo server
+# then open http://localhost:1313
 ```
