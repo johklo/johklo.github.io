@@ -3,7 +3,7 @@ title: "Book List"
 date: 2023-01-01T20:25:29+09:00
 lastmod: 2025-01-01T21:00:00+09:00
 tags: ["blog"]
-aliases: ["/wiki/blog/book-list/"]
+aliases: ["/wiki/blog/book-list/", "/blog/book-list/"]
 ---
 
 ## Consulting 

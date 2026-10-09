@@ -1,5 +1,5 @@
 baseURL: "https://johklo.github.io/"
-title: "John Kim · Cloud, Tech & AI"
+title: "John Kim · Cloud, Tech, AI & Business"
 theme: hextra
 
 locale: ko
@@ -48,10 +48,6 @@ menu:
       name: Docs
       pageRef: /docs
       weight: 1
-    - identifier: blog
-      name: Blog
-      pageRef: /blog
-      weight: 2
     - identifier: about
       name: About
       pageRef: /about

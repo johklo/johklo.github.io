@@ -2,7 +2,7 @@
 title: "About"
 ---
 
-[GitHub](https://github.com/johklo) · [Email](mailto:john.chu.kim@yahoo.com) · [RSS](/blog/index.xml)
+[GitHub](https://github.com/johklo) · [Email](mailto:john.chu.kim@yahoo.com) · [RSS](/docs/index.xml)
 
 ## Motto
 

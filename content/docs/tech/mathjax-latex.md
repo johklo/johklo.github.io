@@ -4,7 +4,7 @@ date: 2017-11-28T22:56:29+09:00
 lastmod: 2019-11-04T22:13:47+09:00
 tags: ["latex"]
 math: true
-aliases: ["/wiki/mathjax-latex/"]
+aliases: ["/wiki/mathjax-latex/", "/docs/how-to/mathjax-latex/"]
 ---
 
 ## 개요

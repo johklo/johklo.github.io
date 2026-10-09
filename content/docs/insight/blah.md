@@ -3,7 +3,7 @@ title: "앵무조개"
 date: 2023-01-04T20:25:29+09:00
 lastmod: 2023-01-04T21:00:00+09:00
 tags: ["blog"]
-aliases: ["/wiki/blog/blah/"]
+aliases: ["/wiki/blog/blah/", "/blog/blah/"]
 ---
 
 > 해마다 해마다 침묵의 고통 속에서

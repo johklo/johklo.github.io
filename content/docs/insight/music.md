@@ -3,7 +3,7 @@ title: "Zach Williams - A hundred Highways"
 date: 2023-02-14T10:22:29+09:00
 lastmod: 2023-02-14T10:22:29+10:00
 tags: ["blog"]
-aliases: ["/wiki/blog/music/"]
+aliases: ["/wiki/blog/music/", "/blog/music/"]
 ---
 
 > All the times that I worked hard because I believed

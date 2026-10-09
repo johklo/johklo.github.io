@@ -4,7 +4,7 @@ description: "LLM을 프로덕션에서 운영하기 위한 체계 — 평가, �
 date: 2026-04-12T00:00:00+09:00
 lastmod: 2026-04-13T12:00:00+09:00
 tags: ["llm", "ai", "llmops", "mlops", "deployment", "evals", "monitoring"]
-aliases: ["/wiki/llmops/"]
+aliases: ["/wiki/llmops/", "/docs/llmops/"]
 ---
 
 ---

@@ -4,7 +4,7 @@ description: "Client Relationship에 관한 황금같은 조언"
 date: 2023-01-01T20:25:29+09:00
 lastmod: 2023-01-01T21:05:00+09:00
 tags: ["blog"]
-aliases: ["/wiki/blog/client-relationship/"]
+aliases: ["/wiki/blog/client-relationship/", "/blog/client-relationship/"]
 ---
 
 ## Client Relationship에 관해
