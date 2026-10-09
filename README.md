@@ -19,9 +19,12 @@ Old `/wiki/...`, `/blog/...` and removed-category URLs redirect to their new `/d
 
 ## Editing from the site
 
-- **Edit:** every page has a "GitHub에서 편집하기" link (right column) that opens the file in GitHub's web editor.
-- **Create:** every category page (`/docs/<category>/`) has a "+ 이 카테고리에 새 문서 만들기" link that opens a new file in that folder with front matter prefilled. Rename `new-doc.md` (it becomes the URL) before committing.
-- Committing to `master` in the web editor triggers the deploy workflow, and the change is live in about a minute.
+Every page has an "✎ 이 문서 수정하기" link at the top that opens it in the in-site editor at `/admin/` ([Sveltia CMS](https://sveltiacms.app/), configured in `static/admin/config.yml`). Category pages also have "+ 이 카테고리에 새 문서 만들기".
+
+- **Sign in:** choose "액세스 토큰으로 로그인" and paste a GitHub fine-grained personal access token limited to this repository with **Contents: Read and write**. The "GitHub으로 로그인" button needs an OAuth server and is not set up.
+- **Save:** the editor commits straight to `master`, and the deploy workflow publishes the change in about a minute.
+- **Images** uploaded in the editor go to `static/images/`.
+- "GitHub에서 수정" next to it opens the same file in GitHub's web editor as a fallback.
 
 ## Local preview
 

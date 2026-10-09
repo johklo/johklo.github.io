@@ -1,0 +1,104 @@
+# Sveltia CMS configuration: https://sveltiacms.app/en/docs
+# Open https://johklo.github.io/admin/ and sign in with a GitHub personal access token
+# (fine-grained, this repository only, Contents: Read and write).
+backend:
+  name: github
+  repo: johklo/johklo.github.io
+  branch: master
+  commit_messages:
+    create: "docs: create {{path}}"
+    update: "docs: update {{path}}"
+    delete: "docs: delete {{path}}"
+    uploadMedia: "docs: upload {{path}}"
+    deleteMedia: "docs: delete {{path}}"
+
+site_url: https://johklo.github.io
+display_url: https://johklo.github.io
+media_folder: static/images
+public_folder: /images
+
+slug:
+  encoding: unicode
+  clean_accents: false
+  sanitize_replacement: "-"
+
+collections:
+  - name: tech
+    label: Tech
+    folder: content/docs/tech
+    create: true
+    index_file: &index_file
+      label: 카테고리 페이지
+      fields: &index_fields
+      - { name: title, label: 제목, widget: string }
+      - { name: description, label: 한 줄 설명, widget: string, required: false }
+      - { name: weight, label: 카테고리 순서, widget: number, value_type: int, required: false }
+      - name: sidebar
+        label: 사이드바
+        widget: object
+        required: false
+        fields:
+          - { name: open, label: 펼쳐서 표시, widget: boolean, required: false }
+      - { name: aliases, label: 예전 주소 (리다이렉트), widget: list, required: false }
+      - { name: body, label: 본문, widget: markdown, modes: [raw, rich_text], required: false }
+    sortable_fields: [title, date]
+    fields: &doc_fields
+      - { name: title, label: 제목, widget: string }
+      - { name: description, label: 한 줄 설명, widget: string, required: false }
+      - { name: date, label: 작성일, widget: datetime, required: false }
+      - { name: lastmod, label: 수정일, widget: datetime, required: false }
+      - { name: tags, label: 태그, widget: list, required: false }
+      - { name: weight, label: 사이드바 순서 (작을수록 위), widget: number, value_type: int, required: false }
+      - { name: math, label: 수식 사용, widget: boolean, required: false }
+      - { name: draft, label: 초안 (게시 안 함), widget: boolean, required: false }
+      - { name: aliases, label: 예전 주소 (리다이렉트), widget: list, required: false }
+      - { name: body, label: 본문, widget: markdown, modes: [rich_text, raw] }
+  - name: ai
+    label: AI
+    folder: content/docs/ai
+    create: true
+    index_file: *index_file
+    sortable_fields: [title, date]
+    fields: *doc_fields
+  - name: business
+    label: Business
+    folder: content/docs/business
+    create: true
+    index_file: *index_file
+    sortable_fields: [title, date]
+    fields: *doc_fields
+  - name: book
+    label: Book
+    folder: content/docs/book
+    create: true
+    index_file: *index_file
+    sortable_fields: [title, date]
+    fields: *doc_fields
+  - name: insight
+    label: Insight
+    folder: content/docs/insight
+    create: true
+    index_file: *index_file
+    sortable_fields: [title, date]
+    fields: *doc_fields
+  - name: pages
+    label: 기본 페이지
+    files:
+      - name: home
+        label: 홈
+        file: content/_index.md
+        fields:
+          - { name: title, label: 제목, widget: string }
+          - { name: description, label: 한 줄 설명, widget: string, required: false }
+          - { name: toc, label: 목차 표시, widget: boolean, required: false }
+          - { name: body, label: 본문, widget: markdown, modes: [raw, rich_text] }
+      - name: docs
+        label: Docs 첫 페이지
+        file: content/docs/_index.md
+        fields: *index_fields
+      - name: about
+        label: About
+        file: content/about.md
+        fields:
+          - { name: title, label: 제목, widget: string }
+          - { name: body, label: 본문, widget: markdown, modes: [rich_text, raw] }

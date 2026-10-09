@@ -31,3 +31,8 @@ body {
   font-size: 0.875rem;
 }
 
+
+.content .doc-actions .doc-actions__alt {
+  opacity: 0.7;
+}
+
