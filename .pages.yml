@@ -74,7 +74,7 @@ content:
         type: collection
         path: content/docs/tech
         exclude: [_index.md]
-        filename: { template: "{primary}.md", field: create }
+        filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: &view
           fields: [title, date]
           primary: title
@@ -96,7 +96,7 @@ content:
         type: collection
         path: content/docs/ai
         exclude: [_index.md]
-        filename: { template: "{primary}.md", field: create }
+        filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: *view
         fields: *doc_fields
       - name: business
@@ -104,7 +104,7 @@ content:
         type: collection
         path: content/docs/business
         exclude: [_index.md]
-        filename: { template: "{primary}.md", field: create }
+        filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: *view
         fields: *doc_fields
       - name: book
@@ -112,7 +112,7 @@ content:
         type: collection
         path: content/docs/book
         exclude: [_index.md]
-        filename: { template: "{primary}.md", field: create }
+        filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: *view
         fields: *doc_fields
       - name: insight
@@ -120,7 +120,7 @@ content:
         type: collection
         path: content/docs/insight
         exclude: [_index.md]
-        filename: { template: "{primary}.md", field: create }
+        filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: *view
         fields: *doc_fields
 
