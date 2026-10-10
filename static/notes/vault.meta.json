@@ -1,7 +1,7 @@
 {
-  "salt": "JsIiz1tHi3u98twzNIJnaA==",
-  "iv": "CaiB53C0chevLlsr",
+  "salt": "Q12IIBBacKlJNpxXe2BGbA==",
+  "iv": "JZBXl3DqWoQSR4R9",
   "iterations": 310000,
   "algorithm": "AES-256-GCM / PBKDF2-SHA256",
-  "version": "1802fd894427120d"
+  "version": "c57796b32d5585f7"
 }
