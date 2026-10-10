@@ -5,7 +5,7 @@
  */
 const SCOPE_PATH = new URL(self.registration.scope).pathname;
 const PREFIX = `appraiser-study:${SCOPE_PATH}:`;
-const CACHE = `${PREFIX}v2`;
+const CACHE = `${PREFIX}v3`;
 const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -36,19 +36,21 @@ self.addEventListener('fetch', (event) => {
 
   // 문서·금고 파일은 네트워크 우선 — 재배포 시 앱과 데이터가 어긋나지 않게 한다.
   // 금고는 솔트·IV 와 암호문이 한 쌍이라 한쪽만 낡으면 복호화가 깨진다.
+  // vault.enc?v=<빌드 지문> 은 주소마다 쌓이지 않도록 쿼리를 뗀 경로 하나로만 보관한다(오프라인 대비).
   if (request.mode === 'navigate' || isVault) {
+    const key = isVault ? new Request(url.pathname) : request;
     event.respondWith(
       fetch(request)
         .then((res) => {
           if (res.ok) {
             const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
+            caches.open(CACHE).then((c) => c.put(key, copy));
           }
           return res;
         })
         .catch(() =>
           caches
-            .match(request)
+            .match(key)
             .then((hit) => hit ?? (request.mode === 'navigate' ? caches.match('./index.html') : undefined)),
         ),
     );
