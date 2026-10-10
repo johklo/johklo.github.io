@@ -1,7 +1,7 @@
 {
-  "name": "공부노트 — 감정평가사 2027",
+  "name": "공부노트",
   "short_name": "공부노트",
-  "description": "강의 읽기, 수식과 개념 암기, 기출과 모의고사를 연결하는 개인 학습실",
+  "description": "개인 학습 노트",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
