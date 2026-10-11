@@ -1,4 +1,4 @@
-import{C as e,c as t,l as n,t as r}from"./index-C9yxne9D.js";import{t as i}from"./Markdown-BSymMH24.js";var a=e();function o(e){let t=null,n=[{title:`자료 안내`,text:``}];for(let r of e.split(`
+import{C as e,c as t,l as n,t as r}from"./index-CakSMdjF.js";import{t as i}from"./Markdown-B41ATzj0.js";var a=e();function o(e){let t=null,n=[{title:`자료 안내`,text:``}];for(let r of e.split(`
 `)){let e=r.match(/^\s{0,3}(`{3,}|~{3,})/);if(e){t?e[1][0]===t[0]&&e[1].length>=t.length&&(t=null):t=e[1],n[n.length-1].text+=r+`
 `;continue}!t&&/^## /.test(r)?n.push({title:r.slice(3),text:r+`
 `}):n[n.length-1].text+=r+`
