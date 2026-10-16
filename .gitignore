@@ -1,0 +1,10 @@
+/public/
+/resources/_gen/
+.hugo_build.lock
+hugo_stats.json
+.DS_Store
+/static/notes/
+/static/s/
+/notes/
+/s/
+__pycache__/
