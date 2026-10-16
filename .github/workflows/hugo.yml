@@ -33,15 +33,31 @@ jobs:
         run: |
           python3 -m unittest discover -s tests
           python3 tools/check_public_site.py
+      - name: Fetch site assets
+        uses: actions/checkout@v4
+        with:
+          repository: johklo/study-notes-private
+          ref: master
+          path: _site-assets
+          sparse-checkout: notes
+          ssh-key: ${{ secrets.SITE_ASSETS_KEY }}
+          persist-credentials: false
       - id: pages
         uses: actions/configure-pages@v5
       - name: Build
         env:
           HUGO_ENVIRONMENT: production
         run: hugo --gc --minify --baseURL "${{ steps.pages.outputs.base_url }}/"
-      - uses: actions/upload-pages-artifact@v3
+      - name: Prepare site assets
+        run: python3 tools/prepare_site_assets.py _site-assets/notes public/notes
+      - name: Package site
+        run: tar --dereference --hard-dereference --directory public -cf "$RUNNER_TEMP/artifact.tar" .
+      - uses: actions/upload-artifact@v4
         with:
-          path: ./public
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     needs: build

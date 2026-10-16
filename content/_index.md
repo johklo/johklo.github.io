@@ -10,6 +10,7 @@ Cloud and tech work, published in the open. Notes, handbooks and the tools that 
 
 - [Azure Product Updates Digest](https://johklo.github.io/azure-updates-digest/) : Azure 제품 업데이트를 서비스별로 모아 요약한 주간 다이제스트
 - [HPC & GPU 인프라 핸드북](https://johklo.github.io/hpc-gpu-curriculum/) : Slurm, NUMA·I/O 튜닝, GPU 장애 분석까지 여섯 모듈로 정리한 문서
+- [공부노트](/notes/)
 
 ## Docs
 

@@ -16,6 +16,7 @@ Source for <https://johklo.github.io/>, built with Hugo and the [Hextra](https:/
 | `themes/hextra` | Hextra theme, pinned as a git submodule. |
 | `.github/workflows/hugo.yml` | Builds and deploys to GitHub Pages on every push to `master`. |
 | `tools/check_public_site.py` | Checks that tracked static files are approved public images or site metadata. |
+| `tools/prepare_site_assets.py` | Validates an encrypted application snapshot before adding it to the deployment output. |
 
 Old `/wiki/...`, `/blog/...` and removed-category URLs redirect to their new `/docs/...` pages through each page's `aliases`.
 
@@ -36,10 +37,21 @@ is excluded from the site until that time; `draft: false` does not override it.
 
 ## Public files
 
-This repository and its Actions artifacts are public. Keep private applications
-and their data in separate private repositories, including encrypted bundles.
+This Git repository and its Actions artifacts are public. Keep application source
+and private data in separate private repositories, including encrypted bundles.
 Only uploaded images, Search Console verification files, and `robots.txt` belong
 in `static/`. The deployment workflow checks this boundary before building.
+
+The `/notes/` entry is served from an encrypted application snapshot fetched at
+deployment time from a private repository. No application files are committed here.
+The workflow validates the snapshot, copies it into `public/notes/`, and packages
+the site without listing individual files in the log. The encrypted files are
+public on the website and in the deployment artifact; plaintext study data is not.
+
+`SITE_ASSETS_KEY` is an Actions secret containing a read-only SSH deploy key for
+the snapshot repository only. It does not grant access to the application-source
+repository. Direct snapshot edits require a manual run of `hugo.yml`; the source
+repository's publishing tool requests that run after pushing its snapshot.
 
 ## Local preview
 
@@ -48,3 +60,6 @@ git submodule update --init
 hugo server
 # then open http://localhost:1313
 ```
+
+The local Hugo preview does not include `/notes/` unless its encrypted snapshot
+is added separately to the generated deployment output.
