@@ -73,7 +73,7 @@ content:
         label: Tech
         type: collection
         path: content/docs/tech
-        exclude: [_index.md]
+        exclude: [_index.md, "machine-learning-platform-engineering/**"]
         filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: &view
           fields: [title, date]
@@ -91,6 +91,18 @@ content:
           - { name: draft, component: draft }
           - { name: aliases, component: aliases }
           - { name: body, component: body }
+      - name: ml-platform-engineering
+        label: "Tech / Machine Learning Platform Engineering"
+        type: collection
+        path: content/docs/tech/machine-learning-platform-engineering
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view:
+          fields: [title, weight]
+          primary: title
+          sort: [weight, title]
+          default: { sort: weight, order: asc }
+        fields: *doc_fields
       - name: ai
         label: AI
         type: collection
@@ -160,6 +172,7 @@ content:
           - { name: aliases, component: aliases }
           - { name: body, component: rawbody }
       - { name: tech-index, label: Tech 카테고리 페이지, type: file, path: content/docs/tech/_index.md, fields: *index_fields }
+      - { name: ml-platform-engineering-index, label: Machine Learning Platform Engineering 카테고리 페이지, type: file, path: content/docs/tech/machine-learning-platform-engineering/_index.md, fields: *index_fields }
       - { name: ai-index, label: AI 카테고리 페이지, type: file, path: content/docs/ai/_index.md, fields: *index_fields }
       - { name: business-index, label: Business 카테고리 페이지, type: file, path: content/docs/business/_index.md, fields: *index_fields }
       - { name: book-index, label: Book 카테고리 페이지, type: file, path: content/docs/book/_index.md, fields: *index_fields }
