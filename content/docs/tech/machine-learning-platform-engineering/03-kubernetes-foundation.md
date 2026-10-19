@@ -87,7 +87,7 @@ Kubernetes는 컨테이너를 어디에 배치하고 원하는 상태를 어떻�
 
 컨트롤 플레인은 API server, etcd, scheduler와 controller 등으로 상태, 배치, 조정을 관리한다. 워커 노드에서는 kubelet과 컨테이너 런타임이 실제 워크로드를 실행한다.
 
-![API server, etcd, Scheduler와 Controller를 가진 관리 노드와 kubelet 및 컨테이너 런타임으로 컨테이너를 실행하는 워커 노드의 구분.](/images/ml-platform-engineering/figure-3-04.png "그림 3.4. Kubernetes 구성 요소. 출처: Machine Learning Platform Engineering, 3장.")
+![API server, etcd, Scheduler와 Controller를 가진 관리 노드와 kubelet 및 컨테이너 런타임으로 컨테이너를 실행하는 워커 노드의 구분.](/images/ml-platform-engineering/figure-3-04.png?v=2 "그림 3.4. Kubernetes 구성 요소. 출처: Machine Learning Platform Engineering, 3장.")
 
 그림의 Master node는 현재 주로 컨트롤 플레인이라고 부르는 관리 영역이다. 박스의 구분은 책임을 나타낸다. 워커가 etcd에 직접 요청한다는 뜻으로 읽으면 안 된다. 각 구성 요소는 API server를 통해 상태를 읽고 갱신하며 etcd는 그 클러스터 상태를 저장한다.
 
@@ -131,7 +131,7 @@ kubectl get services,endpointslices -n <namespace>
 | ReplicaSet | 정해진 수의 Pod 복제본 유지 | 보통 Deployment를 통해 관리 |
 | Deployment | 버전 교체와 복제본의 선언적 관리 | 애플리케이션 상태를 선언하는 것이지 모델 품질을 보장하는 것이 아님 |
 
-![Deployment가 ReplicaSet을 관리하고 ReplicaSet이 Pod의 수를 유지하며 Pod 안에서 컨테이너가 실행되는 포함 관계.](/images/ml-platform-engineering/figure-3-05.png "그림 3.5. Deployment, ReplicaSet, Pod와 Container의 관계. 출처: Machine Learning Platform Engineering, 3장.")
+![Deployment가 ReplicaSet을 관리하고 ReplicaSet이 Pod의 수를 유지하며 Pod 안에서 컨테이너가 실행되는 포함 관계.](/images/ml-platform-engineering/figure-3-05.png?v=2 "그림 3.5. Deployment, ReplicaSet, Pod와 Container의 관계. 출처: Machine Learning Platform Engineering, 3장.")
 
 Deployment → ReplicaSet → Pod의 관리 관계를 이해하면 Pod를 수동으로 지워도 왜 다시 만들어지는지 설명할 수 있다. 선언 자체가 잘못되었다면 재시작을 반복해도 문제가 해결되지 않는다.
 

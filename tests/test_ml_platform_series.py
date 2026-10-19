@@ -83,9 +83,9 @@ class MLPlatformPublicationTest(unittest.TestCase):
         cls.hidden = cls.articles.keys() - cls.visible
 
     def page_path(self, url):
-        relative = unquote(url).lstrip("/")
-        path = self.output / relative
-        return path / "index.html" if url.endswith("/") else path
+        url_path = unquote(urlsplit(url).path)
+        path = self.output / url_path.lstrip("/")
+        return path / "index.html" if url_path.endswith("/") else path
 
     def test_only_overview_and_first_three_chapters_are_published(self):
         self.assertEqual(set(self.articles.values()), set(range(14)))
@@ -167,7 +167,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 with self.subTest(page=slug, image=image["src"]):
                     self.assertTrue(image.get("alt", "").strip())
                     output = self.page_path(image["src"])
-                    original = ROOT / "static" / image["src"].lstrip("/")
+                    original = ROOT / "static" / urlsplit(image["src"]).path.lstrip("/")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
                     used.add(original)
         self.assertEqual(
