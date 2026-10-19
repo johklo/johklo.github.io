@@ -35,6 +35,21 @@ CMS dates use local date and time without a UTC suffix. Hugo interprets them in
 use a local timestamp or an explicit `+09:00` offset. A future publication date
 is excluded from the site until that time; `draft: false` does not override it.
 
+## Reading list
+
+The Book category includes a reading checklist. Add a title or change its checkbox,
+then select "GitHub에 저장". Saving requires a fine-grained GitHub token with Contents
+read/write permission for this repository. The token is used only for the current
+request and is not stored in browser storage or the page.
+
+The list is stored in the JSON front matter of `content/docs/book/_index.md`, not
+in a separate database. Each visit fetches the current file from GitHub, so another
+device can load saved changes before the next site deployment finishes. Concurrent
+reading-list edits are rejected rather than overwritten. Unsaved edits stay only
+in the current tab.
+
+The same list can be edited through the Book category entry in Pages CMS.
+
 ## Public files
 
 This Git repository and its Actions artifacts are public. Keep application source

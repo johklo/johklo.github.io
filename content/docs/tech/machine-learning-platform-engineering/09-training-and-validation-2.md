@@ -1,5 +1,5 @@
 ---
-title: "09. 모델 학습과 검증 II — 데이터 이동과 실험 관측"
+title: "09. 모델 학습과 검증 II"
 description: "PVC와 객체 저장소의 선택, TensorBoard와 MLflow의 역할, 영화 추천 학습 파이프라인"
 date: 2026-10-18T21:30:00+09:00
 weight: 90

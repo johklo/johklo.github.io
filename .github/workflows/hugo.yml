@@ -32,6 +32,7 @@ jobs:
       - name: Check public files
         run: |
           python3 -m unittest discover -s tests
+          node --test tests/reading-list.test.mjs
           python3 tools/check_public_site.py
       - name: Fetch site assets
         uses: actions/checkout@v4

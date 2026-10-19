@@ -1,5 +1,5 @@
 ---
-title: "12. LLM 기반 시스템 설계 — RAG와 DakkaBot"
+title: "12. LLM 기반 시스템 설계"
 description: "검색, 문맥 구성, 생성을 분리하고 UI와 관측을 더해 문서 질의 시스템 만들기"
 date: 2026-10-18T21:30:00+09:00
 weight: 120
@@ -13,7 +13,7 @@ tags: ["book-club", "ml-platform-engineering", "llmops", "rag"]
 
 RAG(Retrieval-Augmented Generation)는 이와 비슷합니다. 질문에 맞는 자료를 찾고, 그 자료를 문맥으로 제공한 뒤 LLM이 답하도록 합니다. 책은 가상의 회사 DataKrypt의 문서 도우미 DakkaBot을 통해 이 구조를 만듭니다.
 
-## 12.1 LLMOps — 새로운 문제와 익숙한 원칙
+## 12.1 LLMOps
 
 배포, CI/CD, 로그, 모니터링은 여전히 필요합니다. 달라지는 점은 답변이 모델 가중치 하나가 아니라 문서, 검색, 프롬프트, 모델 API의 조합에서 나온다는 것입니다.
 
@@ -26,7 +26,7 @@ RAG(Retrieval-Augmented Generation)는 이와 비슷합니다. 질문에 맞는 
 
 같은 질문에도 표현이 달라질 수 있으므로 문자열의 완전 일치만으로 품질을 판단하기 어렵습니다. temperature 같은 샘플링 설정을 낮춰도 모든 환경에서 완전한 결정성이 보장되는 것은 아닙니다.
 
-## 12.2 DakkaBot — 단순한 RAG 아키텍처
+## 12.2 DakkaBot
 
 ### 12.2.1 만들 시스템
 

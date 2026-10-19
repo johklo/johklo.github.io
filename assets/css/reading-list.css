@@ -1,0 +1,134 @@
+.reading-list {
+  --reading-border: #94a3b8;
+  --reading-background: #fff;
+  --reading-text: #0f172a;
+  --reading-error: #b91c1c;
+  color: var(--reading-text);
+  margin-bottom: 2.5rem;
+}
+
+.reading-list,
+.reading-list * {
+  box-sizing: border-box;
+}
+
+.dark .reading-list {
+  --reading-border: #64748b;
+  --reading-background: #171717;
+  --reading-text: #f1f5f9;
+  --reading-error: #fca5a5;
+}
+
+.reading-list fieldset {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.reading-list__add > div,
+.reading-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.reading-list__add label,
+.reading-list details label {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.reading-list input[type="text"],
+.reading-list input[type="password"] {
+  background: var(--reading-background);
+  border: 1px solid var(--reading-border);
+  border-radius: 0.25rem;
+  color: inherit;
+  min-height: 2.75rem;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.reading-list input[type="text"] {
+  flex: 1 1 14rem;
+}
+
+.reading-list input[type="password"] {
+  width: 100%;
+}
+
+.reading-list button {
+  background: var(--reading-background);
+  border: 1px solid var(--reading-border);
+  border-radius: 0.25rem;
+  color: inherit;
+  cursor: pointer;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.8rem;
+}
+
+.reading-list button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.reading-list :is(button, input, summary):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.content .reading-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.reading-list li {
+  align-items: center;
+  border-bottom: 1px solid var(--reading-border);
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+}
+
+.reading-list li label {
+  align-items: start;
+  display: flex;
+  flex: 1;
+  gap: 0.6rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reading-list input[type="checkbox"] {
+  accent-color: currentColor;
+  flex: none;
+  height: 1.15rem;
+  margin-top: 0.2rem;
+  width: 1.15rem;
+}
+
+.reading-list details {
+  margin-top: 1rem;
+}
+
+.reading-list summary {
+  cursor: pointer;
+}
+
+.reading-list [data-reading-status] {
+  min-height: 1.5em;
+}
+
+.reading-list [data-reading-status][role="alert"] {
+  color: var(--reading-error);
+}
+
+.reading-list__sr-only {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}

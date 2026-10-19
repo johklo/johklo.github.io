@@ -1,5 +1,5 @@
 ---
-title: "06. 모델을 프로덕션으로 — 배포와 데이터 드리프트"
+title: "06. 모델을 프로덕션으로"
 description: "BentoML로 소득 분류 API를 만들고 Evidently로 입력 데이터의 변화를 관측하기"
 date: 2026-10-18T21:30:00+09:00
 weight: 60

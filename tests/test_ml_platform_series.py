@@ -18,6 +18,12 @@ class PageLinks(HTMLParser):
         super().__init__()
         self.links = []
         self.ids = set()
+        self.images = []
+        self.captions = []
+        self.in_caption = False
+        self.in_reading_state = False
+        self.reading_state = ""
+        self.scripts = []
         self.feed(html)
 
     def handle_starttag(self, tag, attrs):
@@ -26,6 +32,25 @@ class PageLinks(HTMLParser):
             self.links.append(attrs["href"])
         if attrs.get("id"):
             self.ids.add(attrs["id"])
+        if tag == "img":
+            self.images.append(attrs)
+        if tag == "figcaption":
+            self.in_caption = True
+        if tag == "script":
+            self.scripts.append(attrs)
+            self.in_reading_state = "data-reading-state" in attrs
+
+    def handle_endtag(self, tag):
+        if tag == "figcaption":
+            self.in_caption = False
+        if tag == "script":
+            self.in_reading_state = False
+
+    def handle_data(self, data):
+        if self.in_caption:
+            self.captions.append(data)
+        if self.in_reading_state:
+            self.reading_state += data
 
 
 @unittest.skipUnless(shutil.which("hugo"), "Hugo is required for publication tests")
@@ -117,3 +142,53 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     if target.fragment:
                         ids = PageLinks(path.read_text(encoding="utf-8")).ids
                         self.assertIn(unquote(target.fragment), ids)
+
+    def test_book_diagrams_have_sources_and_are_copied_to_the_site(self):
+        used = set()
+        for slug in self.visible:
+            if self.articles[slug] == 0:
+                continue
+            document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
+                encoding="utf-8"
+            )
+            parsed = PageLinks(document)
+            figures = [
+                image for image in parsed.images
+                if image.get("src", "").startswith(
+                    "/images/ml-platform-engineering/"
+                )
+            ]
+            self.assertTrue(figures, f"No book diagram in {slug}")
+            self.assertTrue(any(
+                "Machine Learning Platform Engineering" in caption
+                for caption in parsed.captions
+            ))
+            for image in figures:
+                with self.subTest(page=slug, image=image["src"]):
+                    self.assertTrue(image.get("alt", "").strip())
+                    output = self.page_path(image["src"])
+                    original = ROOT / "static" / image["src"].lstrip("/")
+                    self.assertEqual(output.read_bytes(), original.read_bytes())
+                    used.add(original)
+        self.assertEqual(
+            used,
+            set((ROOT / "static" / "images" / "ml-platform-engineering").glob("*.png")),
+        )
+
+    def test_reading_module_embeds_usable_state_and_publishes_its_script(self):
+        document = self.page_path("/docs/book/").read_text(encoding="utf-8")
+        parsed = PageLinks(document)
+        source = (ROOT / "content" / "docs" / "book" / "_index.md").read_text(
+            encoding="utf-8"
+        )
+        metadata, _ = json.JSONDecoder().raw_decode(source)
+        self.assertEqual(
+            json.loads(parsed.reading_state), metadata["reading_list"]
+        )
+        modules = [
+            script for script in parsed.scripts
+            if "reading-list." in script.get("src", "")
+        ]
+        self.assertEqual(len(modules), 1)
+        self.assertEqual(modules[0]["type"], "module")
+        self.assertTrue(self.page_path(modules[0]["src"]).is_file())
