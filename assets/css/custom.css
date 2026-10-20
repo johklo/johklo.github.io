@@ -36,7 +36,8 @@ body {
   opacity: 0.7;
 }
 
-.content img[src^="/images/ml-platform-engineering/"] {
+.content img[src^="/images/ml-platform-engineering/"],
+.content img[src^="/images/ai-agents-and-applications/"] {
   background-color: #fff;
   border-radius: 0;
   height: auto;

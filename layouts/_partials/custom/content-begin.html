@@ -8,15 +8,19 @@
   {{- $cms := "https://app.pagescms.org/johklo/johklo.github.io/master" -}}
   {{- $edit := "" -}}
   {{- $new := "" -}}
+  {{- $bookCollection := "" -}}
+  {{- range $prefix, $collection := dict "docs/tech/machine-learning-platform-engineering/" "ml-platform-engineering" "docs/tech/ai-agents-and-applications/" "ai-agents-and-applications" -}}
+    {{- if hasPrefix $path $prefix }}{{ $bookCollection = $collection }}{{ end -}}
+  {{- end -}}
   {{- if eq $path "_index.md" }}{{ $edit = printf "%s/file/home" $cms -}}
   {{- else if eq $path "about.md" }}{{ $edit = printf "%s/file/about" $cms -}}
   {{- else if eq $path "docs/_index.md" }}{{ $edit = printf "%s/file/docs-index" $cms -}}
-  {{- else if hasPrefix $path "docs/tech/machine-learning-platform-engineering/" -}}
+  {{- else if $bookCollection -}}
     {{- if $.IsSection -}}
-      {{- $edit = printf "%s/file/ml-platform-engineering-index" $cms -}}
-      {{- $new = printf "%s/collection/ml-platform-engineering/new" $cms -}}
+      {{- $edit = printf "%s/file/%s-index" $cms $bookCollection -}}
+      {{- $new = printf "%s/collection/%s/new" $cms $bookCollection -}}
     {{- else -}}
-      {{- $edit = printf "%s/collection/ml-platform-engineering/edit/%s" $cms (urlquery (printf "content/%s" $path)) -}}
+      {{- $edit = printf "%s/collection/%s/edit/%s" $cms $bookCollection (urlquery (printf "content/%s" $path)) -}}
     {{- end -}}
   {{- else if and (eq (len $parts) 3) (eq (index $parts 0) "docs") -}}
     {{- $cat := index $parts 1 -}}
