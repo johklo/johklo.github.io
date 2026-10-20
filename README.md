@@ -30,6 +30,16 @@ Content is edited with [Pages CMS](https://pagescms.org/), configured in `.pages
 - **Save:** each save commits to `master`, and the deploy workflow publishes it in about a minute.
 - "GitHub에서 수정" opens the same file in GitHub's web editor as a fallback.
 
+For book diagrams, set the image's alternative text to a description of the
+diagram, not its filename. Put the figure number, description, and source in a
+separate text paragraph immediately below the image. For example:
+`그림 2.2. 순환하는 ML 생애주기. 출처: Machine Learning Platform Engineering, 2장.`
+Keep that paragraph when replacing the image. Do not rely on the image title
+field for attribution; it can be lost when the image is replaced in the editor.
+CMS upload filenames and the default `/images/` location are supported by the
+ML series publication check. Replaced images may remain in the media library;
+they do not all have to be used by the current articles.
+
 CMS dates use local date and time without a UTC suffix. Hugo interprets them in
 `Asia/Seoul`, as configured in `hugo.yaml`. When editing front matter directly,
 use a local timestamp or an explicit `+09:00` offset. A future publication date

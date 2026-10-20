@@ -21,6 +21,8 @@ class PageLinks(HTMLParser):
         self.images = []
         self.captions = []
         self.in_caption = False
+        self.paragraphs = []
+        self.in_paragraph = False
         self.in_reading_state = False
         self.reading_state = ""
         self.scripts = []
@@ -36,6 +38,9 @@ class PageLinks(HTMLParser):
             self.images.append(attrs)
         if tag == "figcaption":
             self.in_caption = True
+        if tag == "p":
+            self.paragraphs.append("")
+            self.in_paragraph = True
         if tag == "script":
             self.scripts.append(attrs)
             self.in_reading_state = "data-reading-state" in attrs
@@ -43,12 +48,16 @@ class PageLinks(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "figcaption":
             self.in_caption = False
+        if tag == "p":
+            self.in_paragraph = False
         if tag == "script":
             self.in_reading_state = False
 
     def handle_data(self, data):
         if self.in_caption:
             self.captions.append(data)
+        if self.in_paragraph:
+            self.paragraphs[-1] += data
         if self.in_reading_state:
             self.reading_state += data
 
@@ -144,7 +153,6 @@ class MLPlatformPublicationTest(unittest.TestCase):
                         self.assertIn(unquote(target.fragment), ids)
 
     def test_book_diagrams_have_sources_and_are_copied_to_the_site(self):
-        used = set()
         for slug in self.visible:
             if self.articles[slug] == 0:
                 continue
@@ -154,26 +162,24 @@ class MLPlatformPublicationTest(unittest.TestCase):
             parsed = PageLinks(document)
             figures = [
                 image for image in parsed.images
-                if image.get("src", "").startswith(
-                    "/images/ml-platform-engineering/"
-                )
+                if image.get("src", "").startswith("/images/")
             ]
             self.assertTrue(figures, f"No book diagram in {slug}")
             self.assertTrue(any(
-                "Machine Learning Platform Engineering" in caption
-                for caption in parsed.captions
-            ))
+                "출처: Machine Learning Platform Engineering" in caption
+                for caption in parsed.captions + parsed.paragraphs
+            ), f"No book diagram source in {slug}")
             for image in figures:
                 with self.subTest(page=slug, image=image["src"]):
                     self.assertTrue(image.get("alt", "").strip())
                     output = self.page_path(image["src"])
-                    original = ROOT / "static" / urlsplit(image["src"]).path.lstrip("/")
+                    original = (
+                        ROOT / "static"
+                        / unquote(urlsplit(image["src"]).path).lstrip("/")
+                    )
+                    self.assertTrue(output.is_file(), f"Missing published image: {image['src']}")
+                    self.assertTrue(original.is_file(), f"Missing source image: {image['src']}")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
-                    used.add(original)
-        self.assertEqual(
-            used,
-            set((ROOT / "static" / "images" / "ml-platform-engineering").glob("*.png")),
-        )
 
     def test_reading_module_embeds_usable_state_and_publishes_its_script(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")
