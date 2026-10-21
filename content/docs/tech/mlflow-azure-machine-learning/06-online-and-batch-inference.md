@@ -9,7 +9,7 @@ tags: ["mlflow", "mlops", "azure-machine-learning"]
 
 등록한 모델을 사용하는 방식은 요청에 바로 응답하는 온라인 추론과 결과 파일을 남기는 배치 추론으로 나뉜다. 모델 버전과 실제 서비스를 연결하는 deployment, endpoint의 역할을 구분했다.
 
-[목차의 도구 역할 비교](../#전체-mlops에서의-역할)에서 BentoML을 별도 서빙 구현의 예로 다뤘다. 이 편은 BentoML을 사용하는 실습이 아니라 AML의 MLflow 모델 배포 경로를 다룬다.
+[목차의 도구 역할 비교](../#전체-mlops에서의-역할)에서 BentoML을 별도 서빙 구현의 예로 다뤘다. 해당 도구의 범위는 [BentoML 기능과 구성](../bentoml-capabilities/)에 정리했다. 이 편은 BentoML을 사용하는 실습이 아니라 AML의 MLflow 모델 배포 경로를 다룬다.
 
 ## 준비 조건과 실습 범위
 

@@ -8,7 +8,7 @@ Source for <https://johklo.github.io/>, built with Hugo and the [Hextra](https:/
 | --- | --- |
 | `content/_index.md` | Landing page: projects, docs index, Insight posts, repositories. |
 | `content/docs/` | Notes in Tech / AI / Business / Book / Insight. Each folder is a sidebar category; its `_index.md` is the category page. |
-| `content/docs/tech/mlflow-azure-machine-learning/` | MLflow learning series: an overview and six sequential articles, editable in its own Pages CMS collection. |
+| `content/docs/tech/mlflow-azure-machine-learning/` | MLflow learning series: an overview, two tool feature references, and six sequential lab articles, editable in its own Pages CMS collection. |
 | `content/about.md` | About page. |
 | `static/images/` | Images uploaded from the editor. |
 | `.pages.yml` | Pages CMS editor configuration. |

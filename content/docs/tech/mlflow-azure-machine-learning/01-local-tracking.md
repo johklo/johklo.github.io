@@ -9,7 +9,7 @@ tags: ["mlflow", "mlops", "azure-machine-learning"]
 
 학습 코드를 실행할 때마다 설정과 결과를 같은 기준으로 남기는 것부터 시작했다. 이 편은 Azure 구독 없이 로컬 Python에서 MLflow를 익히는 단계다.
 
-도구의 정의와 전체 MLOps에서의 위치는 [목차의 MLflow와 BentoML 설명](../#mlflow와-bentoml의-의미)에 두었다. 여기서는 MLflow의 실험 기록부터 실제 코드로 확인한다.
+도구의 전체 범위는 [MLflow 기능과 구성](../mlflow-capabilities/)에, MLOps에서의 위치는 [목차의 MLflow와 BentoML 설명](../#mlflow와-bentoml의-의미)에 두었다. 여기서는 MLflow의 실험 기록부터 실제 코드로 확인한다.
 
 ## 준비 조건과 이번 편의 결과
 

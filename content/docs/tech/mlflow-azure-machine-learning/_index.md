@@ -1,8 +1,8 @@
 ---
 title: "MLflow와 Azure Machine Learning"
-description: "MLflow와 BentoML의 MLOps 역할부터 로컬 실험, AML 연결과 모델 등록 및 추론까지 이어지는 학습 노트"
+description: "MLflow와 BentoML 기능 정리 2편과 로컬 실험부터 AML 모델 등록 및 추론까지 이어지는 6편의 실습"
 date: 2026-10-21T09:55:00+09:00
-lastmod: 2026-10-21T14:11:00+09:00
+lastmod: 2026-10-21T14:42:00+09:00
 weight: 3
 tags: ["mlflow", "bentoml", "mlops", "azure-machine-learning"]
 aliases: ["/docs/tech/2026-10-21-mlflow-to-azure-machine-learning/"]
@@ -13,6 +13,8 @@ sidebar:
 책에서 읽은 MLflow를 직접 실행해 보고, 같은 코드를 Azure Machine Learning에 연결하는 순서로 나눴다. Azure Machine Learning은 아래에서 AML로 줄여 쓴다. 전체 흐름은 이 목차에 두고, 개념과 실습은 주제별 여섯 편으로 구분했다.
 
 모든 편은 같은 Wine 분류 예제를 이어서 사용한다. 서로 다른 프로젝트를 매번 만드는 것이 아니라 하나의 `mlflow-aml-lab` 폴더에 파일과 실행 기록을 추가하는 구조다.
+
+전체 기능은 [MLflow 기능과 구성](mlflow-capabilities/)과 [BentoML 기능과 구성](bentoml-capabilities/)에 나눠 정리했다. 두 글은 도구의 범위를 살펴보는 참고 자료이며, 번호가 붙은 01~06편은 같은 코드를 이어서 실행하는 실습이다. 최신 기능 소개와 AML 실습의 고정 버전도 구분했다.
 
 ## MLflow와 BentoML의 의미
 
@@ -90,6 +92,8 @@ flowchart TD
 BentoML은 여기서 역할을 비교하는 대상이며 여섯 편의 실행 예제에 추가 설치하지 않는다. MLflow와 AML을 먼저 익히고, 별도 서빙 구현이 필요한지 판단할 때 이어서 볼 범위로 두었다.
 
 ## 학습 순서
+
+목록의 첫 두 글에서 기능 범위를 살펴보고, 01~06편을 순서대로 이어서 볼 수 있다.
 
 {{< section-list >}}
 
