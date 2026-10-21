@@ -73,7 +73,7 @@ content:
         label: Tech
         type: collection
         path: content/docs/tech
-        exclude: [_index.md, "machine-learning-platform-engineering/**", "ai-agents-and-applications/**"]
+        exclude: [_index.md, "machine-learning-platform-engineering/**", "ai-agents-and-applications/**", "mlflow-azure-machine-learning/**"]
         filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: &view
           fields: [title, date]
@@ -107,6 +107,14 @@ content:
         label: "Tech / AI Agents and Applications"
         type: collection
         path: content/docs/tech/ai-agents-and-applications
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *book_series_view
+        fields: *doc_fields
+      - name: mlflow-azure-machine-learning
+        label: "Tech / MLflow와 Azure Machine Learning"
+        type: collection
+        path: content/docs/tech/mlflow-azure-machine-learning
         exclude: [_index.md]
         filename: { template: "{primary}.md", field: create }
         view: *book_series_view
@@ -182,6 +190,7 @@ content:
       - { name: tech-index, label: Tech 카테고리 페이지, type: file, path: content/docs/tech/_index.md, fields: *index_fields }
       - { name: ml-platform-engineering-index, label: Machine Learning Platform Engineering 카테고리 페이지, type: file, path: content/docs/tech/machine-learning-platform-engineering/_index.md, fields: *index_fields }
       - { name: ai-agents-and-applications-index, label: AI Agents and Applications 카테고리 페이지, type: file, path: content/docs/tech/ai-agents-and-applications/_index.md, fields: *index_fields }
+      - { name: mlflow-azure-machine-learning-index, label: MLflow와 Azure Machine Learning 목차, type: file, path: content/docs/tech/mlflow-azure-machine-learning/_index.md, fields: *index_fields }
       - { name: ai-index, label: AI 카테고리 페이지, type: file, path: content/docs/ai/_index.md, fields: *index_fields }
       - { name: business-index, label: Business 카테고리 페이지, type: file, path: content/docs/business/_index.md, fields: *index_fields }
       - name: book-index

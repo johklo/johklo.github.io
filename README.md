@@ -8,6 +8,7 @@ Source for <https://johklo.github.io/>, built with Hugo and the [Hextra](https:/
 | --- | --- |
 | `content/_index.md` | Landing page: projects, docs index, Insight posts, repositories. |
 | `content/docs/` | Notes in Tech / AI / Business / Book / Insight. Each folder is a sidebar category; its `_index.md` is the category page. |
+| `content/docs/tech/mlflow-azure-machine-learning/` | MLflow learning series: an overview and six sequential articles, editable in its own Pages CMS collection. |
 | `content/about.md` | About page. |
 | `static/images/` | Images uploaded from the editor. |
 | `.pages.yml` | Pages CMS editor configuration. |
@@ -29,6 +30,10 @@ Content is edited with [Pages CMS](https://pagescms.org/), configured in `.pages
 - **Images:** drag or paste them into the editor. They are saved to `static/images/` and served from `/images/...`.
 - **Save:** each save commits to `master`, and the deploy workflow publishes it in about a minute.
 - "GitHub에서 수정" opens the same file in GitHub's web editor as a fallback.
+
+The MLflow series has its own collection, ordered by sidebar weight. Its overview
+is under the category pages group. The former single-article URL redirects to
+the series overview through the overview's `aliases`.
 
 For book diagrams, set the image's alternative text to a description of the
 diagram, not its filename. Put the figure number, description, and source in a
