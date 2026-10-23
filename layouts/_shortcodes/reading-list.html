@@ -7,13 +7,6 @@
   <p data-reading-count></p>
   <fieldset data-reading-controls disabled>
     <legend class="reading-list__sr-only">독서 목록 편집</legend>
-    <form data-reading-add class="reading-list__add">
-      <label for="{{ $id }}-book-title">책 제목</label>
-      <div>
-        <input id="{{ $id }}-book-title" name="title" type="text" required autocomplete="off">
-        <button type="submit">추가</button>
-      </div>
-    </form>
     <ul data-reading-books>
       {{- range .Page.Params.reading_list }}
         <li><label><input type="checkbox" disabled{{ if .read }} checked{{ end }}> {{ .title }}</label></li>

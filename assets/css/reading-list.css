@@ -26,20 +26,17 @@
   padding: 0;
 }
 
-.reading-list__add > div,
 .reading-list__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.reading-list__add label,
 .reading-list details label {
   display: block;
   margin-bottom: 0.35rem;
 }
 
-.reading-list input[type="text"],
 .reading-list input[type="password"] {
   background: var(--reading-background);
   border: 1px solid var(--reading-border);
@@ -48,10 +45,6 @@
   min-height: 2.75rem;
   min-width: 0;
   padding: 0.5rem 0.75rem;
-}
-
-.reading-list input[type="text"] {
-  flex: 1 1 14rem;
 }
 
 .reading-list input[type="password"] {

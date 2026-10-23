@@ -183,6 +183,10 @@ class MLPlatformPublicationTest(unittest.TestCase):
 
     def test_reading_module_embeds_usable_state_and_publishes_its_script(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")
+        self.assertNotIn("data-reading-add", document)
+        self.assertNotIn("book-title", document)
+        self.assertIn("data-reading-save", document)
+        self.assertIn("data-reading-reload", document)
         parsed = PageLinks(document)
         source = (ROOT / "content" / "docs" / "book" / "_index.md").read_text(
             encoding="utf-8"

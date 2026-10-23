@@ -132,8 +132,6 @@ export function mountReadingList(root) {
   const list = root.querySelector('[data-reading-books]');
   const counter = root.querySelector('[data-reading-count]');
   const status = root.querySelector('[data-reading-status]');
-  const form = root.querySelector('[data-reading-add]');
-  const titleInput = form.elements.namedItem('title');
   const tokenInput = root.querySelector('[data-reading-token]');
   const saveButton = root.querySelector('[data-reading-save]');
   const reloadButton = root.querySelector('[data-reading-reload]');
@@ -188,7 +186,7 @@ export function mountReadingList(root) {
         if (!window.confirm(`"${book.title}"을 목록에서 삭제할까요?`)) return;
         books = books.filter(value => value.id !== book.id);
         render();
-        titleInput.focus();
+        reloadButton.focus();
         notify('저장하지 않은 변경이 있습니다.');
       });
       item.append(label, remove);
@@ -222,20 +220,6 @@ export function mountReadingList(root) {
     }
   }
 
-  form.addEventListener('submit', event => {
-    event.preventDefault();
-    const title = titleInput.value.trim();
-    if (!title) {
-      notify('책 제목을 입력해 주세요.', true);
-      titleInput.focus();
-      return;
-    }
-    books = [...books, { id: crypto.randomUUID(), title, read: false }];
-    titleInput.value = '';
-    render();
-    titleInput.focus();
-    notify('책을 추가했습니다. GitHub에 저장하면 다른 기기에도 반영됩니다.');
-  });
   saveButton.addEventListener('click', async () => {
     if (busy || !dirty()) return;
     const token = tokenInput.value.trim();

@@ -52,8 +52,9 @@ is excluded from the site until that time; `draft: false` does not override it.
 
 ## Reading list
 
-The Book category includes a reading checklist. Add a title or change its checkbox,
-then select "GitHub에 저장". Saving requires a fine-grained GitHub token with Contents
+The Book category includes a reading checklist. Change a book's checkbox,
+then select "GitHub에 저장". Add books through the Book category entry in Pages CMS.
+Saving from the site requires a fine-grained GitHub token with Contents
 read/write permission for this repository. The token is used only for the current
 request and is not stored in browser storage or the page.
 
