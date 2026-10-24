@@ -294,7 +294,7 @@ npx @modelcontextprotocol/inspector@2.12.0 --web --config .\mcp-inspector.json
 
 ## 질문
 
-### 북클럽 적용: Inspector에는 도구가 보이는데 에이전트는 안 쓴다면?
+### Inspector에는 도구가 보이는데 에이전트는 안 쓴다면?
 
 발견이 된다는 것은 서버가 정의를 제공한다는 증거입니다. 그 정의가 모델에 바인딩됐는지, 설명이 질문에 맞는지, 실제 도구 요청을 실행하는 연결이 있는지는 따로 확인해야 합니다.
 
