@@ -365,9 +365,72 @@ print("Online:", online["hours_per_week"])
 
 다른 애플리케이션에서 피처를 조회할 수 있는 API 접점입니다. SDK를 직접 쓰기 어려운 언어에서도 사용할 수 있지만, 접근 권한과 지연, 오류 처리는 별도로 설계해야 합니다.
 
+앞에서 만든 `income-features-study` 폴더로 이동하고 같은 가상환경에서 서버를 실행했습니다.
+
+```powershell
+cd income-features-study
+feast serve --host 127.0.0.1 --port 16566
+```
+
+다른 PowerShell에서 사용자 `42`와 등록되지 않은 `999`를 함께 조회했습니다.
+
+```powershell
+$payload = @{
+    features = @("hours:hours_per_week", "hours:workclass")
+    entities = @{ user_id = @(42, 999) }
+} | ConvertTo-Json -Depth 5
+
+$response = Invoke-RestMethod `
+    -Uri http://127.0.0.1:16566/get-online-features `
+    -Method Post -ContentType application/json -Body $payload
+
+for ($i = 0; $i -lt $response.metadata.feature_names.Count; $i++) {
+    [PSCustomObject]@{
+        feature = $response.metadata.feature_names[$i]
+        values = $response.results[$i].values | ConvertTo-Json -Compress
+        statuses = $response.results[$i].statuses -join ", "
+    }
+}
+```
+
+응답은 열별로 묶여 있습니다. `metadata.feature_names`와 `results`를 같은 인덱스로 읽어야 하며, 응답의 피처 순서가 요청 순서와 같다고 가정하지 않습니다.
+
+| 피처 | 사용자 42 | 사용자 999 |
+| --- | --- | --- |
+| `hours_per_week` | `52.0`, `PRESENT` | `null`, `NOT_FOUND` |
+| `workclass` | `self-employed`, `PRESENT` | `null`, `NOT_FOUND` |
+
+사용자 999도 요청에 넣은 식별자 자체는 반환됐지만, 피처 상태는 `NOT_FOUND`였습니다. HTTP 요청이 성공했다고 모델 입력까지 준비된 것은 아닙니다. 추론 전에 피처별 상태와 결측을 검사해야 한다는 점을 여기서 확인했습니다.
+
+이 온라인 API에는 과거 기준 시각을 넣지 않습니다. 5월22일의 값 `36`을 원한다면 앞의 `get_historical_features()`를 사용합니다. 최신 안내판에서 지난달의 장부를 찾으려 하면 안 되는 이유입니다.
+
 ### 4.2.4 Feast UI
 
 등록된 entity와 피처, 원천 정보를 탐색하는 화면입니다. 등록 상태를 확인하는 것과 실제 피처 값의 최신성, 품질을 검증하는 것은 다릅니다.
+
+같은 repository 폴더에서 새 터미널을 열고 UI를 실행했습니다.
+
+```powershell
+feast ui --host 127.0.0.1 --port 18888
+```
+
+`http://127.0.0.1:18888`에서 **Feature Views → hours**를 열었습니다.
+
+![Feast UI의 hours feature view. hours_per_week와 workclass의 타입, user entity, FileSource와 materialization 기간이 표시되어 있습니다.](/images/ml-platform-engineering/study-ch04-feast-view.png)
+
+이 화면은 공용 재료의 목록표처럼 읽으면 됩니다. `hours`는 재료 묶음인 feature view이고, `user`는 어느 사용자의 재료인지 찾는 기준입니다.
+
+| 화면에서 확인한 항목 | 의미와 확인한 내용 |
+| --- | --- |
+| Features | `hours_per_week: DOUBLE`, `workclass: STRING`이 정의대로 등록됐습니다. |
+| Entities | 조인 기준인 `user`가 연결됐습니다. 코드의 `join_keys`는 `user_id`입니다. |
+| Batch Source | 과거 조회의 원천이 `FileSource`의 Parquet 파일로 연결됐습니다. |
+| Materialization Intervals | 실행한 `2025-05-01`부터 `2025-06-05`까지의 구간이 기록됐습니다. |
+| Consuming Feature Services | 아직 feature service를 정의하지 않아 0입니다. 온라인 조회가 실패했다는 뜻은 아닙니다. |
+
+UI에는 피처의 정의와 연결이 보이고, 온라인 값은 앞의 API 호출로 확인했습니다. Materialization 기간이 남아 있어도 모든 사용자의 값이 존재하거나 지금 최신이라는 뜻은 아니므로, 사용자 999처럼 누락된 요청도 따로 검사했습니다.
+
+실습 후 두 서버는 각 터미널의 Ctrl+C로 종료합니다.
 
 ### 정리: 실험과 피처의 연결
 

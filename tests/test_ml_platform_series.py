@@ -266,6 +266,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             4: [
                 "study-ch04-mlflow-runs.png", "study-ch04-mlflow-metrics.png",
                 "study-ch04-mlflow-model.png",
+                "study-ch04-feast-view.png",
             ],
             5: [
                 "study-ch05-kfp-cluster.png",
