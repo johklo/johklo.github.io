@@ -2,6 +2,7 @@
 title: 2026년 AI 책 읽기
 description: AI 관련 도서 읽기 및 현황 정리
 date: 2026-01-09T18:30:00
+lastmod: 2026-10-24T18:39:00
 tags:
   - book
   - ai
