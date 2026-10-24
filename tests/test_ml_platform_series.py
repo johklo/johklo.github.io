@@ -152,6 +152,30 @@ class MLPlatformPublicationTest(unittest.TestCase):
                         ids = PageLinks(path.read_text(encoding="utf-8")).ids
                         self.assertIn(unquote(target.fragment), ids)
 
+    def test_integrated_labs_are_published_and_linked_from_learning_entries(self):
+        url = "/docs/tech/ml-platform-engineering-labs/"
+        article = self.page_path(url)
+        self.assertTrue(article.is_file(), "Integrated lab guide was not published")
+        links = PageLinks(article.read_text(encoding="utf-8")).links
+        self.assertIn("https://github.com/johklo/ml-platform-engineering-labs", links)
+        for entry in (
+            "/", SERIES_URL, f"{SERIES_URL}00-overview/",
+            "/docs/tech/mlflow-azure-machine-learning/",
+        ):
+            with self.subTest(entry=entry):
+                entry_links = PageLinks(
+                    self.page_path(entry).read_text(encoding="utf-8")
+                ).links
+                resolved = {
+                    urlsplit(urljoin(f"https://johklo.github.io{entry}", href)).path
+                    for href in entry_links
+                }
+                self.assertIn(url, resolved)
+        indexes = list(self.output.glob("*.search-data*.json"))
+        self.assertTrue(any(
+            url in json.loads(path.read_text(encoding="utf-8")) for path in indexes
+        ))
+
     def test_book_diagrams_have_sources_and_are_copied_to_the_site(self):
         for slug in self.visible:
             if self.articles[slug] == 0:

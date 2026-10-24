@@ -11,3 +11,4 @@ __pycache__/
 /_site-assets/
 /*.epub
 /*.pdf
+/.lab-work/

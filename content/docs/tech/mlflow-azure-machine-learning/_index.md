@@ -14,6 +14,8 @@ sidebar:
 
 모든 편은 같은 Wine 분류 예제를 이어서 사용한다. 서로 다른 프로젝트를 매번 만드는 것이 아니라 하나의 `mlflow-aml-lab` 폴더에 파일과 실행 기록을 추가하는 구조다.
 
+이 기초 과정 이후에는 [ML 플랫폼 엔지니어링 통합 실습](../ml-platform-engineering-labs/)으로 이어갈 수 있다. 별도 저장소에서 영화 추천, 합성 카드 탐지와 RAG를 실행하며 Feast, Kubeflow Pipelines, BentoML과 데이터 변화 관측까지 연결한다. 기존 Wine 예제를 대체하기보다 실험 추적과 모델 등록을 익힌 뒤 확장하는 과정이다.
+
 전체 기능은 [MLflow 기능과 구성](mlflow-capabilities/)과 [BentoML 기능과 구성](bentoml-capabilities/)에 나눠 정리했다. 두 글은 도구의 범위를 살펴보는 참고 자료이며, 번호가 붙은 01~06편은 같은 코드를 이어서 실행하는 실습이다. 최신 기능 소개와 AML 실습의 고정 버전도 구분했다.
 
 ## MLflow와 BentoML의 의미
