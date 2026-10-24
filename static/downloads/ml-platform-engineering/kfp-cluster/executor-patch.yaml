@@ -1,0 +1,11 @@
+spec:
+  template:
+    spec:
+      containers:
+        - name: workflow-controller
+          args:
+            - --configmap
+            - workflow-controller-configmap
+            - --executor-image
+            - quay.io/argoproj/argoexec:v3.4.17
+            - --namespaced

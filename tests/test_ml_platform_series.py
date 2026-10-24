@@ -258,16 +258,19 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertTrue(original.is_file(), f"Missing source image: {image['src']}")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
 
-    def test_first_five_chapters_publish_executed_evidence_with_explanations(self):
+    def test_chapters_publish_application_ui_without_rendered_log_images(self):
         expected = {
-            1: ["study-ch01-lineage.png"],
-            2: ["study-ch02-gates.png"],
+            1: [],
+            2: [],
             3: ["study-ch03-api-ready.png"],
             4: [
                 "study-ch04-mlflow-runs.png", "study-ch04-mlflow-metrics.png",
-                "study-ch04-mlflow-model.png", "study-ch04-feast.png",
+                "study-ch04-mlflow-model.png",
             ],
-            5: ["study-ch05-kfp-local.png"],
+            5: [
+                "study-ch05-kfp-cluster.png",
+                "study-ch05-kfp-cluster-result.png",
+            ],
         }
         for chapter, filenames in expected.items():
             slug = next(slug for slug, number in self.articles.items() if number == chapter)
@@ -278,6 +281,29 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 image = self.output / "images" / "ml-platform-engineering" / filename
                 self.assertTrue(image.is_file())
                 self.assertEqual(image.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+        for removed in (
+            "study-ch01-lineage.png", "study-ch02-gates.png",
+            "study-ch04-feast.png", "study-ch05-kfp-local.png",
+        ):
+            self.assertFalse(
+                (self.output / "images" / "ml-platform-engineering" / removed).exists()
+            )
+
+    def test_cluster_instructions_publish_downloads_without_draft_status_messages(self):
+        chapter = self.page_path(f"{SERIES_URL}05-ml-pipelines/").read_text(
+            encoding="utf-8"
+        )
+        for filename in (
+            "Dockerfile", "submit_cluster.py",
+            "object-store-patch.yaml", "executor-patch.yaml",
+        ):
+            url = f"/downloads/ml-platform-engineering/kfp-cluster/{filename}"
+            self.assertIn(url, chapter)
+            self.assertTrue(self.page_path(url).is_file())
+        for url in (SERIES_URL, f"{SERIES_URL}05-ml-pipelines/"):
+            document = self.page_path(url).read_text(encoding="utf-8")
+            self.assertNotIn("6장 이후", document)
+            self.assertNotIn("초안입니다", document)
 
     def test_reading_list_preserves_cms_state_without_public_editing_controls(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")

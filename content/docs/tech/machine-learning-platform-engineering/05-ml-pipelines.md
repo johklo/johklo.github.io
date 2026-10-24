@@ -69,7 +69,7 @@ KFP는 작업을 방향성 비순환 그래프(DAG)로 표현합니다. 앞 단�
 | `Compiler().compile()` | 정의를 실행 명세 YAML로 변환 | 클러스터에 Pod를 띄우지 않음 |
 | 로컬 runner 또는 클러스터 실행 | 실제 입력으로 작업 수행 | 성공해도 업무 품질과 출시 승인을 대신하지 않음 |
 
-따라서 컴파일 성공 화면과 실행 성공 화면은 다른 증거입니다. 컴파일은 주소와 권한, 패키지 설치 상태까지 시험하지 않습니다. 실제 실행에서 “모델을 찾지 못함”이 나오는 것은 이 차이 때문일 수 있습니다.
+컴파일에 성공해도 주소와 권한, 패키지 설치 상태까지 확인된 것은 아닙니다. 실행할 때 “모델을 찾지 못함”이 나온다면 이 환경 차이를 먼저 확인합니다.
 
 ## 파라미터와 아티팩트는 왜 구분할까요?
 
@@ -175,6 +175,7 @@ def write_data(predictions: Input[Dataset], result: Output[Dataset]):
         raise ValueError("Invalid prediction probability")
     Path(result.path).parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(result.path, index=False)
+    print(frame.to_string(index=False))
 
 
 @dsl.pipeline(name="income-study-batch")
@@ -239,9 +240,7 @@ python run_pipeline_study.py
 
 WSL2의 Ubuntu 24.04, Python 3.11.15와 KFP 2.10.1 환경에서 위 코드를 실행했습니다. 같은 Linux 환경에서 4장의 MLflow 모델과 Feast 피처를 새로 만든 뒤 `pipeline_study.py`로 컴파일하고 `run_pipeline_study.py`로 실제 네 task를 실행했습니다.
 
-![KFP SubprocessRunner로 네 작업이 차례로 SUCCESS를 반환하고 사용자 42의 과거 피처 36과 모델 버전 1로 생성한 예측 결과가 남은 실행 로그.](/images/ml-platform-engineering/study-ch05-kfp-local.png)
-
-화면은 위에서 아래로 읽습니다.
+작업별 성공 상태는 다음 의미로 해석했습니다.
 
 1. `read-data` 성공은 요청 목록을 파일로 읽고 다음 단계의 아티팩트로 썼다는 뜻입니다.
 2. `retrieve-features` 성공은 실제 Feast에서 조회한 값을 요청 목록에 맞춰 연결했고 필수 값의 누락이 없었다는 뜻입니다.
@@ -254,7 +253,7 @@ WSL2의 Ubuntu 24.04, Python 3.11.15와 KFP 2.10.1 환경에서 위 코드를 �
 
 직접 확인할 질문: “네 단계가 모두 SUCCESS인데 잘못된 모델 버전을 넘겼다면 정답일까요?” 아닙니다. 잘못된 구체 버전도 정상 로딩될 수 있으므로, 실행 성공뿐 아니라 사용한 모델 URI와 입력의 기준 시점이 의도와 맞는지 확인해야 합니다.
 
-여기서 쓰는 SubprocessRunner는 현재 PC와 설치한 패키지를 공유하는 실행 방식입니다. Kubernetes Pod의 격리, 이미지 pull, Secret, 서비스 DNS와 artifact 저장소 업로드를 검증한 것은 아닙니다.
+SubprocessRunner에서는 현재 PC의 파일과 패키지를 공유합니다. 다음에는 각 작업을 Kubernetes Pod로 분리하고, 파일 전달을 클러스터의 아티팩트 저장소에 맡겼습니다.
 
 ### 그대로 클러스터에 올리면 안 되는 이유
 
@@ -270,7 +269,124 @@ WSL2의 Ubuntu 24.04, Python 3.11.15와 KFP 2.10.1 환경에서 위 코드를 �
 | 기본 Python 이미지 | 고정 의존성과 코드를 담은 실행 이미지 |
 | 마지막 `Output[Dataset]` | artifact 저장소 확인, 필요하면 별도 업무 목적지에 확정 쓰기 |
 
-책의 네 번째 컴포넌트는 예측을 MinIO의 업무 결과 파일로 업로드합니다. 이 작은 예제는 KFP의 결과 아티팩트 작성에서 멈춥니다. 둘은 같은 범위가 아닙니다. 클러스터용 이미지 빌드와 별도 프로젝트의 실제 KFP 명세는 [파이프라인 통합 실습](../../ml-platform-engineering-labs/ml-platform-labs-04-pipelines/)에서 이어갈 수 있습니다.
+책의 네 번째 컴포넌트는 예측을 MinIO의 업무 결과 파일로 업로드합니다. 여기서는 먼저 KFP의 결과 아티팩트 저장까지 연결합니다. 업무용 경로의 확정 쓰기와 재처리는 [파이프라인 통합 실습](../../ml-platform-engineering-labs/ml-platform-labs-04-pipelines/)에서 이어갑니다.
+
+## Kubernetes에서 네 작업 실행하기
+
+한 주방의 작업대를 나누는 대신, 작업마다 별도 주방을 배정해 봤습니다. 앞 단계의 그릇을 직접 가져오는 대신 보관소에 맡기고 다음 작업이 꺼내 쓰게 하는 방식입니다. 여기서 주방은 Pod, 보관소는 S3 호환 아티팩트 저장소입니다.
+
+Docker Desktop의 Linux 엔진 위에 kind 클러스터를 만들고, **Kubeflow Pipelines standalone**을 설치했습니다. 전체 Kubeflow의 Notebooks나 Training Operator가 아니라, 이 장에서 사용하는 Pipelines만 설치한 구성입니다.
+
+| 구성 | 실습 환경 |
+| --- | --- |
+| Kubernetes | kind 0.27.0, 노드 이미지 `kindest/node:v1.31.6` |
+| KFP 서버 | `2.4.1`, `platform-agnostic` 설치 |
+| Python SDK | `kfp==2.10.1` |
+| 컴포넌트 | Python 3.11 이미지, 4장과 같은 고정 의존성 |
+| 아티팩트 저장소 | SeaweedFS `3.85`, S3 API, Kubernetes Secret으로 인증 |
+
+서버와 Python SDK는 별도로 버전이 매겨집니다. SDK 버전 `2.10.1`을 서버 설치 태그로 사용하면 해당 태그를 찾지 못합니다.
+
+### 1. 독립된 학습용 클러스터 만들기
+
+Docker Desktop을 실행한 뒤, `kind`와 `kubectl`을 사용할 수 있는 PowerShell에서 진행합니다. 별도 kubeconfig를 지정해 기존 클러스터와 구분했습니다.
+
+```powershell
+$env:KUBECONFIG = Join-Path $PWD "book-kfp.config"
+kind create cluster --name book-kfp --image kindest/node:v1.31.6 --wait 180s
+kubectl get nodes
+
+$version = "2.4.1"
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=$version"
+kubectl wait --for condition=established --timeout=60s crd/applications.app.k8s.io
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=$version"
+```
+
+설치 중 `minio`에서 `ImagePullBackOff`가 발생했습니다. 이벤트를 보니 예전 `gcr.io/ml-pipeline/minio` 이미지를 찾지 못했고, 첫 실행에서는 Argo executor의 예전 미러도 같은 문제로 멈췄습니다. 모델 코드가 실행되기 전의 이미지 다운로드 문제였습니다.
+
+저장소는 S3 호환 SeaweedFS로 바꾸고, executor는 같은 버전의 Argo 원본 이미지를 사용했습니다. [저장소 패치](/downloads/ml-platform-engineering/kfp-cluster/object-store-patch.yaml)는 기존 Secret을 읽으며 인증값을 코드에 넣지 않습니다. [Executor 패치](/downloads/ml-platform-engineering/kfp-cluster/executor-patch.yaml)는 이미지 주소를 바꿉니다. `minio-service`라는 Service 이름은 유지하지만 그 뒤에서 실행되는 저장소는 SeaweedFS입니다.
+
+```powershell
+curl.exe -fLo object-store-patch.yaml https://johklo.github.io/downloads/ml-platform-engineering/kfp-cluster/object-store-patch.yaml
+curl.exe -fLo executor-patch.yaml https://johklo.github.io/downloads/ml-platform-engineering/kfp-cluster/executor-patch.yaml
+kubectl -n kubeflow patch deployment minio --patch-file object-store-patch.yaml
+kubectl -n kubeflow patch deployment workflow-controller --patch-file executor-patch.yaml
+kubectl -n kubeflow rollout status deployment/minio --timeout=180s
+kubectl -n kubeflow rollout status deployment/mysql --timeout=300s
+kubectl -n kubeflow rollout status deployment/metadata-grpc-deployment --timeout=300s
+kubectl -n kubeflow rollout status deployment/ml-pipeline --timeout=300s
+```
+
+이 구성은 로컬 학습용입니다. 기본 standalone 설치의 인증·TLS·네트워크 구성을 운영 환경에 그대로 사용하지 않습니다.
+
+### 2. Pod가 읽을 모델과 피처 준비하기
+
+이번에는 서비스 배포까지 한꺼번에 늘리기보다 **Pod 분리와 아티팩트 전달**에 집중했습니다. 4장의 합성 데이터, Feast repository, MLflow SQLite DB와 등록 모델을 이미지 빌드 중 `/study`에 생성했습니다. 모든 Pod가 같은 이미지의 입력 스냅샷을 읽고, 작업 결과만 KFP 저장소를 통해 전달합니다.
+
+따라서 이 실습의 Feast는 파일 기반 offline store이고 MLflow도 이미지 내부의 고정 모델을 읽습니다. 공유 MLflow 서버나 원격 Feast 서비스를 배포한 구성과는 구분해야 합니다. 모델이나 원천 데이터를 바꾸려면 이미지를 새 태그로 빌드하고 다시 로드합니다.
+
+4장의 `income_study.py`, `feature_study.py`와 이 장의 `pipeline_study.py`를 같은 폴더에 저장한 뒤 실행했습니다.
+
+```powershell
+curl.exe -fLo Dockerfile https://johklo.github.io/downloads/ml-platform-engineering/kfp-cluster/Dockerfile
+curl.exe -fLo submit_cluster.py https://johklo.github.io/downloads/ml-platform-engineering/kfp-cluster/submit_cluster.py
+docker build -t income-study:chapter05 .
+kind load docker-image income-study:chapter05 --name book-kfp
+```
+
+[Dockerfile](/downloads/ml-platform-engineering/kfp-cluster/Dockerfile)은 4장과 같은 패키지 버전을 설치하고 모델과 피처를 생성합니다. [제출 스크립트](/downloads/ml-platform-engineering/kfp-cluster/submit_cluster.py)는 위 네 컴포넌트의 기본 이미지만 바꿔 컴파일합니다. PC의 경로 대신 `/study`의 경로를 파라미터로 넘기고, 캐시는 꺼서 네 작업을 모두 실행하게 했습니다.
+
+### 3. UI에 접속하고 실행 제출하기
+
+한 터미널에서 UI 연결을 유지합니다.
+
+```powershell
+kubectl -n kubeflow port-forward --address 127.0.0.1 svc/ml-pipeline-ui 18580:80
+```
+
+다른 터미널에서 4장의 가상환경을 활성화하고 실행합니다.
+
+```powershell
+python submit_cluster.py
+```
+
+브라우저에서 `http://127.0.0.1:18580`을 열고 **Experiments → chapter-05 → income-study-kubernetes**로 들어갑니다. 제출 스크립트는 실행 ID를 `cluster-run-id.txt`에 남기고, 실행이 끝날 때까지 기다립니다.
+
+작업이 멈췄을 때는 다음 순서로 원인을 좁힙니다.
+
+```powershell
+kubectl -n kubeflow get pods
+kubectl -n kubeflow get events --field-selector type=Warning
+kubectl -n kubeflow logs <작업-Pod-이름> -c main
+```
+
+`ImagePullBackOff`는 이미지 위치와 접근 권한부터 확인합니다. Pod가 실행된 뒤 Python 예외가 나온다면 그때 입력 파일, 패키지와 모델 버전을 확인합니다. 둘을 구분하니 모델 코드를 불필요하게 고치지 않고 문제를 찾을 수 있었습니다.
+
+### 4. 실행 그래프와 저장된 결과 확인하기
+
+저장소와 executor 이미지 설정을 고친 뒤 다시 제출하니 `read-data → retrieve-features → run-inference → write-data`가 모두 성공했습니다. 캐시를 끈 상태에서 각 컴포넌트가 별도 Pod로 실행됐습니다.
+
+![Kubeflow Pipelines의 income-study-kubernetes 실행 그래프. 네 작업이 모두 성공했고 entities, features, predictions, result 아티팩트가 작업 사이에 연결되어 있습니다.](/images/ml-platform-engineering/study-ch05-kfp-cluster.png)
+
+파란 아이콘의 상자는 작업이고, 노란 폴더는 작업이 남긴 파일입니다. `retrieve-features`는 `entities`를 받아 `features`를 내보냅니다. 이 연결 덕분에 다음 Pod가 앞 Pod의 메모리나 로컬 임시 파일을 직접 볼 필요가 없습니다.
+
+마지막 `write-data`를 선택해 **Input/Output**을 열었습니다. 입력 `predictions`와 출력 `result`가 같은 실행 ID 아래의 서로 다른 저장 경로로 연결되어 있었습니다.
+
+![Kubeflow Pipelines의 write-data 입출력 패널. 입력 predictions와 출력 result의 S3 호환 저장소 경로가 표시되어 있습니다.](/images/ml-platform-engineering/study-ch05-kfp-cluster-result.png)
+
+미리보기에 `PAR1`과 깨진 문자처럼 보이는 내용이 나오는 것은 Parquet 파일을 텍스트로 표시하기 때문입니다. 표의 내용은 파일을 내려받아 pandas로 읽어 확인했습니다. **Output Artifacts → result → View All**의 파일을 `result`로 저장하면 다음처럼 읽을 수 있습니다.
+
+```powershell
+python -c "import pandas as pd; print(pd.read_parquet('result').to_string(index=False))"
+```
+
+| 사용자 | 조회 기준 시각 | 주당 근무 시간 | 근무 형태 | 예측 확률 | 모델 |
+| --- | --- | --- | --- | --- | --- |
+| 42 | 2025-05-22 UTC | 36.0 | private | 0.333333 | `models:/income-study/1` |
+
+로컬 실행과 같은 결과였습니다. 특히 온라인 최신값 `52`가 아니라 기준 시각의 과거 값 `36`이 마지막 파일까지 유지됐습니다. **작업 상태의 성공**, **작업 사이의 파일 전달**, **파일에 담긴 값**을 각각 확인하니 실행 그래프를 읽는 기준이 분명해졌습니다.
+
+실습을 마치면 port-forward 터미널에서 Ctrl+C로 연결을 종료합니다. 이번에 만든 학습용 클러스터만 정리하려면 `kind delete cluster --name book-kfp`를 실행합니다.
 
 ## 예측 결과를 읽을 때 확인할 세 가지
 
@@ -335,5 +451,3 @@ Q. 어떤 단계를 별도 컴포넌트로 나누는 것이 좋을까요?
 한 줄 정리: 오케스트레이션은 실행 순서만 정하는 것이 아니라 데이터 전달, 고정 버전, 실패와 재실행의 경계를 명시하는 일입니다.
 
 [이전: 04. 실험과 피처 관리](../04-experiments-and-features/), [시리즈 목차](../)
-
-6장 이후의 독서노트는 아직 초안입니다.
