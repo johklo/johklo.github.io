@@ -206,15 +206,13 @@ UI 명령은 같은 폴더에서 실행하고 `http://127.0.0.1:5000`을 엽니�
 
 ### 실제 MLflow 화면에서 기록의 연결 읽기
 
-위 스크립트를 Windows의 Python 3.12 환경에서 실행한 뒤 MLflow 2.16.2의 UI를 열어 캡처했습니다. 캡처용 서버 포트는 15400을 사용했으며, 앞에서 안내한 5000과 기능은 같습니다. 책의 화면을 옮기거나 예시 데이터를 UI 위에 덧그린 것이 아닙니다.
-
 ![income-study 실험에 tree와 forest의 두 실행이 저장되고 tree 실행의 모델이 income-study 버전 1로 등록된 실제 MLflow UI.](/images/ml-platform-engineering/study-ch04-mlflow-runs.png)
 
 공책 한 권 안에 두 페이지가 생긴 모습입니다. `tree`, `forest`는 모델 종류를 나타내도록 붙인 run 이름입니다. 이 목록에 있다는 사실만으로 어느 쪽이 좋다고 결론 내리지 않고 같은 검증 지표를 열어 비교합니다.
 
-![선택된 tree 실행의 파라미터와 데이터·코드 해시, validation AUC 및 final test AUC가 표시된 실제 MLflow 상세 화면. 작성자 표시는 가렸다.](/images/ml-platform-engineering/study-ch04-mlflow-metrics.png)
+![선택된 tree 실행의 파라미터와 데이터·코드 해시, validation AUC 및 final test AUC가 표시된 MLflow 상세 화면.](/images/ml-platform-engineering/study-ch04-mlflow-metrics.png)
 
-이번 실행에서는 tree의 검증 AUC가 약 `0.9521`, 최종 테스트 AUC가 약 `0.8939`였습니다. 기준선의 검증 AUC는 `0.5`입니다. 화면의 `max_depth: 3`, 학습 360행, 검증 120행이 코드의 조건과 맞는지 확인합니다. 작성자 표시는 가렸습니다.
+이번 실행에서는 tree의 검증 AUC가 약 `0.9521`, 최종 테스트 AUC가 약 `0.8939`였습니다. 기준선의 검증 AUC는 `0.5`입니다. 화면의 `max_depth: 3`, 학습 360행, 검증 120행이 코드의 조건과 맞는지 확인합니다.
 
 두 점수는 서로 다른 데이터에서 계산했으므로 같아야 하는 값이 아닙니다. 최종 테스트 AUC가 더 낮다고 파일 저장 오류라고 단정하지도 않습니다. 더 중요한 확인은 **검증으로 선택한 후보에 테스트를 나중에 한 번 적용했다**는 순서입니다. 합성 데이터의 이 수치를 실제 소득 분류 성능으로 일반화하지 않습니다.
 
@@ -357,7 +355,7 @@ print("Online:", online["hours_per_week"])
 
 ![Feast로 5월22일의 과거 피처 36을 조회한 뒤 materialize를 실행하고 온라인 최신값 52를 조회한 실제 Python 출력.](/images/ml-platform-engineering/study-ch04-feast.png)
 
-직접 실행한 표준 출력 파일을 브라우저로 표시한 캡처입니다. `Historical: [36.0]` 뒤에 materialization이 수행되고 `Online: [52.0]`가 나오는 순서를 봅니다. **과거 장부에서 찾은 값과 오늘 안내판의 값이 서로 달라야 정상인 상황**입니다.
+`Historical: [36.0]` 뒤에 materialization이 수행되고 `Online: [52.0]`가 나오는 순서를 봅니다. **과거 장부에서 찾은 값과 오늘 안내판의 값이 서로 달라야 정상인 상황**입니다.
 
 직접 확인할 질문: “학습 점수를 높이려고 36 대신 52를 넣어도 될까요?” 안 됩니다. 예측 당시 아직 없던 정보를 주는 것은 답안지를 미리 보여 주는 것과 비슷한 누수입니다.
 

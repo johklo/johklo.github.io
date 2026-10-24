@@ -241,8 +241,6 @@ WSL2의 Ubuntu 24.04, Python 3.11.15와 KFP 2.10.1 환경에서 위 코드를 �
 
 ![KFP SubprocessRunner로 read-data, retrieve-features, run-inference, write-data가 차례로 SUCCESS를 반환하고 사용자 42의 과거 피처 36과 모델 버전 1로 생성한 예측 결과가 남은 실제 실행 로그.](/images/ml-platform-engineering/study-ch05-kfp-local.png)
 
-실제 표준 출력 로그에서 task의 시작·종료 상태 행과 마지막 결과 파일의 내용을 발췌해 브라우저로 표시한 캡처입니다. KFP 웹 UI나 Kubernetes Pod 실행 화면이 아닙니다. 긴 executor 설정과 로컬 경로는 생략했지만 성공 문구나 결과값을 만들어 넣지는 않았습니다.
-
 화면은 위에서 아래로 읽습니다.
 
 1. `read-data` 성공은 요청 목록을 파일로 읽고 다음 단계의 아티팩트로 썼다는 뜻입니다.
