@@ -52,17 +52,12 @@ is excluded from the site until that time; `draft: false` does not override it.
 
 ## Reading list
 
-The Book category includes a reading checklist. Change a book's checkbox,
-then select "GitHub에 저장". Add books through the Book category entry in Pages CMS.
-Saving from the site requires a fine-grained GitHub token with Contents
-read/write permission for this repository. The token is used only for the current
-request and is not stored in browser storage or the page.
-
-The list is stored in the JSON front matter of `content/docs/book/_index.md`, not
-in a separate database. Each visit fetches the current file from GitHub, so another
-device can load saved changes before the next site deployment finishes. Concurrent
-reading-list edits are rejected rather than overwritten. Unsaved edits stay only
-in the current tab.
+The Book category displays a read-only checklist and the number of books read.
+Manage entries and their `read` checkboxes in Pages CMS under
+“기본 · 카테고리 페이지 → Book 카테고리 페이지 → 독서 목록”.
+The list is stored in the JSON front matter of `content/docs/book/_index.md`.
+Changes appear after the site deploys. The public page has no editing buttons,
+GitHub token input, or client-side GitHub requests.
 
 The same list can be edited through the Book category entry in Pages CMS.
 

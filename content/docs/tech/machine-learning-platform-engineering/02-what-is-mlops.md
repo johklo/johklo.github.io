@@ -2,6 +2,7 @@
 title: 02. MLOps란 무엇인가
 description: 닫힌 ML 생애주기, DevOps와의 차이, 자동화 수준으로 보는 MLOps 성숙도
 date: 2026-10-21T07:33:00
+lastmod: 2026-10-24T15:00:00+09:00
 tags:
   - book-club
   - ml-platform-engineering
@@ -11,9 +12,9 @@ weight: 20
 math: false
 draft: false
 ---
-1장에서 전체 생애주기를 봤다면, 2장은 그 흐름을 왜 계속 반복해야 하는지 설명합니다. 일반적인 배포 자동화와 겹치는 부분이 많지만 코드 외에 데이터와 모델도 바뀐다는 점이 다릅니다.
+가게에서 손님 취향이 달라졌다고 무조건 레시피부터 바꾸지는 않습니다. 재료가 잘못 들어왔는지, 조리 도구가 고장 났는지부터 확인해야 합니다. ML 운영도 마찬가지입니다. 예측이 나빠졌다는 신호가 곧바로 재학습하라는 명령은 아닙니다.
 
-서비스 배포에 CI/CD가 있다는 사실과 ML 파이프라인이 자동화되어 있다는 사실을 구분할 필요가 있었습니다. 이 장의 성숙도 모델도 어떤 도구가 설치됐는지가 아니라 무엇을 자동화했는지를 기준으로 이해했습니다.
+2장의 핵심은 관측 결과를 다음 행동으로 연결하는 반복 구조입니다. 이 글에서는 책의 생애주기와 성숙도 구분을 정리한 뒤, 지표의 손실을 계산하고 나쁜 후보를 거절하는 작은 실습까지 이어갑니다. 추가한 수치와 코드는 학습용이며 실제 출시 정책을 대신하지 않습니다.
 
 ## 2.1 반복되는 MLOps 생애주기
 
@@ -227,6 +228,100 @@ flowchart TD
 
 실험에서 운영으로 옮길 때 다른 전처리 코드를 다시 작성한다면 자동화가 있어도 불일치 위험이 남습니다. 공유 컴포넌트뿐 아니라 같은 입력에서의 결과 비교로 실험, 운영 대칭성을 확인해야 합니다.
 
+## 정확도가 아니라 실패 비용으로 비교해 보기
+
+앞의 스팸 사례에서 정상 메일을 차단한 40건은 거짓 양성(FP), 스팸을 놓친 20건은 거짓 음성(FN)입니다. 두 실수를 같은 비용으로 취급하면 업무에 맞지 않는 모델을 고를 수 있습니다.
+
+정상 메일을 잃는 손실을 건당 100, 스팸이 통과하는 불편을 건당 2라는 가상 단위로 두겠습니다. 이때 총손실은 `40 × 100 + 20 × 2 = 4,040`입니다. 다른 임계값에서 FP가 10건, FN이 50건이라면 손실은 `10 × 100 + 50 × 2 = 1,100`으로 줄어듭니다. Recall은 낮아져도 이 가정에서는 두 번째 선택이 낫습니다.
+
+```python
+def error_cost(false_positive, false_negative, fp_cost=100, fn_cost=2):
+    counts = (false_positive, false_negative)
+    if any(not isinstance(value, int) or value < 0 for value in counts):
+        raise ValueError("Error counts must be non-negative integers")
+    return false_positive * fp_cost + false_negative * fn_cost
+
+
+print(error_cost(40, 20))
+print(error_cost(10, 50))
+```
+
+실행하면 `4040`, `1100`이 나옵니다. 비용 비율을 반대로 바꾸면 어떤 결론이 나오는지도 계산해 보세요. 손실값은 임의의 가정이므로 이 숫자로 실제 스팸 서비스를 결정할 수는 없습니다. 중요한 것은 지표 선택이 업무의 손실 구조에 의존한다는 점입니다.
+
+ROC-AUC가 높다고 위 손실까지 최소인 것도 아닙니다. AUC는 점수의 순위 구분 능력을 요약하고, FP와 FN은 실제로 사용할 임계값에 따라 달라집니다. 임계값은 검증 데이터에서 고르고, 최종 테스트 결과를 보며 계속 조정하지 않아야 합니다.
+
+## 직접 해보기: 자동 실행보다 먼저 거절 경로 만들기
+
+자동차 공장에 컨베이어 벨트만 있고 불량품을 멈추는 검사가 없다면 생산 속도가 위험을 키울 수 있습니다. 학습 파이프라인의 검증 게이트도 같은 역할입니다. 잘못된 입력이나 기준 미달의 후보가 다음 단계로 넘어가지 않게 합니다.
+
+다음은 모델을 학습하는 코드가 아니라, 평가 결과를 받아 후보를 보류하는 규칙을 연습하는 코드입니다. 결측률, 검증 AUC, p95 지연은 앞 단계가 실제로 계산해 전달해야 합니다.
+
+```python
+def release_decision(report):
+    required = {
+        "missing_rate", "validation_auc", "baseline_auc",
+        "p95_latency_ms", "schema_valid"
+    }
+    if not required.issubset(report):
+        raise ValueError("Incomplete evaluation report")
+    numeric = ("missing_rate", "validation_auc", "baseline_auc", "p95_latency_ms")
+    from math import isfinite
+    if any(
+        isinstance(report[key], bool)
+        or not isinstance(report[key], (int, float))
+        or not isfinite(report[key])
+        for key in numeric
+    ):
+        raise ValueError("Metrics must be finite numbers")
+    if any(not 0 <= report[key] <= 1 for key in numeric[:3]):
+        raise ValueError("Rates and AUC must be between 0 and 1")
+    if report["p95_latency_ms"] < 0 or not isinstance(report["schema_valid"], bool):
+        raise ValueError("Invalid latency or schema result")
+    reasons = []
+    if not report["schema_valid"]:
+        reasons.append("schema mismatch")
+    if report["missing_rate"] > 0.01:
+        reasons.append("missing rate exceeds 1%")
+    if report["validation_auc"] < report["baseline_auc"] + 0.02:
+        reasons.append("validation AUC improvement is below 0.02")
+    if report["p95_latency_ms"] > 200:
+        reasons.append("p95 latency exceeds 200 ms")
+    return {"eligible": not reasons, "reasons": reasons}
+
+
+candidate = {
+    "missing_rate": 0.005,
+    "validation_auc": 0.84,
+    "baseline_auc": 0.80,
+    "p95_latency_ms": 170,
+    "schema_valid": True,
+}
+print(release_decision(candidate))
+print(release_decision({**candidate, "missing_rate": 0.08}))
+```
+
+첫 결과는 `eligible: True`, 두 번째는 `eligible: False`와 결측률 초과 이유입니다. NaN처럼 비교를 조용히 빠져나갈 수 있는 값도 거절하도록 했습니다. 실제 서비스에서는 평가 보고서의 진위, 표본 수, 집단별 결과, 승인과 롤백 준비도 확인해야 합니다. 이 함수만으로 출시 시스템이 완성되는 것은 아닙니다.
+
+다음으로 지연을 260ms로 바꾸고, `schema_valid`를 `False`로 바꿔 보세요. AUC가 아무리 좋아도 별도의 이유로 보류되어야 합니다. 거절 이유를 감춘 채 이전 값으로 대체하면 운영자는 무엇이 잘못됐는지 알기 어렵습니다.
+
+### 무엇을 다시 실행해야 할까요?
+
+| 관측한 증상 | 먼저 조사할 곳 | 재학습부터 하면 생길 위험 |
+| --- | --- | --- |
+| 배포 직후 모든 요청이 열 누락 오류 | API 입력, 피처 계약, 전처리 버전 | 호환성 오류를 학습 문제로 착각 |
+| 특정 수집기에서 결측이 갑자기 증가 | 수집기와 원천 스키마 | 장애 데이터를 정상으로 학습 |
+| 새 사용자에게만 추천 품질 하락 | 새 사용자 비중, 초기 추천 정책 | 이력이 없는 사람의 문제를 기존 사용자 재학습으로 덮음 |
+| 입력 분포는 비슷한데 정답 기반 손실 증가 | 라벨 지연, 정책 변화, `P(Y|X)` | 드리프트 검사 통과만으로 품질 이상을 놓침 |
+| API는 느려졌지만 같은 입력의 예측은 동일 | 자원, 피처 조회, 모델 로딩 | 불필요한 학습으로 원인 조사가 늦어짐 |
+
+정답을 나중에 알게 되는 경우에는 예측 시점에 `request_id`, 모델 버전, 입력 기준 시점, 예측값을 남기고 나중의 정답과 연결해야 합니다. 개인 식별 정보 전체를 로그에 남기라는 뜻은 아닙니다. 필요한 연결 식별자와 보존 범위를 정해야 합니다.
+
+### 성숙도 단계 구분을 실제 변경에 적용하기
+
+금요일마다 담당자가 노트북을 실행하고 파일을 전달한다면 수동 구간이 중심입니다. 같은 데이터 준비·학습·평가가 일정에 맞춰 실행되고 부적절한 후보가 중단된다면 학습 절차의 자동화에 가까워집니다. 그 절차의 코드를 바꿀 때도 검사, 이미지 빌드, 시험 실행, 배포가 이어진다면 파이프라인 자체의 CI/CD까지 확장한 것입니다.
+
+여기서 API의 Docker 이미지만 자동 배포하는 경우를 구별해야 합니다. 모델을 만드는 절차는 여전히 수동일 수 있으므로 그것만으로 Level 2라고 볼 수 없습니다. 반대로 출시 승인에 사람이 남아 있다는 사실만으로 전체 자동화 수준을 낮게 판단해서도 안 됩니다.
+
 ## 반복 작업의 비용
 
 자동화 우선순위를 정하려면 최근 모델 변경에서 데이터 준비, 학습, 평가, 배포에 각각 얼마나 걸렸는지 봐야 합니다. 실행 시간과 승인 대기를 구분하면 병목이 달라 보일 수 있습니다.
@@ -250,5 +345,7 @@ flowchart TD
 Level 1과 Level 2의 차이를 모델 배포 횟수로만 보면 놓치는 부분이 있습니다. 같은 학습 절차를 다시 실행하는 것과 그 절차 자체를 검사하고 바꾸는 것은 다른 능력입니다.
 
 그래서 현재 상태를 볼 때도 배포 자동화가 있는지 하나만 묻기보다 데이터 검증, 학습과 평가, 모델 등록과 출시를 나눠 확인해야겠다고 생각했습니다. 어디가 수동으로 끊기는지 알아야 다음 개선도 정할 수 있습니다.
+
+한 줄 정리: MLOps의 성숙도는 모델을 자주 만드는 정도보다 잘못된 입력과 변경을 거절하고 원인에 맞게 되돌아갈 수 있는지에 달려 있습니다.
 
 [이전: 01. 시작하기](../01-getting-started/), [시리즈 목차](../), [다음: 03. Kubernetes 기반](../03-kubernetes-foundation/)

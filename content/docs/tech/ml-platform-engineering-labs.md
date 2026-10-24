@@ -58,16 +58,21 @@ GPU나 클라우드 계정 없이 세 프로젝트의 준비, 모델 저장, 평
 
 | 순서 | 가이드 |
 | --- | --- |
-| 00 | [실행 구조와 출처 기록](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/00-foundation.md) |
-| 01 | [영화 추천과 MovieLens](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/01-movies.md) |
-| 02 | [합성 카드 탐지와 YOLO](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/02-cards.md) |
-| 03 | [Feast의 과거 시점과 온라인 피처](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/03-feast.md) |
-| 04 | [Kubeflow와 Azure ML 파이프라인](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/04-pipelines.md) |
-| 05 | [BentoML, HTTP 서빙과 Evidently](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/05-serving-monitoring.md) |
-| 06 | [RAG와 LLMOps 도구 연결](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/06-rag-llmops.md) |
-| 07 | [Azure 구성과 실행 절차](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/07-azure.md) |
+| 00 | [실행 구조와 출처 기록](../ml-platform-labs-00-foundation/) |
+| 01 | [영화 추천과 MovieLens](../ml-platform-labs-01-movies/) |
+| 02 | [합성 카드 탐지와 YOLO](../ml-platform-labs-02-cards/) |
+| 03 | [Feast의 과거 시점과 온라인 피처](../ml-platform-labs-03-feast/) |
+| 04 | [Kubeflow와 Azure ML 파이프라인](../ml-platform-labs-04-pipelines/) |
+| 05 | [BentoML, HTTP 서빙과 Evidently](../ml-platform-labs-05-serving-monitoring/) |
+| 06 | [RAG와 LLMOps 도구 연결](../ml-platform-labs-06-rag-llmops/) |
+| 07 | [Azure 구성과 실행 절차](../ml-platform-labs-07-azure/) |
+| 08 | [책과의 대응 및 검증 범위](../ml-platform-labs-08-coverage/) |
+| 09 | [피처 조회, 출시와 장애 복구 통합 실험](../ml-platform-labs-09-integrated-operations/) |
+| 10 | [RAG 변경 평가와 출시 및 복구](../ml-platform-labs-10-rag-release/) |
 
-한 번에 모든 도구를 설치하지 않고 필요한 단계에서 선택 의존성을 추가합니다. 도구마다 입력, 출력과 실패 기준을 확인한 뒤 다음 단계로 넘어가는 순서입니다.
+각 과정은 별도 하위 카테고리 없이 Tech의 개별 아티클로 게시합니다. 한 번에 모든 도구를 설치하지 않고 필요한 단계에서 선택 의존성을 추가합니다. 도구마다 입력, 출력과 실패 기준을 확인한 뒤 다음 단계로 넘어가는 순서입니다.
+
+09편에서는 MLflow 후보 비교에서 실제 Feast 기반 요청 분기, 배치 재시도와 출시 복구까지 하나로 실행합니다. 단순히 도구가 설치되었는지를 확인하는 대신 피처 공급 전후의 응답과 실패 이후 상태가 어떻게 달라지는지 근거를 남깁니다.
 
 ## Azure에서 달라지는 부분
 
@@ -79,7 +84,9 @@ Azure ML 작업은 독립된 실행 환경에서 데이터를 주고받습니다
 
 ## 학습 범위의 경계
 
-이 자료는 책 전체 도구의 모든 기능을 구현한 운영 플랫폼은 아닙니다. 자동 승인, 무중단 트래픽 전환, 문서별 접근 통제, 의미 기반 답변 캐시와 운영용 대시보드처럼 추가 구현이 필요한 부분은 [대응표](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/08-coverage.md)에 구분했습니다.
+이 자료는 책 전체 도구의 모든 기능을 구현한 운영 플랫폼은 아닙니다. 무중단 트래픽 전환, 문서별 접근 통제, 의미 기반 답변 캐시와 운영용 대시보드처럼 추가 구현이 필요한 부분은 [대응표](../ml-platform-labs-08-coverage/)에 구분했습니다.
+
+로컬 출시 과정에서는 평가를 통과한 후보만 활성화하고, 포인터 전환 실패에서 기존 버전이 유지되는지 확인합니다. RAG도 프롬프트, 문서와 검색 설정을 고정한 후보를 평가하고, 품질이 떨어지는 변경은 거절합니다. 이 로컬 게이트는 조직의 승인 절차나 클라우드의 무중단 운영을 대신하지 않습니다.
 
 목표는 도구를 많이 설치하는 것이 아니라, 어떤 변경이 어떤 결과를 만들었는지 근거를 남기고 설명하는 것입니다. 정상 동작을 본 다음 실패 원인과 복구까지 확인하면 책에서 읽은 구조를 더 구체적으로 이해할 수 있습니다.
 

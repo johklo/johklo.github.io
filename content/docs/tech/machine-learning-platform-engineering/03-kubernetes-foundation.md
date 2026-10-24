@@ -2,14 +2,14 @@
 title: "03. Kubernetes 위에 ML 애플리케이션의 기반 놓기"
 description: "Docker, Kubernetes 객체, CI/CD와 모니터링을 하나의 배포 흐름으로 연결하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-10-20T20:23:00+09:00
+lastmod: 2026-10-24T15:00:00+09:00
 weight: 30
 tags: ["book-club", "ml-platform-engineering", "kubernetes", "devops"]
 ---
 
-3장은 ML 도구를 올리기 전에 컨테이너와 Kubernetes, CI/CD와 모니터링의 역할을 설명합니다. 예제는 간단한 FastAPI 서비스지만 모델을 서빙할 때도 같은 실행 기반이 필요합니다.
+이삿짐을 같은 상자에 포장하는 일과 그 상자를 어느 건물에 놓고 손님을 안내하는 일은 다릅니다. Docker는 실행할 내용을 포장하고, Kubernetes는 그 포장을 어디에서 몇 개 실행할지 관리하며, Service는 바뀌는 실행 대상까지 요청을 연결합니다.
 
-이번 장에서는 각 도구를 따로 외우기보다 코드 변경이 실제 서비스가 되기까지의 경로를 따라가려고 했습니다. 이미지를 만드는 일, Pod를 실행하는 일, 요청을 연결하는 일은 서로 다른 단계입니다.
+3장은 이 실행 기반에 CI/CD와 모니터링을 붙입니다. 각 객체의 역할을 읽은 뒤 작은 API의 포트, label, readiness를 직접 연결해 보고, 일부러 연결을 끊었을 때 어디에서 증거를 찾는지 확인하겠습니다.
 
 ## 3.1 컨테이너와 도구
 
@@ -255,6 +255,173 @@ Prometheus는 애플리케이션이 노출한 메트릭 엔드포인트에서 �
 
 label 설계는 [Prometheus 이름, label 지침](https://prometheus.io/docs/practices/naming/)을 참고했습니다.
 
+## 직접 해보기: 작은 API를 실제 요청 경로로 연결하기
+
+책의 FastAPI 예제를 그대로 옮기는 대신, 같은 개념을 확인할 별도의 작은 예제를 만들겠습니다. 여기에는 ML 모델이 없습니다. 모델을 넣기 전에 이미지와 네트워크 문제를 분리하려는 실습입니다.
+
+Python 3.12, 실행 가능한 Docker Engine과 개인 학습용 Kubernetes 클러스터가 필요합니다. Windows에서는 Docker의 Linux 컨테이너 모드를 사용합니다. 아래 클러스터 명령은 이미 준비된 Minikube를 전제로 하며, 이 글을 작성하면서 클러스터 실행까지 확인한 예제는 아닙니다. 운영 클러스터에는 적용하지 마세요.
+
+### 1. 앱의 주소와 포트 고정하기
+
+빈 실습 폴더에 `app.py`를 만듭니다.
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/")
+def index():
+    return {"service": "ml-book-study", "version": "v1"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "alive"}
+
+
+@app.get("/ready")
+def ready():
+    return {"status": "ready"}
+```
+
+이 예제의 readiness는 항상 성공합니다. 실제 모델 서비스라면 모델 로딩과 필수 초기화를 마쳤을 때 성공하도록 바꿔야 합니다. 외부 시스템이 느리다고 liveness까지 무조건 실패시키면 재시작이 부하를 더 키울 수 있습니다.
+
+`requirements.txt`에는 학습용 버전을 고정합니다.
+
+```text
+fastapi==0.115.5
+uvicorn==0.32.1
+```
+
+같은 폴더의 `Dockerfile`입니다.
+
+```dockerfile
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+`COPY . .` 대신 필요한 두 파일만 복사했습니다. 실습 폴더에 토큰 파일이 있다고 해도 이미지로 가져오지 않도록 범위를 좁힌 것입니다. 기반 이미지는 읽기 쉬운 태그를 썼지만 실제 출시에서는 검증한 digest까지 고정해야 합니다.
+
+```powershell
+docker build -t income-api:study-v1 .
+docker run --rm --name ml-book-api -p 127.0.0.1:18000:8000 income-api:study-v1
+```
+
+두 번째 명령은 터미널을 점유합니다. 다른 터미널에서 `curl.exe http://127.0.0.1:18000/`로 확인하고, 종료할 때는 실행 터미널에서 Ctrl+C를 누릅니다. `18000`은 PC의 포트이고 `8000`은 컨테이너 안의 앱 포트입니다.
+
+### 2. Deployment와 Service의 연결 만들기
+
+다음 내용을 `deployment.yaml`로 저장합니다.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: income-api
+  namespace: ml-book-study
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: income-api
+  template:
+    metadata:
+      labels:
+        app: income-api
+    spec:
+      containers:
+        - name: api
+          image: income-api:study-v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: income-api
+  namespace: ml-book-study
+spec:
+  selector:
+    app: income-api
+  ports:
+    - port: 80
+      targetPort: 8000
+```
+
+중요한 연결은 세 군데입니다. Deployment의 selector와 Pod template의 label이 같아야 하고, Service의 selector도 그 label을 골라야 합니다. 마지막으로 `targetPort: 8000`은 프로세스가 실제로 듣는 포트와 맞아야 합니다. `containerPort` 선언 자체가 포트를 열어 주지는 않습니다.
+
+개인 Minikube의 context가 맞는지 확인한 다음 적용합니다. `minikube image load`는 로컬 이미지를 그 클러스터가 사용할 수 있게 옮기는 단계입니다. 다른 클러스터라면 접근 가능한 레지스트리에 푸시한 이미지 주소와 인증을 써야 합니다.
+
+```powershell
+kubectl config current-context
+minikube image load income-api:study-v1
+kubectl create namespace ml-book-study
+kubectl apply -f deployment.yaml
+kubectl rollout status deployment/income-api -n ml-book-study --timeout=120s
+kubectl get pods -n ml-book-study -o wide
+kubectl get endpointslices -n ml-book-study
+kubectl port-forward service/income-api -n ml-book-study 18080:80
+```
+
+마지막 명령을 둔 상태에서 다른 터미널의 `curl.exe http://127.0.0.1:18080/`가 `v1` 응답을 받는지 확인합니다. 이 명령은 Service가 고른 Pod로 접속하는 점검 경로이지 Service의 전체 부하 분산과 외부 네트워크 경로를 검증하는 부하 시험은 아닙니다.
+
+### 3. 성공 화면 대신 실패의 차이를 관찰하기
+
+테스트마다 YAML을 원래 값으로 복원하고 다시 적용합니다. 한꺼번에 여러 곳을 바꾸면 원인을 구분하기 어렵습니다.
+
+| 바꿀 곳 | 예상 증상 | 확인할 증거 |
+| --- | --- | --- |
+| 이미지 태그를 존재하지 않는 값으로 변경 | 새 Pod에서 이미지 pull 실패 | `kubectl describe pod`의 Events |
+| Service selector를 `app: missing`으로 변경 | 준비된 앱이 있어도 대상이 없음 | Service와 EndpointSlice의 대상 |
+| readiness 경로를 `/not-found`로 변경 | 앱 프로세스는 살아도 Ready가 아님 | Pod의 Ready 조건과 probe 실패 이벤트 |
+| `targetPort`를 8001로 변경 | 일반 Service 접속은 앱 포트에 도달하지 못함 | 앱의 수신 포트와 Service 설정 비교 |
+
+Pod가 Running이어도 Ready가 아닐 수 있습니다. 또 롤링 업데이트 중에는 이전 버전 Pod가 계속 응답해서 새 버전의 실패를 가릴 수 있습니다. 응답 성공만 보지 말고 rollout 상태와 실행 중인 이미지도 확인해야 합니다.
+
+점검을 마치면 port-forward를 Ctrl+C로 종료하고 `kubectl delete -f deployment.yaml`로 이 예제의 Deployment와 Service만 제거합니다. Namespace나 클러스터 전체를 지울 필요는 없습니다.
+
+## 메트릭을 요청 수로 직접 읽어 보기
+
+Prometheus가 `http_requests_total`이라는 Counter를 수집한다고 가정하겠습니다. 다음 질의는 최근 5분 구간의 평균 초당 요청 수입니다. 실제 메트릭과 label 이름은 계측 라이브러리에 맞춰 확인해야 합니다.
+
+```promql
+sum(rate(http_requests_total{job="income-api"}[5m]))
+```
+
+오류율은 5xx 요청의 증가율을 전체 요청의 증가율로 나눕니다. 전체 요청이 없는 구간은 정상 0%라고 단정하지 말고 “트래픽 없음” 또는 “수집 실패”와 구별해야 합니다.
+
+```promql
+sum(rate(http_requests_total{job="income-api",status=~"5.."}[5m]))
+/
+sum(rate(http_requests_total{job="income-api"}[5m]))
+```
+
+이 두 질의가 정상이어도 모델의 분류가 틀릴 수 있습니다. 메트릭 수집 성공, HTTP 요청 성공, 예측의 정답 여부는 서로 다른 층입니다. 이것을 나눠 보는 것이 다음 장에서 MLflow와 Feast를 추가하는 이유이기도 합니다.
+
 ## 운영에서 확인할 부분
 
 애플리케이션이 실행되는 것과 운영팀이 인수할 수 있는 상태는 다릅니다.
@@ -297,4 +464,6 @@ Pod 자동 재시작은 모델, 설정의 올바른 복구와 다릅니다. 복�
 
 결국 배포 상태와 모델의 평가 결과를 따로 확인하고 연결해야 합니다. 이후 ML 도구를 붙일 때도 기존 실행 기반과 모델 고유의 검증이 어디서 만나는지 살펴볼 필요가 있겠습니다.
 
-[이전: 02. MLOps란 무엇인가](../02-what-is-mlops/), [시리즈 목차](../)
+한 줄 정리: 이미지 생성, Pod 실행, 요청 연결, 예측 품질은 서로 다른 성공 조건이므로 각각의 증거를 확인해야 합니다.
+
+[이전: 02. MLOps란 무엇인가](../02-what-is-mlops/), [시리즈 목차](../), [다음: 04. 실험과 피처 관리](../04-experiments-and-features/)

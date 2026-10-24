@@ -1,34 +1,16 @@
 {{- $id := printf "reading-list-%d" .Ordinal -}}
 {{- $style := resources.Get "css/reading-list.css" | minify | fingerprint -}}
-{{- $script := resources.Get "js/reading-list.mjs" | resources.Copy "js/reading-list.js" | fingerprint -}}
 <link rel="stylesheet" href="{{ $style.RelPermalink }}" integrity="{{ $style.Data.Integrity }}">
-<section id="{{ $id }}" class="reading-list" data-reading-list aria-labelledby="{{ $id }}-title">
+<section id="{{ $id }}" class="reading-list" aria-labelledby="{{ $id }}-title">
   <h2 id="{{ $id }}-title">독서 목록</h2>
-  <p data-reading-count></p>
-  <fieldset data-reading-controls disabled>
-    <legend class="reading-list__sr-only">독서 목록 편집</legend>
-    <ul data-reading-books>
-      {{- range .Page.Params.reading_list }}
-        <li><label><input type="checkbox" disabled{{ if .read }} checked{{ end }}> {{ .title }}</label></li>
-      {{- end }}
-    </ul>
-    <div class="reading-list__actions">
-      <button type="button" data-reading-save disabled>GitHub에 저장</button>
-      <button type="button" data-reading-reload>다시 불러오기</button>
-    </div>
-    <details>
-      <summary>GitHub 저장 설정</summary>
-      <label for="{{ $id }}-token">저장용 토큰</label>
-      <input id="{{ $id }}-token" data-reading-token type="password" autocomplete="off" spellcheck="false" aria-describedby="{{ $id }}-token-help">
-      <p id="{{ $id }}-token-help">
-        이 저장소의 Contents 읽기와 쓰기 권한이 있는
-        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">fine-grained token</a>을 사용한다.
-        토큰은 저장 요청에만 사용하고 보관하지 않는다.
-      </p>
-    </details>
-  </fieldset>
-  <p data-reading-status role="status" aria-live="polite">목록을 불러오는 중입니다.</p>
-  <noscript>독서 목록을 편집하려면 JavaScript를 켜야 합니다.</noscript>
-  <script type="application/json" data-reading-state>{{ .Page.Params.reading_list | jsonify | safeJS }}</script>
+  {{- $books := .Page.Params.reading_list | default slice -}}
+  {{- $read := where $books "read" true -}}
+  <p>읽은 책 {{ len $read }} / {{ len $books }}</p>
+  <ul>
+    {{- range $books }}
+      <li><label><input type="checkbox" disabled{{ if .read }} checked{{ end }}> {{ .title }}</label></li>
+    {{- else }}
+      <li>등록한 책이 없습니다.</li>
+    {{- end }}
+  </ul>
 </section>
-<script type="module" src="{{ $script.RelPermalink }}" integrity="{{ $script.Data.Integrity }}"></script>
