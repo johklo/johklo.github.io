@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -85,6 +86,13 @@ class AIAgentsPublicationTest(unittest.TestCase):
         for url in [SERIES_URL, *self.urls]:
             document = self.page_path(url).read_text(encoding="utf-8")
             parsed = PageLinks(document)
+            book_figures = [
+                image for image in parsed.images
+                if re.search(r"/figure-\d+-\d+\.png$", image.get("src", ""))
+            ]
+            slug = url.rstrip("/").rsplit("/", 1)[-1]
+            if slug[:2].isdigit() and int(slug[:2]) not in (0, 2):
+                self.assertTrue(book_figures, f"No source-book diagram in {url}")
             if url == SERIES_URL:
                 self.assertTrue(any(
                     "/file/ai-agents-and-applications-index" in link
@@ -132,6 +140,13 @@ class AIAgentsPublicationTest(unittest.TestCase):
                         "AI Agents and Applications",
                         " ".join(parsed.captions),
                     )
+                    number = re.search(r"/figure-(\d+)-(\d+)\.png$", source)
+                    if number:
+                        chapter, figure = map(int, number.groups())
+                        self.assertRegex(
+                            " ".join(parsed.captions),
+                            rf"그림 {chapter}\.{figure}\. .*?출처: AI Agents and Applications",
+                        )
                     original = ROOT / "static" / urlsplit(source).path.lstrip("/")
                     self.assertEqual(
                         self.page_path(source).read_bytes(),

@@ -232,6 +232,10 @@ UI 명령은 같은 폴더에서 실행하고 `http://127.0.0.1:5000`을 엽니�
 
 ## 4.2 Feast를 피처 스토어로 사용하기
 
+![피처 생성 파이프라인이 Offline store를 채우고 Online store로 materialization하며, Feature registry의 정의를 따라 학습용 과거 피처와 실시간 추론용 피처를 조회하는 Feast 구성.](/images/ml-platform-engineering/figure-4-10.png "그림 4.10. Feast 피처 스토어 설계. 출처: Machine Learning Platform Engineering, 4장.")
+
+과거 거래 장부와 오늘의 안내판을 함께 관리하는 모습으로 읽으면 쉽습니다. 위쪽 `get_historical_features`는 학습 기준 시점에 맞는 값을 찾고, 아래쪽 `get_online_features`는 온라인 저장소의 값을 빠르게 가져옵니다. 가운데 Registry는 값 전체를 담은 창고가 아니라 피처 정의와 저장소·materialization 정보를 관리합니다. 이 차이를 아래 실습의 과거 값 `36`과 온라인 값 `52`로 확인합니다.
+
 실제 데이터는 여러 파일이나 테이블에 흩어져 있습니다. 매번 조인과 변환을 다시 구현하면 학습과 서빙의 정의가 달라지기 쉽습니다. 이를 training-serving skew, 즉 학습, 서빙 불일치라고 부릅니다.
 
 Feast에서 entity는 피처가 누구에 대한 것인지 나타내는 식별자입니다. 사용자라면 `user_id`가 될 수 있습니다. feature view는 데이터 소스와 조회할 피처들을 묶어 정의합니다.

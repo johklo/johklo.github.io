@@ -233,19 +233,23 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 image for image in parsed.images
                 if image.get("src", "").startswith("/images/")
             ]
-            if self.articles[slug] <= 3:
-                self.assertTrue(figures, f"No book diagram in {slug}")
-            else:
-                self.assertGreater(parsed.mermaid_blocks, 0, f"No diagram in {slug}")
             book_figures = [
                 image for image in figures
                 if not Path(urlsplit(image["src"]).path).name.startswith("study-")
             ]
-            if book_figures:
-                self.assertTrue(any(
-                    "출처: Machine Learning Platform Engineering" in caption
-                    for caption in parsed.captions + parsed.paragraphs
-                ), f"No book diagram source in {slug}")
+            self.assertTrue(book_figures, f"No source-book diagram in {slug}")
+            self.assertTrue(any(
+                "출처: Machine Learning Platform Engineering" in caption
+                for caption in parsed.captions + parsed.paragraphs
+            ), f"No book diagram source in {slug}")
+            for image in book_figures:
+                number = re.search(r"/figure-(\d+)-(\d+)\.png$", image["src"])
+                if number:
+                    chapter, figure = map(int, number.groups())
+                    self.assertRegex(
+                        " ".join(parsed.captions + parsed.paragraphs),
+                        rf"그림 {chapter}\.{figure}\. .*?출처: Machine Learning Platform Engineering",
+                    )
             for image in figures:
                 with self.subTest(page=slug, image=image["src"]):
                     self.assertTrue(image.get("alt", "").strip())

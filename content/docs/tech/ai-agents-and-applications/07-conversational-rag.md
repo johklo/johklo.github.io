@@ -22,6 +22,10 @@ Loader가 `Document`를 만들고 Splitter가 청크를 만듭니다. 임베딩 
 
 ### 7.1.2 검색과 생성
 
+![질문이 Retriever와 Embeddings, Vector store를 거쳐 Document 목록으로 돌아온 뒤, PromptTemplate에서 질문과 문맥을 조립해 모델에 전달하는 호출 순서.](/images/ai-agents-and-applications/figure-7-04.png "그림 7.4. 질의응답 호출 시퀀스. 출처: AI Agents and Applications, 7장.")
+
+위에서 아래로 읽으면 한 질문의 호출 순서가 보입니다. 1~3번에서 검색한 것은 벡터와 원문이고, 4번에서 질문과 원문을 프롬프트로 묶은 뒤 5번에서 생성 모델을 호출합니다. 이 기본 시퀀스에는 대화 이력이 없으므로, “그곳” 같은 후속 질문을 처리하려면 뒤에서 설명할 대상 복원과 이력 전달을 추가해야 합니다.
+
 Retriever는 질문에서 자료를 찾고, PromptTemplate은 질문과 자료를 조립하며, 채팅 모델은 완성된 메시지로 답을 만듭니다.
 
 질문을 검색과 생성 양쪽에 전달해야 합니다. 검색 결과만 모델에 보내면 어떤 질문에 답할지 모호해지고, 질문만 보내면 외부 자료를 사용한 RAG가 아닙니다.
