@@ -98,7 +98,7 @@ uv run --extra monitor ml-labs tools drift --reference .ml-labs/reference.csv --
 
 API, BentoML과 MLflow UI는 각각 실행한 터미널에서 Ctrl+C로 종료합니다. 생성 모델은 `.ml-labs`, `mlruns`, BentoML의 사용자 모델 저장소에 남을 수 있습니다. 삭제 전에 실행 기록의 참조 관계를 확인하세요.
 
-한 줄 정리: 모델 버전 고정, 요청 동작, 서비스 지연과 데이터 변화를 각각 확인해야 배포 이후를 설명할 수 있습니다.
+모델 버전 고정, 요청 동작, 서비스 지연과 데이터 변화를 각각 확인해야 배포 이후를 설명할 수 있습니다.
 
 [이전: 파이프라인](../ml-platform-labs-04-pipelines/) / [다음: RAG와 LLMOps](../ml-platform-labs-06-rag-llmops/)
 

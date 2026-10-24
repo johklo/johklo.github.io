@@ -144,7 +144,7 @@ az ml online-endpoint delete --name <unique-endpoint-name> --resource-group <lab
 
 Key Vault는 purge protection 때문에 삭제 후에도 즉시 이름을 재사용할 수 없습니다. 보존 기간과 구독별 정책도 정리 계획에 포함합니다.
 
-한 줄 정리: 렌더링, Azure 검증, 작업 제출과 엔드포인트 생성은 서로 다른 단계이며 비용과 성공 근거도 따로 확인해야 합니다.
+렌더링, Azure 검증, 작업 제출과 엔드포인트 생성은 서로 다른 단계이며 비용과 성공 근거도 따로 확인해야 합니다.
 
 참고: [SDK v2 component pipeline](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-create-component-pipeline-python?view=azureml-api-2), [MLflow endpoint](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-mlflow-models-online-endpoints?view=azureml-api-2), [Search RBAC](https://learn.microsoft.com/en-us/azure/search/search-security-rbac).
 

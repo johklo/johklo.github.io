@@ -1,5 +1,5 @@
 ---
-title: "00. 책의 구성과 북클럽 읽기 지도"
+title: "00. 책의 구성과 흐름"
 description: "ML 플랫폼의 기초부터 구축과 운영, LLMOps까지 이어지는 4개 Part와 13개 챕터"
 date: 2026-10-18T21:30:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
@@ -36,7 +36,7 @@ flowchart TD
 
 ML 프로젝트를 한 번 끝내는 작업이 아니라 계속 돌아오는 생애주기로 봅니다. 컨테이너와 Kubernetes, 배포 자동화와 기본 모니터링으로 모델이 올라갈 바닥을 만드는 구간입니다.
 
-| 글 | 원문 챕터 | 읽으며 답할 질문 |
+| 글 | 원문 챕터 | 핵심 쟁점 |
 | --- | --- | --- |
 | [01. 시작하기](../01-getting-started/) | Getting started with MLOps and ML engineering | 실험에서 서비스로 넘어갈 때 무엇이 추가되는가? |
 | [02. MLOps란 무엇인가](../02-what-is-mlops/) | What is MLOps? | 자동화의 대상은 모델 파일인가, 모델을 만드는 과정인가? |
@@ -48,7 +48,7 @@ ML 프로젝트를 한 번 끝내는 작업이 아니라 계속 돌아오는 생
 
 실험 결과를 기록하고 피처를 재사용하며, 여러 작업을 연결해 예측을 서비스합니다. 소득 분류 예제로 각 기능을 연결합니다.
 
-| 글 | 원문 챕터 | 읽으며 답할 질문 |
+| 글 | 원문 챕터 | 핵심 쟁점 |
 | --- | --- | --- |
 | [04. 실험과 피처 관리](../04-experiments-and-features/) | Designing reliable ML systems | 이 모델이 어떤 실험과 피처에서 나왔는지 설명할 수 있는가? |
 | [05. ML 파이프라인](../05-ml-pipelines/) | Orchestrating ML pipelines | 서로 다른 컨테이너의 작업을 어떻게 하나의 실행으로 묶는가? |
@@ -60,7 +60,7 @@ MLflow, Feast, Kubeflow Pipelines, BentoML, Evidently가 차례로 등장합니�
 
 신분증 이미지에서 카드 영역을 찾는 객체 탐지와 사용자, 영화 평점을 쓰는 추천을 다룹니다. 이미지와 표 데이터의 차이가 저장, 검증, 운영 관측에 어떻게 영향을 주는지 비교할 구간입니다.
 
-| 글 | 원문 챕터 | 읽으며 답할 질문 |
+| 글 | 원문 챕터 | 핵심 쟁점 |
 | --- | --- | --- |
 | 07. 데이터 분석과 준비 | Data analysis and preparation | 노트북의 탐색을 재실행 가능한 데이터 준비 작업으로 바꾸려면? |
 | 08. 학습과 검증 I | Model training and validation: Part 1 | 학습이 끝났다는 사실과 모델이 쓸 만하다는 사실은 어떻게 다른가? |
@@ -74,7 +74,7 @@ MLflow, Feast, Kubeflow Pipelines, BentoML, Evidently가 차례로 등장합니�
 
 마지막에는 사내 문서를 찾아 답하는 DakkaBot을 만듭니다. 직접 학습한 모델의 가중치를 관리하던 문제에 검색 문서, 벡터 인덱스, 프롬프트, 외부 모델 API 관리가 더해집니다.
 
-| 글 | 원문 챕터 | 읽으며 답할 질문 |
+| 글 | 원문 챕터 | 핵심 쟁점 |
 | --- | --- | --- |
 | 12. LLM 기반 시스템 | Designing LLM-powered systems | 잘못된 답변의 원인이 검색인지 생성인지 구분할 수 있는가? |
 | 13. 프로덕션 LLM 설계 | Production LLM system design | 답변 품질, 안전, 비용을 바꾸는 변경을 어떻게 검증하고 되돌릴까? |

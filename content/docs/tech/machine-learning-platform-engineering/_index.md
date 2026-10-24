@@ -1,6 +1,6 @@
 ---
 title: "[책] Machine Learning Platform Engineering"
-description: ML 플랫폼의 기초부터 모델 운영, RAG와 LLMOps까지 다루는 북클럽 독서노트
+description: ML 플랫폼의 기초부터 모델 운영, RAG와 LLMOps까지 다루는 독서노트
 weight: 1
 sidebar:
   open: false

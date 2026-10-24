@@ -66,7 +66,7 @@ uv run --extra feast ml-labs tools feast run --repo integrations/feast --action 
 
 온라인 저장소는 로컬 SQLite입니다. Redis 없이도 실제 Feast 흐름을 확인하기 위한 선택이며, 처리량과 지연을 운영 환경 수준으로 검증한 것은 아닙니다.
 
-## 무엇을 남겨야 할까요
+## 피처 조회에 필요한 기록
 
 | 대상 | 확인할 내용 |
 | --- | --- |
@@ -78,11 +78,11 @@ uv run --extra feast ml-labs tools feast run --repo integrations/feast --action 
 
 Feast FeatureView의 TTL과 온라인 저장소 자체의 키 만료는 같은 개념이 아닙니다. 온라인 최신성, 늦게 도착한 이벤트와 피처 누락을 어떻게 처리할지는 별도 정책이 필요합니다.
 
-## 연결을 더 깊게 만들기
+## 라우터와 순위 모델의 구분
 
-평점 수에 따른 라우터는 [통합 운영 과정](../ml-platform-labs-09-integrated-operations/)에서 실행합니다. 이어서 사용자 평균 평점과 장르 선호도를 모델 입력으로 활용하는 별도 순위 모델을 구현해 보세요. 그때는 피처 계약과 학습, 서빙 변환을 함께 바꾸어야 합니다.
+평점 수에 따른 라우터는 [통합 운영 과정](../ml-platform-labs-09-integrated-operations/)에서 실행합니다. 사용자 평균 평점과 장르 선호도를 모델 입력으로 활용하는 별도 순위 모델은 이 구현에 포함하지 않았습니다. 이를 연결하려면 피처 계약과 학습, 서빙 변환을 함께 바꾸어야 합니다.
 
-한 줄 정리: 피처 정의, 과거 시점 조회와 온라인 값 공급은 서로 다른 단계이며 각각의 시점과 누락을 확인해야 합니다.
+피처 정의, 과거 시점 조회와 온라인 값 공급은 서로 다른 단계이며 각각의 시점과 누락을 확인해야 합니다.
 
 [이전: 객체 탐지](../ml-platform-labs-02-cards/) / [다음: 파이프라인](../ml-platform-labs-04-pipelines/)
 

@@ -280,7 +280,8 @@ class MLPlatformPublicationTest(unittest.TestCase):
         for chapter, filenames in expected.items():
             slug = next(slug for slug, number in self.articles.items() if number == chapter)
             document = self.page_path(f"{SERIES_URL}{slug}/").read_text(encoding="utf-8")
-            self.assertIn("직접 확인할 질문", document)
+            self.assertNotIn("직접 확인할 질문", document)
+            self.assertNotIn("한 줄 정리:", document)
             for filename in filenames:
                 self.assertIn(filename, document)
                 image = self.output / "images" / "ml-platform-engineering" / filename
