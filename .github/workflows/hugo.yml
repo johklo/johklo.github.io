@@ -27,7 +27,7 @@ jobs:
         run: >-
           python -m pip install --quiet
           mlflow==2.16.2 scikit-learn==1.5.2 feast==0.40.1
-          pandas==2.2.3 numpy==1.26.4 pyarrow==17.0.0 kfp==2.10.1
+          pandas==2.2.3 numpy==1.26.4 pyarrow==17.0.0 kfp==2.10.1 sqlalchemy==2.0.36
       - name: Run the examples directly from the published chapters
         run: python -m unittest discover -s tests -p test_ml_platform_study.py -v
 

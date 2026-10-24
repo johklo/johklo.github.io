@@ -70,7 +70,7 @@ Tracking의 파라미터와 지표, 실행 상태 같은 메타데이터는 back
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install mlflow==2.16.2 scikit-learn==1.5.2 pandas==2.2.3 numpy==1.26.4
+python -m pip install mlflow==2.16.2 scikit-learn==1.5.2 pandas==2.2.3 numpy==1.26.4 sqlalchemy==2.0.36
 ```
 
 다음 코드를 `income_study.py`로 저장합니다. 실제 개인 데이터를 사용하지 않도록 합성 데이터를 만들었고, 수치형 열도 추가했습니다. 따라서 책의 소득 데이터와 분포나 성능을 비교하면 안 됩니다.
