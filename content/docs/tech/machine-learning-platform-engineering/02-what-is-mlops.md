@@ -314,11 +314,11 @@ print(release_decision({**candidate, "missing_rate": 0.08}))
 
 `p95_latency_ms`는 응답 시간의 검사입니다. 공부를 잘하는 학생이라도 약속한 시간 안에 답하지 못하면 실시간 상담을 맡기기 어려운 것과 비슷합니다. 품질과 속도는 각각 통과해야 할 조건입니다.
 
-### 실제 실행 화면 읽기
+### 실행 결과 확인하기
 
 위 두 Python 블록을 각각 `cost_study.py`, `gate_study.py`로 저장해 실행했습니다.
 
-![손실 계산 결과 4040과 1100, 정상 후보의 eligible True 및 결측률 8% 후보의 eligible False와 거절 이유가 표시된 실제 Python 출력.](/images/ml-platform-engineering/study-ch02-gates.png)
+![손실 계산 결과 4040과 1100, 정상 후보의 eligible True 및 결측률 8% 후보의 eligible False와 거절 이유.](/images/ml-platform-engineering/study-ch02-gates.png)
 
 앞의 두 숫자는 손실 가정에 따른 계산이고, 뒤의 두 줄은 가상의 평가 보고서에 검사 규칙을 적용한 결과입니다. 실제 운영 모델의 성능 측정값으로 해석하면 안 됩니다.
 

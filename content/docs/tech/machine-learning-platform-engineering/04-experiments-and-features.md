@@ -204,9 +204,9 @@ UI 명령은 같은 폴더에서 실행하고 `http://127.0.0.1:5000`을 엽니�
 
 여기서 데이터 해시와 스크립트 해시만으로 환경 전체가 설명되지는 않습니다. 실제 프로젝트에서는 코드 커밋, 잠금 의존성, 데이터 권한, 학습 환경과 승인도 연결해야 합니다. 인코더의 `handle_unknown="ignore"`는 새 범주에서 예외를 피하는 동작이지 그 범주에 대해 모델이 잘 배웠다는 보장이 아닙니다.
 
-### 실제 MLflow 화면에서 기록의 연결 읽기
+### MLflow에서 실험과 모델 연결 확인하기
 
-![income-study 실험에 tree와 forest의 두 실행이 저장되고 tree 실행의 모델이 income-study 버전 1로 등록된 실제 MLflow UI.](/images/ml-platform-engineering/study-ch04-mlflow-runs.png)
+![income-study 실험에 tree와 forest의 두 실행이 저장되고 tree 실행의 모델이 income-study 버전 1로 등록된 MLflow UI.](/images/ml-platform-engineering/study-ch04-mlflow-runs.png)
 
 공책 한 권 안에 두 페이지가 생긴 모습입니다. `tree`, `forest`는 모델 종류를 나타내도록 붙인 run 이름입니다. 이 목록에 있다는 사실만으로 어느 쪽이 좋다고 결론 내리지 않고 같은 검증 지표를 열어 비교합니다.
 
@@ -218,7 +218,7 @@ UI 명령은 같은 폴더에서 실행하고 `http://127.0.0.1:5000`을 엽니�
 
 이 예제는 작은 CSV를 artifact로 보관하고 태그에 해시를 기록합니다. 그래서 화면의 `Datasets used`가 비어 있어도 CSV가 없는 것은 아닙니다. `log_input()`으로 데이터셋 메타데이터를 기록하는 기능과 파일 artifact 보관은 다른 동작입니다.
 
-![MLflow 모델 레지스트리에서 income-study Version 1과 원천 실행 tree, 입력·출력 스키마를 확인한 실제 화면.](/images/ml-platform-engineering/study-ch04-mlflow-model.png)
+![MLflow 모델 레지스트리의 income-study Version 1과 원천 실행 tree, 입력·출력 스키마.](/images/ml-platform-engineering/study-ch04-mlflow-model.png)
 
 완성품 목록에서는 이름 `income-study`, 버전 `1`, Source Run `tree`를 확인합니다. 이 세 가지를 연결하면 등록 모델에서 원래 실험 페이지로 돌아갈 수 있습니다. 버전 1이 자동으로 프로덕션에 배포됐다는 뜻은 아닙니다. 스크립트는 등록 모델을 재로딩하고 예측이 같은지 비교하는 데까지 실행했습니다.
 
@@ -353,7 +353,7 @@ print("Online:", online["hours_per_week"])
 
 실행 후 확인할 값은 `Historical: [36.0]`, `Online: [52.0]`입니다. 과거 시점의 조회와 최신값 조회를 의도적으로 나눈 것입니다. 이 온라인 값을 5월22일의 학습에 사용하면 안 됩니다.
 
-![Feast로 5월22일의 과거 피처 36을 조회한 뒤 materialize를 실행하고 온라인 최신값 52를 조회한 실제 Python 출력.](/images/ml-platform-engineering/study-ch04-feast.png)
+![Feast로 5월22일의 과거 피처 36을 조회한 뒤 materialize를 실행하고 온라인 최신값 52를 조회한 결과.](/images/ml-platform-engineering/study-ch04-feast.png)
 
 `Historical: [36.0]` 뒤에 materialization이 수행되고 `Online: [52.0]`가 나오는 순서를 봅니다. **과거 장부에서 찾은 값과 오늘 안내판의 값이 서로 달라야 정상인 상황**입니다.
 

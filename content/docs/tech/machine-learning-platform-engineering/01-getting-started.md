@@ -287,7 +287,7 @@ python lineage_study.py
 
 앞의 비교는 `True`, 데이터를 추가한 뒤의 비교는 `False`여야 합니다. 이름과 경로는 그대로인데 데이터 내용이 바뀐 것입니다. 이것이 “어제 쓴 CSV 경로가 있다”만으로 충분하지 않은 이유입니다. 해시는 내용을 복구해 주지 않으므로 원본 스냅샷도 보존해야 합니다.
 
-### 실제 실행 화면 읽기
+### 실행 결과 확인하기
 
 ![lineage_study.py를 실행한 출력. 파일 변경 전의 해시 비교는 True이고 같은 파일에 행을 추가한 뒤에는 False다.](/images/ml-platform-engineering/study-ch01-lineage.png)
 

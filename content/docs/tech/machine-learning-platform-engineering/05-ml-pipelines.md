@@ -235,11 +235,11 @@ python run_pipeline_study.py
 
 `kfp-local-output` 아래 마지막 task의 결과 Parquet에서 사용자 42, 조회 기준 시각, `hours_per_week: 36.0`, 예측 확률과 고정된 `model_uri`를 확인합니다. 확률값 자체보다 조회한 과거 피처와 모델 버전이 맞는지가 우선입니다.
 
-### 실제 KFP 실행 화면 읽기
+### KFP 실행 결과 확인하기
 
 WSL2의 Ubuntu 24.04, Python 3.11.15와 KFP 2.10.1 환경에서 위 코드를 실행했습니다. 같은 Linux 환경에서 4장의 MLflow 모델과 Feast 피처를 새로 만든 뒤 `pipeline_study.py`로 컴파일하고 `run_pipeline_study.py`로 실제 네 task를 실행했습니다.
 
-![KFP SubprocessRunner로 read-data, retrieve-features, run-inference, write-data가 차례로 SUCCESS를 반환하고 사용자 42의 과거 피처 36과 모델 버전 1로 생성한 예측 결과가 남은 실제 실행 로그.](/images/ml-platform-engineering/study-ch05-kfp-local.png)
+![KFP SubprocessRunner로 네 작업이 차례로 SUCCESS를 반환하고 사용자 42의 과거 피처 36과 모델 버전 1로 생성한 예측 결과가 남은 실행 로그.](/images/ml-platform-engineering/study-ch05-kfp-local.png)
 
 화면은 위에서 아래로 읽습니다.
 
