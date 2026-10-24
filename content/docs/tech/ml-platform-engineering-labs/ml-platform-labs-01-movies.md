@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 01. 영화 추천을 시간 순서대로 학습하�
 description: "01. 영화 추천을 시간 순서대로 학습하고 평가하기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 20
+aliases: ["/docs/tech/ml-platform-labs-01-movies/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

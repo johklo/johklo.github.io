@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 03. 같은 사용자 피처를 과거와 현재에�
 description: "03. 같은 사용자 피처를 과거와 현재에서 조회하기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 40
+aliases: ["/docs/tech/ml-platform-labs-03-feast/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

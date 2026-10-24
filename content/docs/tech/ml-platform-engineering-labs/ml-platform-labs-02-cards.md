@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 02. 합성 카드 탐지에서 기준선과 학습 �
 description: "02. 합성 카드 탐지에서 기준선과 학습 모델 비교하기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 30
+aliases: ["/docs/tech/ml-platform-labs-02-cards/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

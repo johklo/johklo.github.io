@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 00. 모델 파일보다 먼저 실행의 출처 만�
 description: "00. 모델 파일보다 먼저 실행의 출처 만들기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 10
+aliases: ["/docs/tech/ml-platform-labs-00-foundation/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 
@@ -76,7 +78,7 @@ Git 커밋을 기록할 수 없는 컨테이너나 업로드 환경에서는 `ML
 
 한 줄 정리: 모델 주소만 남기지 말고 데이터, 코드, 평가와 등록 버전까지 이어져야 실험을 설명할 수 있습니다.
 
-[다음: 영화 추천](../ml-platform-labs-01-movies/) / [전체 과정](../ml-platform-engineering-labs/)
+[다음: 영화 추천](../ml-platform-labs-01-movies/) / [전체 과정](../)
 
 
 실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받습니다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/00-foundation.md)

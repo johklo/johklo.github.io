@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 08. 책과 실습의 대응 및 검증 범위"
 description: "08. 책과 실습의 대응 및 검증 범위 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 90
+aliases: ["/docs/tech/ml-platform-labs-08-coverage/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 
@@ -77,7 +79,7 @@ KFP 컴파일 검사는 클러스터 실행 성공과 다릅니다. Azure SDK가
 
 이 과제들은 현재 구현했다고 주장하는 기능이 아니라, 기본 과정 이후 직접 완성할 부분입니다.
 
-[이전: Azure 실행](../ml-platform-labs-07-azure/) / [전체 과정](../ml-platform-engineering-labs/)
+[이전: Azure 실행](../ml-platform-labs-07-azure/) / [전체 과정](../)
 
 
 실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받습니다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/08-coverage.md)

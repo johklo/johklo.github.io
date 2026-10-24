@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 10. RAG 후보 비교, 릴리스 활성화와 rollba
 description: "10. RAG 후보 비교, 릴리스 활성화와 rollback 실습 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 110
+aliases: ["/docs/tech/ml-platform-labs-10-rag-release/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

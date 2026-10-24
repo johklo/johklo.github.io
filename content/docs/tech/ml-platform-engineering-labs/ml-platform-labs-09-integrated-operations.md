@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 09. 피처 조회부터 출시와 복구까지 한 �
 description: "09. 피처 조회부터 출시와 복구까지 한 흐름으로 실행하기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 100
+aliases: ["/docs/tech/ml-platform-labs-09-integrated-operations/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 
@@ -157,7 +159,7 @@ uv run ml-labs batch --candidate .ml-labs/runs/movies-live/candidate.json --repo
 
 한 줄 정리: 도구의 설치 상태가 아니라 요청 결과와 실패 이후의 상태가 바뀌는지로 통합 여부를 확인합니다.
 
-[이전: 책과의 대응](../ml-platform-labs-08-coverage/) / [전체 과정](../ml-platform-engineering-labs/)
+[이전: 책과의 대응](../ml-platform-labs-08-coverage/) / [전체 과정](../)
 
 
 실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받습니다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/09-integrated-operations.md)

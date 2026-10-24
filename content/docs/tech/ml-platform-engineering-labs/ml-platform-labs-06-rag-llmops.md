@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 06. 검색부터 평가·배포까지 같은 RAG를 
 description: "06. 검색부터 평가·배포까지 같은 RAG를 사용하기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 70
+aliases: ["/docs/tech/ml-platform-labs-06-rag-llmops/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

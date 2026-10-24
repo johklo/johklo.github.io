@@ -176,9 +176,11 @@ class MLPlatformPublicationTest(unittest.TestCase):
             url in json.loads(path.read_text(encoding="utf-8")) for path in indexes
         ))
 
-    def test_lab_lessons_publish_complete_bodies_directly_under_tech(self):
-        sources = sorted((ROOT / "content" / "docs" / "tech").glob("ml-platform-labs-*.md"))
+    def test_lab_lessons_publish_complete_bodies_beneath_the_overview(self):
+        tech_source = ROOT / "content" / "docs" / "tech"
+        sources = sorted((tech_source / "ml-platform-engineering-labs").glob("ml-platform-labs-*.md"))
         self.assertEqual(len(sources), 11)
+        self.assertEqual(list(tech_source.glob("ml-platform-labs-*.md")), [])
         tech = PageLinks(
             self.page_path("/docs/tech/").read_text(encoding="utf-8")
         ).links
@@ -187,12 +189,20 @@ class MLPlatformPublicationTest(unittest.TestCase):
         for path in indexes:
             indexed.update(json.loads(path.read_text(encoding="utf-8")))
         overview_url = "/docs/tech/ml-platform-engineering-labs/"
+        self.assertIn(overview_url, tech)
+        overview = self.page_path(overview_url).read_text(encoding="utf-8")
+        overview_links = PageLinks(overview).links
+        self.assertIn("/file/ml-platform-engineering-labs-index", overview)
         for source in sources:
-            url = f"/docs/tech/{source.stem}/"
+            url = f"{overview_url}{source.stem}/"
             with self.subTest(lesson=source.stem):
                 document = self.page_path(url).read_text(encoding="utf-8")
-                self.assertIn(url, tech)
+                self.assertIn(url, overview_links)
                 self.assertIn(url, indexed)
+                old_url = f"/docs/tech/{source.stem}/"
+                self.assertNotIn(old_url, indexed)
+                redirect = self.page_path(old_url).read_text(encoding="utf-8")
+                self.assertIn(f"https://johklo.github.io{url}", redirect)
                 self.assertIn("실습 저장소", document)
                 headings = re.findall(
                     r"(?m)^## (.+)$", source.read_text(encoding="utf-8")
@@ -202,13 +212,12 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertIn(heading, document)
                 self.assertGreater(len(source.read_text(encoding="utf-8")), 1500)
                 self.assertIn(
-                    f"/collection/tech/edit/", document,
+                    "/collection/ml-platform-engineering-labs/edit/", document,
                 )
                 for href in PageLinks(document).links:
                     target = urlsplit(urljoin(f"https://johklo.github.io{url}", href))
                     if target.netloc == "johklo.github.io" and (
-                        target.path.startswith("/docs/tech/ml-platform-labs-")
-                        or target.path == overview_url
+                        target.path.startswith(overview_url)
                     ):
                         self.assertTrue(self.page_path(target.path).is_file(), href)
 
@@ -228,7 +237,11 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 self.assertTrue(figures, f"No book diagram in {slug}")
             else:
                 self.assertGreater(parsed.mermaid_blocks, 0, f"No diagram in {slug}")
-            if figures:
+            book_figures = [
+                image for image in figures
+                if not Path(urlsplit(image["src"]).path).name.startswith("study-")
+            ]
+            if book_figures:
                 self.assertTrue(any(
                     "출처: Machine Learning Platform Engineering" in caption
                     for caption in parsed.captions + parsed.paragraphs
@@ -244,6 +257,27 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertTrue(output.is_file(), f"Missing published image: {image['src']}")
                     self.assertTrue(original.is_file(), f"Missing source image: {image['src']}")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
+
+    def test_first_five_chapters_publish_executed_evidence_with_explanations(self):
+        expected = {
+            1: ["study-ch01-lineage.png"],
+            2: ["study-ch02-gates.png"],
+            3: ["study-ch03-api-ready.png"],
+            4: [
+                "study-ch04-mlflow-runs.png", "study-ch04-mlflow-metrics.png",
+                "study-ch04-mlflow-model.png", "study-ch04-feast.png",
+            ],
+            5: ["study-ch05-kfp-local.png"],
+        }
+        for chapter, filenames in expected.items():
+            slug = next(slug for slug, number in self.articles.items() if number == chapter)
+            document = self.page_path(f"{SERIES_URL}{slug}/").read_text(encoding="utf-8")
+            self.assertIn("직접 확인할 질문", document)
+            for filename in filenames:
+                self.assertIn(filename, document)
+                image = self.output / "images" / "ml-platform-engineering" / filename
+                self.assertTrue(image.is_file())
+                self.assertEqual(image.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
     def test_reading_list_preserves_cms_state_without_public_editing_controls(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")

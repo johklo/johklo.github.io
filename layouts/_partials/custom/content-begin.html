@@ -9,7 +9,7 @@
   {{- $edit := "" -}}
   {{- $new := "" -}}
   {{- $bookCollection := "" -}}
-  {{- range $prefix, $collection := dict "docs/tech/machine-learning-platform-engineering/" "ml-platform-engineering" "docs/tech/ai-agents-and-applications/" "ai-agents-and-applications" "docs/tech/mlflow-azure-machine-learning/" "mlflow-azure-machine-learning" -}}
+  {{- range $prefix, $collection := dict "docs/tech/machine-learning-platform-engineering/" "ml-platform-engineering" "docs/tech/ai-agents-and-applications/" "ai-agents-and-applications" "docs/tech/mlflow-azure-machine-learning/" "mlflow-azure-machine-learning" "docs/tech/ml-platform-engineering-labs/" "ml-platform-engineering-labs" -}}
     {{- if hasPrefix $path $prefix }}{{ $bookCollection = $collection }}{{ end -}}
   {{- end -}}
   {{- if eq $path "_index.md" }}{{ $edit = printf "%s/file/home" $cms -}}

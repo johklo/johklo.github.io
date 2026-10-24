@@ -3,6 +3,8 @@ title: "ML 플랫폼 엔지니어링 통합 실습"
 description: "영화 추천, 합성 카드 탐지와 문서 검색을 데이터 준비부터 평가, 서빙과 Azure ML까지 연결하는 실행 가이드"
 date: 2026-10-24T15:00:00+09:00
 tags: ["mlops", "mlflow", "feast", "kubeflow", "bentoml", "azure-machine-learning", "llmops"]
+sidebar:
+  open: false
 ---
 
 『Machine Learning Platform Engineering』을 읽으면서 도구가 맡는 역할은 이해해도, 직접 조건을 바꾸거나 오류를 만났을 때 어디부터 확인해야 할지는 별도로 연습해야겠다고 느꼈습니다. 책에서 다루는 흐름을 실제 코드로 이어서 실행할 수 있도록 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)를 만들었습니다.
@@ -11,7 +13,7 @@ tags: ["mlops", "mlflow", "feast", "kubeflow", "bentoml", "azure-machine-learnin
 
 ## 기존 글에서 이어지는 부분
 
-[MLflow와 Azure Machine Learning 기초 과정](../mlflow-azure-machine-learning/)은 Wine 분류 모델 하나로 실험 기록, 모델 로딩과 등록을 익히는 출발점으로 그대로 활용합니다.
+[MLflow와 Azure Machine Learning 기초 과정](../../mlflow-azure-machine-learning/)은 Wine 분류 모델 하나로 실험 기록, 모델 로딩과 등록을 익히는 출발점으로 그대로 활용합니다.
 
 새 저장소에서는 복사해야 하는 코드 조각 대신 실행 가능한 패키지를 제공합니다. 데이터 계약과 지문, 후보 명세와 평가 보고서, 등록 버전이 서로 연결됩니다. 정상 실행 이후에는 잘못된 데이터나 통과하지 못한 평가를 넣어 어디서 차단되는지도 확인합니다.
 
@@ -58,19 +60,19 @@ GPU나 클라우드 계정 없이 세 프로젝트의 준비, 모델 저장, 평
 
 | 순서 | 가이드 |
 | --- | --- |
-| 00 | [실행 구조와 출처 기록](../ml-platform-labs-00-foundation/) |
-| 01 | [영화 추천과 MovieLens](../ml-platform-labs-01-movies/) |
-| 02 | [합성 카드 탐지와 YOLO](../ml-platform-labs-02-cards/) |
-| 03 | [Feast의 과거 시점과 온라인 피처](../ml-platform-labs-03-feast/) |
-| 04 | [Kubeflow와 Azure ML 파이프라인](../ml-platform-labs-04-pipelines/) |
-| 05 | [BentoML, HTTP 서빙과 Evidently](../ml-platform-labs-05-serving-monitoring/) |
-| 06 | [RAG와 LLMOps 도구 연결](../ml-platform-labs-06-rag-llmops/) |
-| 07 | [Azure 구성과 실행 절차](../ml-platform-labs-07-azure/) |
-| 08 | [책과의 대응 및 검증 범위](../ml-platform-labs-08-coverage/) |
-| 09 | [피처 조회, 출시와 장애 복구 통합 실험](../ml-platform-labs-09-integrated-operations/) |
-| 10 | [RAG 변경 평가와 출시 및 복구](../ml-platform-labs-10-rag-release/) |
+| 00 | [실행 구조와 출처 기록](ml-platform-labs-00-foundation/) |
+| 01 | [영화 추천과 MovieLens](ml-platform-labs-01-movies/) |
+| 02 | [합성 카드 탐지와 YOLO](ml-platform-labs-02-cards/) |
+| 03 | [Feast의 과거 시점과 온라인 피처](ml-platform-labs-03-feast/) |
+| 04 | [Kubeflow와 Azure ML 파이프라인](ml-platform-labs-04-pipelines/) |
+| 05 | [BentoML, HTTP 서빙과 Evidently](ml-platform-labs-05-serving-monitoring/) |
+| 06 | [RAG와 LLMOps 도구 연결](ml-platform-labs-06-rag-llmops/) |
+| 07 | [Azure 구성과 실행 절차](ml-platform-labs-07-azure/) |
+| 08 | [책과의 대응 및 검증 범위](ml-platform-labs-08-coverage/) |
+| 09 | [피처 조회, 출시와 장애 복구 통합 실험](ml-platform-labs-09-integrated-operations/) |
+| 10 | [RAG 변경 평가와 출시 및 복구](ml-platform-labs-10-rag-release/) |
 
-각 과정은 별도 하위 카테고리 없이 Tech의 개별 아티클로 게시합니다. 한 번에 모든 도구를 설치하지 않고 필요한 단계에서 선택 의존성을 추가합니다. 도구마다 입력, 출력과 실패 기준을 확인한 뒤 다음 단계로 넘어가는 순서입니다.
+각 과정은 이 통합 실습 페이지 아래의 하위 아티클로 게시합니다. 한 번에 모든 도구를 설치하지 않고 필요한 단계에서 선택 의존성을 추가합니다. 도구마다 입력, 출력과 실패 기준을 확인한 뒤 다음 단계로 넘어가는 순서입니다.
 
 09편에서는 MLflow 후보 비교에서 실제 Feast 기반 요청 분기, 배치 재시도와 출시 복구까지 하나로 실행합니다. 단순히 도구가 설치되었는지를 확인하는 대신 피처 공급 전후의 응답과 실패 이후 상태가 어떻게 달라지는지 근거를 남깁니다.
 
@@ -84,10 +86,10 @@ Azure ML 작업은 독립된 실행 환경에서 데이터를 주고받습니다
 
 ## 학습 범위의 경계
 
-이 자료는 책 전체 도구의 모든 기능을 구현한 운영 플랫폼은 아닙니다. 무중단 트래픽 전환, 문서별 접근 통제, 의미 기반 답변 캐시와 운영용 대시보드처럼 추가 구현이 필요한 부분은 [대응표](../ml-platform-labs-08-coverage/)에 구분했습니다.
+이 자료는 책 전체 도구의 모든 기능을 구현한 운영 플랫폼은 아닙니다. 무중단 트래픽 전환, 문서별 접근 통제, 의미 기반 답변 캐시와 운영용 대시보드처럼 추가 구현이 필요한 부분은 [대응표](ml-platform-labs-08-coverage/)에 구분했습니다.
 
 로컬 출시 과정에서는 평가를 통과한 후보만 활성화하고, 포인터 전환 실패에서 기존 버전이 유지되는지 확인합니다. RAG도 프롬프트, 문서와 검색 설정을 고정한 후보를 평가하고, 품질이 떨어지는 변경은 거절합니다. 이 로컬 게이트는 조직의 승인 절차나 클라우드의 무중단 운영을 대신하지 않습니다.
 
 목표는 도구를 많이 설치하는 것이 아니라, 어떤 변경이 어떤 결과를 만들었는지 근거를 남기고 설명하는 것입니다. 정상 동작을 본 다음 실패 원인과 복구까지 확인하면 책에서 읽은 구조를 더 구체적으로 이해할 수 있습니다.
 
-[책 읽기 지도](../machine-learning-platform-engineering/00-overview/) / [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)
+[책 읽기 지도](../../machine-learning-platform-engineering/00-overview/) / [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)

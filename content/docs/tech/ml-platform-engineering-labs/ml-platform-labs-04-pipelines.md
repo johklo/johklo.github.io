@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 04. 영화 추천을 독립된 컨테이너 단계�
 description: "04. 영화 추천을 독립된 컨테이너 단계로 나누기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 50
+aliases: ["/docs/tech/ml-platform-labs-04-pipelines/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

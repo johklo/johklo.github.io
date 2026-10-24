@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 05. 선택한 모델을 서비스하고 변화 관�
 description: "05. 선택한 모델을 서비스하고 변화 관찰하기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 60
+aliases: ["/docs/tech/ml-platform-labs-05-serving-monitoring/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

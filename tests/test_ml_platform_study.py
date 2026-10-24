@@ -20,6 +20,17 @@ def examples(chapter):
 
 
 class StudyDecisionTest(unittest.TestCase):
+    def test_lineage_example_detects_changed_contents_at_the_same_path(self):
+        with tempfile.TemporaryDirectory(prefix=".lineage-test-", dir=ROOT) as directory:
+            script = Path(directory) / "lineage_study.py"
+            script.write_text(examples(1)[0], encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(script)], cwd=directory,
+                capture_output=True, text=True, check=True,
+            )
+            self.assertIn("Matches before change: True", result.stdout)
+            self.assertIn("Matches after change: False", result.stdout)
+
     def test_cost_example_explains_the_two_operating_points(self):
         namespace = {}
         with contextlib.redirect_stdout(io.StringIO()):

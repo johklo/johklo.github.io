@@ -3,6 +3,8 @@ title: "ML 플랫폼 실습 07. 로컬 실행 계약을 Azure ML로 옮기기"
 description: "07. 로컬 실행 계약을 Azure ML로 옮기기 실행 절차, 결과 확인과 실패 실험"
 date: 2026-10-24T15:00:00+09:00
 lastmod: 2026-10-24T15:00:00+09:00
+weight: 80
+aliases: ["/docs/tech/ml-platform-labs-07-azure/"]
 tags: ["ml-platform-labs", "mlops", "hands-on"]
 ---
 

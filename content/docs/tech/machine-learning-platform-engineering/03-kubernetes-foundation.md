@@ -315,6 +315,39 @@ docker run --rm --name ml-book-api -p 127.0.0.1:18000:8000 income-api:study-v1
 
 두 번째 명령은 터미널을 점유합니다. 다른 터미널에서 `curl.exe http://127.0.0.1:18000/`로 확인하고, 종료할 때는 실행 터미널에서 Ctrl+C를 누릅니다. `18000`은 PC의 포트이고 `8000`은 컨테이너 안의 앱 포트입니다.
 
+### 실제 API를 실행하고 요청 보내기
+
+먼저 Docker와 Kubernetes를 빼고 앱 자체가 정상인지 확인했습니다. 위 패키지가 설치된 가상환경에서 다음 명령으로 같은 `app.py`를 실행할 수 있습니다.
+
+```powershell
+python -m uvicorn app:app --host 127.0.0.1 --port 15300
+```
+
+`http://127.0.0.1:15300/docs`에서 `GET /ready`를 펼치고 **Try it out → Execute**를 선택합니다. Swagger UI는 API 명세를 보여 주는 화면이며, Execute를 눌러야 실제 요청이 전송됩니다.
+
+![실행 중인 FastAPI의 Swagger UI에서 GET ready를 실제 호출해 HTTP 200과 status ready 응답을 받은 화면.](/images/ml-platform-engineering/study-ch03-api-ready.png)
+
+실제 서버에 요청을 보낸 브라우저 캡처입니다. 위쪽 Request URL, 아래 Server response의 `200`, Response body의 `"status": "ready"`를 함께 확인합니다. 아래의 Example Value는 문서 예시이므로 실제 응답과 구분해야 합니다.
+
+이 화면이 증명하는 범위는 **Python 앱 기동과 로컬 HTTP 요청 성공**입니다. Docker 이미지 빌드나 Kubernetes 배포를 실행했다는 증거는 아닙니다. 다음 단계에서 실패하면 이미 확인한 앱 로직과 새로 추가한 컨테이너·네트워크 설정을 나눠 조사할 수 있습니다.
+
+직접 확인할 질문: “`/ready`가 200이면 모델도 준비됐나요?” 이 작은 앱에는 모델이 없으므로 그렇지 않습니다. 실제 서비스에서는 로딩한 모델 버전과 초기화 상태를 readiness의 의미에 맞게 구현해야 합니다.
+
+### 세 포트를 택배 경로처럼 읽기
+
+호스트 포트는 건물의 출입구, Service의 포트는 안내 창구, `targetPort`는 실제 작업실의 문이라고 생각하면 쉽습니다. 창구가 있다고 작업실이 자동으로 생기는 것은 아닙니다. 앱이 8000번 문에서 기다리는데 안내가 8001번으로 되어 있다면 요청은 도착하지 못합니다.
+
+```mermaid
+flowchart LR
+    accTitle: 개발 PC에서 API 프로세스까지의 포트 연결
+    accDescr: 로컬 Docker 실행의 18000에서 컨테이너 8000으로 가는 경로와, Kubernetes 점검 시 18080에서 Service 80을 거쳐 Pod 8000으로 가는 경로를 구별한다.
+    A["PC 18000"] -->|"docker -p"| B["컨테이너 앱 8000"]
+    C["PC 18080"] -->|"port-forward"| D["Service 80"]
+    D -->|"targetPort"| E["Pod 안 앱 8000"]
+```
+
+`0.0.0.0`은 앱이 컨테이너 안의 모든 네트워크 인터페이스에서 받겠다는 바인딩 설정입니다. 브라우저에 입력할 목적지 주소라는 뜻은 아닙니다. 로컬에서 접속할 때는 위 명령의 호스트 주소인 `127.0.0.1`을 사용합니다.
+
 ### 2. Deployment와 Service의 연결 만들기
 
 다음 내용을 `deployment.yaml`로 저장합니다.

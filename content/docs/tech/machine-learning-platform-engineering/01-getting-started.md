@@ -251,6 +251,52 @@ flowchart TD
 
 직접 만든 명세를 다른 사람이 받아 어떤 모델과 데이터를 가져와야 할지 설명할 수 있다면 첫 목표를 달성한 것입니다. 아직 같은 숫자까지 재현한 것은 아니며 난수, 라이브러리, 하드웨어의 영향은 다음 검증 과제로 남습니다.
 
+### 작은 파일로 출처가 달라지는 순간 확인하기
+
+레시피에 “냉장고의 재료”라고만 적으면 냉장고 내용이 바뀐 뒤에는 같은 요리를 재현하기 어렵습니다. 파일 경로도 냉장고의 주소와 비슷합니다. 해시는 그때 들어 있던 내용의 지문에 가깝습니다.
+
+다음 코드는 Python 기본 라이브러리만 사용합니다. `lineage_study.py`로 저장해서 빈 실습 폴더에서 실행합니다. 실제 모델을 학습하는 실습이 아니라, 동일한 파일 이름에서도 내용이 달라질 수 있다는 것을 확인하는 실습입니다.
+
+```python
+import hashlib
+import json
+from pathlib import Path
+
+snapshot = Path("lineage_snapshot.csv")
+if snapshot.exists():
+    raise FileExistsError("Use an empty study folder to preserve existing data")
+snapshot.write_text("image,label\ncard-001,card\n", encoding="utf-8")
+original = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+manifest = {"dataset": snapshot.name, "sha256": original}
+Path("lineage_manifest.json").write_text(
+    json.dumps(manifest, indent=2), encoding="utf-8"
+)
+print("Recorded dataset:", manifest["dataset"])
+print("Original SHA-256:", original)
+print("Matches before change:", hashlib.sha256(snapshot.read_bytes()).hexdigest() == original)
+with snapshot.open("a", encoding="utf-8") as stream:
+    stream.write("card-002,no-card\n")
+current = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+print("Modified SHA-256:", current)
+print("Matches after change:", current == original)
+```
+
+```powershell
+python lineage_study.py
+```
+
+앞의 비교는 `True`, 데이터를 추가한 뒤의 비교는 `False`여야 합니다. 이름과 경로는 그대로인데 데이터 내용이 바뀐 것입니다. 이것이 “어제 쓴 CSV 경로가 있다”만으로 충분하지 않은 이유입니다. 해시는 내용을 복구해 주지 않으므로 원본 스냅샷도 보존해야 합니다.
+
+### 실제 실행 화면 읽기
+
+![lineage_study.py를 실행한 출력. 파일 변경 전의 해시 비교는 True이고 같은 파일에 행을 추가한 뒤에는 False다.](/images/ml-platform-engineering/study-ch01-lineage.png)
+
+직접 실행한 Python의 표준 출력 파일을 브라우저로 표시해 캡처했습니다. 모델 학습 화면이나 플랫폼 UI를 흉내 낸 그림이 아닙니다.
+
+화면에서는 긴 해시 문자열을 외울 필요가 없습니다. 첫 비교의 `True`와 마지막 비교의 `False`를 보고, **파일의 위치와 내용의 버전은 다르다**는 점을 확인하면 됩니다. 실무에서는 불일치가 나면 원본을 복구하거나 새 데이터 버전으로 실험해야지, 기존 명세의 해시만 바꿔 맞추면 안 됩니다.
+
+직접 확인할 질문: “행 하나만 추가했는데 왜 새 스냅샷으로 취급해야 할까요?” 모델의 학습 입력이 달라졌기 때문입니다. 같은 레시피라도 재료가 바뀌면 결과가 달라질 수 있습니다.
+
 ## 플랫폼 경계와 책임
 
 ML 플랫폼팀이 데이터 수집부터 모든 모델의 업무 성과까지 책임진다고 가정하면 경계가 무한히 커집니다. 플랫폼이 제공하는 기능, 모델팀이 결정하는 품질, 데이터팀이 보장하는 입력, 업무팀이 승인하는 출시 조건을 먼저 나눠야 합니다.

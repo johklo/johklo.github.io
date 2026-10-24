@@ -1,4 +1,4 @@
-"""Publish the executable lab guides as individual Tech articles."""
+"""Publish the executable lab guides beneath the integrated lab overview."""
 
 import argparse
 from pathlib import Path
@@ -24,7 +24,7 @@ def render_guide(source, guides):
     def replace_link(match):
         label, target = match.group(1), match.group(2)
         if target == "../README.md":
-            target = "../ml-platform-engineering-labs/"
+            target = "../"
         elif "://" not in target and not target.startswith(("#", "/")):
             filename, anchor_mark, anchor = target.partition("#")
             path = (source.parent / filename).resolve()
@@ -42,6 +42,8 @@ def render_guide(source, guides):
         f'title: "ML 플랫폼 실습 {title}"\n'
         f'description: "{title} 실행 절차, 결과 확인과 실패 실험"\n'
         f"date: {DATE}\nlastmod: {DATE}\n"
+        f"weight: {(int(source.stem[:2]) + 1) * 10}\n"
+        f'aliases: ["/docs/tech/{slug(source.stem)}/"]\n'
         'tags: ["ml-platform-labs", "mlops", "hands-on"]\n'
         "---\n\n"
         f"{body}"
@@ -62,9 +64,12 @@ def main():
         parser.error("No numbered lab guides found.")
     guides = {path.resolve() for path in sources}
     for source in sources:
-        target = ROOT / "content" / "docs" / "tech" / f"{slug(source.stem)}.md"
+        target = (
+            ROOT / "content" / "docs" / "tech" / "ml-platform-engineering-labs"
+            / f"{slug(source.stem)}.md"
+        )
         target.write_text(render_guide(source, guides), encoding="utf-8")
-    print(f"Published {len(sources)} guides directly under Tech.")
+    print(f"Published {len(sources)} guides beneath the integrated lab overview.")
 
 
 if __name__ == "__main__":
