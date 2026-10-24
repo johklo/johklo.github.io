@@ -26,3 +26,19 @@ class PublicFilesTest(unittest.TestCase):
             "s/hidden/vault.enc",
         ]
         self.assertEqual(unexpected_static_files(paths), paths)
+
+    def test_allows_only_the_reviewed_kfp_study_downloads(self):
+        prefix = "static/downloads/ml-platform-engineering/kfp-cluster/"
+        allowed = [
+            prefix + name for name in (
+                "Dockerfile", "submit_cluster.py",
+                "object-store-patch.yaml", "executor-patch.yaml",
+            )
+        ]
+        rejected = [
+            prefix + "kubeconfig",
+            prefix + "income-study.db",
+            prefix + "other.py",
+            "static/downloads/other/submit_cluster.py",
+        ]
+        self.assertEqual(unexpected_static_files(allowed + rejected), rejected)
