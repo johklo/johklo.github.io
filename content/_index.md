@@ -1,10 +1,9 @@
 ---
-title: "John Kim"
-description: "Cloud and tech work, published in the open."
+title: John Kim
+description: Tech work, books, thoughts published in the open.
 toc: false
 ---
-
-Cloud and tech work, published in the open. Notes, handbooks and the tools that keep them current.
+Tech work, published in the open. Notes, handbooks and the tools that keep them current.
 
 ## Start here
 
