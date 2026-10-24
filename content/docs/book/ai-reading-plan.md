@@ -1,12 +1,17 @@
 ---
-title: "2026년 AI 책 읽기"
-description: "AI 관련 도서 읽기 및 현황 정리"
-date: 2026-01-01T09:19:27+09:00
-lastmod: 2026-01-01T10:06:41+09:00
-tags: ["book", "ai", "llm", "learning"]
-aliases: ["/wiki/book/ai-reading-plan/"]
+title: 2026년 AI 책 읽기
+description: AI 관련 도서 읽기 및 현황 정리
+date: 2026-10-24T18:30:00
+tags:
+  - book
+  - ai
+  - llm
+  - learning
+math: false
+draft: false
+aliases:
+  - /wiki/book/ai-reading-plan/
 ---
-
 # 📚 2026 LLM Reading Plan
 
 LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.  
@@ -16,6 +21,7 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 ---
 
 ## 🎯 목표
+
 - 핵심 LLM/AI 책 **완독**
 - 요약 기록 + 블로그 컨텐츠로 확장
 - 실무/컨설팅에 적용 가능한 지식 체득
@@ -24,39 +30,13 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 ---
 
 ## 📊 진행 현황
+
 - 전체 책 수: **24권**
 - 완료: **1권**
 - 진행률: **0%**
 
-<div class="gauge">
-  <progress value="1" max="24"></progress>
-  <div class="label">4%</div>
-</div>
+4%
 
-<style>
-.gauge{
-  position:relative;
-  width:300px;
-  height:20px;
-}
-.gauge progress{
-  width:100%;
-  height:100%;
-}
-.gauge .label{
-  position:absolute;
-  top:0;
-  left:0;
-  width:100%;
-  height:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:12px;
-  font-weight:bold;
-  color:black;
-}
-</style>
 
 
 ---
@@ -64,49 +44,53 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 ## 📕 전체 목록
 
 ### 🔹 Core / Theory / Foundation
-- [ ] Large Language Models  
-- [ ] What Is ChatGPT Doing … and Why Does It Work?  
-- [ ] The Hundred-Page Language Models Book  
-- [ ] Build a Large Language Model (From Scratch)  
+
+- Large Language Models  
+- What Is ChatGPT Doing … and Why Does It Work?  
+- The Hundred-Page Language Models Book  
+- Build a Large Language Model (From Scratch)
 
 ---
 
 ### 🔹 Development / Engineering / Applications
-- [x] AI Engineering  
-- [ ] The Agentic AI Bible  
-- [ ] AI Agents in Action  
-- [ ] Quick Start Guide to Large Language Models  
-- [ ] Developing Apps with GPT-4 and ChatGPT  
-- [ ] Building LLM Powered Applications  
-- [ ] Generative AI with LangChain  
-- [ ] LangChain Crash Course 
-- [-] The AI Engineering Bible
+
+- AI Engineering (완료)
+- The Agentic AI Bible  
+- AI Agents in Action  
+- Quick Start Guide to Large Language Models  
+- Developing Apps with GPT-4 and ChatGPT  
+- Building LLM Powered Applications  
+- Generative AI with LangChain  
+- LangChain Crash Course 
+- AI Agents and Applications (완료)
+- [-] The AI Engineering Bible (완료)
 
 ---
 
 ### 🔹 Production / MLOps / System
-- [ ] LLM Engineer’s Handbook  
-- [ ] LLMs in Production  
-- [ ] Building LLMs for Production  
-- [ ] Creating Production-Ready LLMs  
-- [ ] Generative AI on AWS  
+
+- LLM Engineer’s Handbook  
+- LLMs in Production  
+- Building LLMs for Production  
+- Creating Production-Ready LLMs  
+- Generative AI on AWS
 
 ---
 
 ### 🔹 Prompting / RAG / Specialized
-- [ ] Prompt Engineering for Generative AI  
-- [ ] Prompt Engineering for LLMs  
-- [ ] RAG-Driven Generative AI  
-- [ ] Super Study Guide  
-- [ ] Natural Language Processing with Transformers  
-- [ ] The Developer’s Playbook for Large Language Model Security  
+
+- Prompt Engineering for Generative AI  
+- Prompt Engineering for LLMs  
+- RAG-Driven Generative AI  
+- Super Study Guide  
+- Natural Language Processing with Transformers  
+- The Developer’s Playbook for Large Language Model Security
 
 
 
+&nbsp;
 
-
-
-
+&nbsp;
 
 ---
 
@@ -121,4 +105,4 @@ LLM 관련 책들을 체계적으로 읽고 기록하는 페이지입니다.
 
 ---
 
-  https://github.com/johklo/awesome-llm-books
+  [https://github.com/johklo/awesome-llm-books](https://github.com/johklo/awesome-llm-books)
