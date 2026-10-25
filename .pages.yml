@@ -217,13 +217,5 @@ content:
             fields:
               - { name: open, type: boolean, label: 펼쳐서 표시 }
           - { name: aliases, component: aliases }
-          - name: reading_list
-            label: 독서 목록
-            type: object
-            list: true
-            fields:
-              - { name: id, type: string, label: 식별자, required: true }
-              - { name: title, type: string, label: 책 제목, required: true }
-              - { name: url, type: string, label: 독서 기록 주소 }
           - { name: body, component: rawbody }
       - { name: insight-index, label: Insight 카테고리 페이지, type: file, path: content/docs/insight/_index.md, fields: *index_fields }

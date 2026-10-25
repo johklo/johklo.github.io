@@ -311,7 +311,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             self.assertNotIn("6장 이후", document)
             self.assertNotIn("초안입니다", document)
 
-    def test_reading_list_shows_book_links_without_checkboxes_or_progress(self):
+    def test_book_home_consolidates_manual_checklist_and_review_links(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")
         self.assertNotIn("data-reading-add", document)
         self.assertNotIn("book-title", document)
@@ -327,14 +327,38 @@ class MLPlatformPublicationTest(unittest.TestCase):
         self.assertTrue(source.startswith("---\n"))
         frontmatter, body = source[4:].split("\n---\n", 1)
         self.assertNotRegex(frontmatter, r"(?m)^\s+read:")
-        self.assertIn("{{< reading-list >}}", body)
+        self.assertNotIn("reading_list:", frontmatter)
+        self.assertNotIn("{{< reading-list >}}", body)
         config = (ROOT / ".pages.yml").read_text(encoding="utf-8")
         book_config = config.split("      - name: book-index\n", 1)[1].split(
             "      - { name: insight-index", 1
         )[0]
         self.assertIn("format: yaml-frontmatter", book_config)
+        self.assertNotIn("name: reading_list", book_config)
         checkboxes = [item for item in parsed.inputs if item.get("type") == "checkbox"]
-        self.assertEqual(checkboxes, [])
+        items = re.findall(r"^- \[([ x])\] .+$", body, re.M)
+        self.assertEqual(len(items), 18)
+        self.assertEqual(len(checkboxes), len(items))
+        self.assertEqual(
+            sum("checked" in checkbox for checkbox in checkboxes),
+            sum(state == "x" for state in items),
+        )
+        self.assertTrue(all("disabled" in checkbox for checkbox in checkboxes))
+        for slug in (
+            "seal", "2026-10-16-", "knowledge-capital", "gtd", "murakami-run",
+        ):
+            url = f"/docs/book/{slug}/"
+            self.assertRegex(body, rf"- \[x\] \[.+\]\({re.escape(url)}\)")
+            self.assertIn(url, parsed.links)
+            self.assertTrue(self.page_path(url).is_file())
+        self.assertFalse(
+            (ROOT / "content" / "docs" / "book" / "book-list.md").exists()
+        )
+        for alias in (
+            "/docs/book/book-list/", "/wiki/blog/book-list/", "/blog/book-list/",
+        ):
+            redirect = self.page_path(alias).read_text(encoding="utf-8")
+            self.assertIn("https://johklo.github.io/docs/book/", redirect)
         self.assertIn("Machine Learning Platform Engineering", document)
         self.assertIn(SERIES_URL, parsed.links)
         self.assertTrue(self.page_path(SERIES_URL).is_file())
