@@ -13,6 +13,6 @@ Benjamin Tan Wei Hao, Shanoop Padmanabhan, Varun Mallya.
 
 책의 흐름을 직접 실행하는 [통합 실습 가이드](../ml-platform-engineering-labs/)도 함께 정리했습니다. 영화 추천, 합성 카드 탐지와 RAG를 별도 저장소의 코드로 이어서 실습할 수 있습니다.
 
-도구의 위치와 운영 책임은 가상 서점 Bookway의 [MLOps](../mlops/)·[LLMOps](../llmops/) 가이드에서 실무 흐름별로 연결했습니다.
+도구의 위치와 운영 책임은 가상 서점 Bookway의 [MLOps](../mlops/), [LLMOps](../llmops/) 가이드에서 실무 흐름별로 연결했습니다.
 
 {{< section-list >}}

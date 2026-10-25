@@ -13,7 +13,7 @@ sidebar:
 
 ## 기존 글에서 이어지는 부분
 
-Bookway라는 별도 가상 서점의 도구별 설계는 [MLOps](../mlops/)·[LLMOps](../llmops/) 가이드에 정리했습니다. 아래 실행 프로젝트의 데이터와 결과는 그대로 구분합니다.
+Bookway라는 별도 가상 서점의 도구별 설계는 [MLOps](../mlops/), [LLMOps](../llmops/) 가이드에 정리했습니다. 아래 실행 프로젝트의 데이터와 결과는 그대로 구분합니다.
 
 [MLflow와 Azure Machine Learning 기초 과정](../../mlflow-azure-machine-learning/)은 Wine 분류 모델 하나로 실험 기록, 모델 로딩과 등록을 익히는 출발점으로 그대로 활용합니다.
 
