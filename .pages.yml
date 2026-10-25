@@ -73,7 +73,7 @@ content:
         label: Tech
         type: collection
         path: content/docs/tech
-        exclude: [_index.md, "machine-learning-platform-engineering/**", "ai-agents-and-applications/**", "mlflow-azure-machine-learning/**", "ml-platform-engineering-labs/**"]
+        exclude: [_index.md, "machine-learning-platform-engineering/**", "ai-agents-and-applications/**", "ops/**"]
         filename: { template: "{year}-{month}-{day}-{primary}.md", field: create }
         view: &view
           fields: [title, date]
@@ -103,10 +103,10 @@ content:
           sort: [weight, title]
           default: { sort: weight, order: asc }
         fields: *doc_fields
-      - name: ml-platform-engineering-labs
-        label: "Tech / ML 플랫폼 엔지니어링 통합 실습"
+      - name: mlops-labs
+        label: "Tech / MLOps & LLMOps / MLOps 실습"
         type: collection
-        path: content/docs/tech/ml-platform-engineering-labs
+        path: content/docs/tech/ops/mlops/labs
         exclude: [_index.md]
         filename: { template: "{primary}.md", field: create }
         view: *book_series_view
@@ -119,10 +119,27 @@ content:
         filename: { template: "{primary}.md", field: create }
         view: *book_series_view
         fields: *doc_fields
-      - name: mlflow-azure-machine-learning
-        label: "Tech / MLflow와 Azure Machine Learning"
+      - name: mlops-basics
+        label: "Tech / MLOps & LLMOps / 도구 기초 가이드"
         type: collection
-        path: content/docs/tech/mlflow-azure-machine-learning
+        path: content/docs/tech/ops/mlops/basics
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *book_series_view
+        fields: *doc_fields
+      - name: mlops
+        label: "Tech / MLOps & LLMOps / MLOps 설계 가이드"
+        type: collection
+        path: content/docs/tech/ops/mlops
+        subfolders: false
+        exclude: [_index.md]
+        filename: { template: "{primary}.md", field: create }
+        view: *book_series_view
+        fields: *doc_fields
+      - name: llmops
+        label: "Tech / MLOps & LLMOps / LLMOps"
+        type: collection
+        path: content/docs/tech/ops/llmops
         exclude: [_index.md]
         filename: { template: "{primary}.md", field: create }
         view: *book_series_view
@@ -197,9 +214,12 @@ content:
           - { name: body, component: rawbody }
       - { name: tech-index, label: Tech 카테고리 페이지, type: file, path: content/docs/tech/_index.md, fields: *index_fields }
       - { name: ml-platform-engineering-index, label: Machine Learning Platform Engineering 카테고리 페이지, type: file, path: content/docs/tech/machine-learning-platform-engineering/_index.md, fields: *index_fields }
-      - { name: ml-platform-engineering-labs-index, label: ML 플랫폼 엔지니어링 통합 실습 목차, type: file, path: content/docs/tech/ml-platform-engineering-labs/_index.md, fields: *index_fields }
+      - { name: ops-index, label: "MLOps & LLMOps 상위 페이지", type: file, path: content/docs/tech/ops/_index.md, fields: *index_fields }
+      - { name: mlops-index, label: "MLOps 설계 가이드 목차", type: file, path: content/docs/tech/ops/mlops/_index.md, fields: *index_fields }
+      - { name: mlops-basics-index, label: "도구 기초 가이드 목차", type: file, path: content/docs/tech/ops/mlops/basics/_index.md, fields: *index_fields }
+      - { name: mlops-labs-index, label: "MLOps 실습 목차", type: file, path: content/docs/tech/ops/mlops/labs/_index.md, fields: *index_fields }
+      - { name: llmops-index, label: "LLMOps 목차", type: file, path: content/docs/tech/ops/llmops/_index.md, fields: *index_fields }
       - { name: ai-agents-and-applications-index, label: AI Agents and Applications 카테고리 페이지, type: file, path: content/docs/tech/ai-agents-and-applications/_index.md, fields: *index_fields }
-      - { name: mlflow-azure-machine-learning-index, label: MLflow와 Azure Machine Learning 목차, type: file, path: content/docs/tech/mlflow-azure-machine-learning/_index.md, fields: *index_fields }
       - { name: ai-index, label: AI 카테고리 페이지, type: file, path: content/docs/ai/_index.md, fields: *index_fields }
       - { name: business-index, label: Business 카테고리 페이지, type: file, path: content/docs/business/_index.md, fields: *index_fields }
       - name: book-index

@@ -1,4 +1,4 @@
-"""Publish the executable lab guides beneath the integrated lab overview."""
+"""Publish the executable lab guides beneath the MLOps lab overview."""
 
 import argparse
 from pathlib import Path
@@ -42,8 +42,9 @@ def render_guide(source, guides):
         f'title: "ML 플랫폼 실습 {title}"\n'
         f'description: "{title} 실행 절차, 결과 확인과 실패 실험"\n'
         f"date: {DATE}\nlastmod: {DATE}\n"
-        f"weight: {(int(source.stem[:2]) + 1) * 10}\n"
-        f'aliases: ["/docs/tech/{slug(source.stem)}/"]\n'
+        f"weight: {110 + int(source.stem[:2]) * 10}\n"
+        f'aliases: ["/docs/tech/{slug(source.stem)}/", '
+        f'"/docs/tech/ml-platform-engineering-labs/{slug(source.stem)}/"]\n'
         'tags: ["ml-platform-labs", "mlops", "hands-on"]\n'
         "---\n\n"
         f"{body}"
@@ -65,7 +66,7 @@ def main():
     guides = {path.resolve() for path in sources}
     for source in sources:
         target = (
-            ROOT / "content" / "docs" / "tech" / "ml-platform-engineering-labs"
+            ROOT / "content" / "docs" / "tech" / "ops" / "mlops" / "labs"
             / f"{slug(source.stem)}.md"
         )
         target.write_text(render_guide(source, guides), encoding="utf-8")

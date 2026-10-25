@@ -9,7 +9,8 @@
   {{- $edit := "" -}}
   {{- $new := "" -}}
   {{- $bookCollection := "" -}}
-  {{- range $prefix, $collection := dict "docs/tech/machine-learning-platform-engineering/" "ml-platform-engineering" "docs/tech/ai-agents-and-applications/" "ai-agents-and-applications" "docs/tech/mlflow-azure-machine-learning/" "mlflow-azure-machine-learning" "docs/tech/ml-platform-engineering-labs/" "ml-platform-engineering-labs" -}}
+  {{- range $prefix, $collection := dict "docs/tech/machine-learning-platform-engineering/" "ml-platform-engineering" "docs/tech/ai-agents-and-applications/" "ai-agents-and-applications" "docs/tech/ops/" "ops" "docs/tech/ops/mlops/" "mlops" "docs/tech/ops/mlops/basics/" "mlops-basics" "docs/tech/ops/mlops/labs/" "mlops-labs" "docs/tech/ops/llmops/" "llmops" -}}
+    {{- /* Keys are visited in sorted order, so the most specific prefix wins. */ -}}
     {{- if hasPrefix $path $prefix }}{{ $bookCollection = $collection }}{{ end -}}
   {{- end -}}
   {{- if eq $path "_index.md" }}{{ $edit = printf "%s/file/home" $cms -}}
@@ -18,7 +19,7 @@
   {{- else if $bookCollection -}}
     {{- if $.IsSection -}}
       {{- $edit = printf "%s/file/%s-index" $cms $bookCollection -}}
-      {{- $new = printf "%s/collection/%s/new" $cms $bookCollection -}}
+      {{- if ne $bookCollection "ops" }}{{ $new = printf "%s/collection/%s/new" $cms $bookCollection }}{{ end -}}
     {{- else -}}
       {{- $edit = printf "%s/collection/%s/edit/%s" $cms $bookCollection (urlquery (printf "content/%s" $path)) -}}
     {{- end -}}

@@ -10,6 +10,7 @@ def main():
     parser.add_argument("--host", default="http://127.0.0.1:18580")
     parser.add_argument("--image", default="income-study:chapter05")
     parser.add_argument("--model-uri", default="models:/income-study/1")
+    parser.add_argument("--feature-service", default="income_model_v1")
     parser.add_argument("--run-name", default="income-study-kubernetes")
     args = parser.parse_args()
 
@@ -36,6 +37,7 @@ def main():
             "repo_path": "/study/income-features-study",
             "tracking_uri": "sqlite:////study/income-study.db",
             "model_uri": args.model_uri,
+            "feature_service": args.feature_service,
         },
         run_name=args.run_name,
         experiment_name="chapter-05",

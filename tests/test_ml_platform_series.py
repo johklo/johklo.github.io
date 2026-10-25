@@ -154,14 +154,14 @@ class MLPlatformPublicationTest(unittest.TestCase):
                         self.assertIn(unquote(target.fragment), ids)
 
     def test_integrated_labs_are_published_and_linked_from_learning_entries(self):
-        url = "/docs/tech/ml-platform-engineering-labs/"
+        url = "/docs/tech/ops/mlops/labs/"
         article = self.page_path(url)
         self.assertTrue(article.is_file(), "Integrated lab guide was not published")
         links = PageLinks(article.read_text(encoding="utf-8")).links
         self.assertIn("https://github.com/johklo/ml-platform-engineering-labs", links)
         for entry in (
             "/", SERIES_URL, f"{SERIES_URL}00-overview/",
-            "/docs/tech/mlflow-azure-machine-learning/",
+            "/docs/tech/ops/mlops/labs/mlflow-aml-overview/",
         ):
             with self.subTest(entry=entry):
                 entry_links = PageLinks(
@@ -179,31 +179,37 @@ class MLPlatformPublicationTest(unittest.TestCase):
 
     def test_lab_lessons_publish_complete_bodies_beneath_the_overview(self):
         tech_source = ROOT / "content" / "docs" / "tech"
-        sources = sorted((tech_source / "ml-platform-engineering-labs").glob("ml-platform-labs-*.md"))
+        sources = sorted((tech_source / "ops" / "mlops" / "labs").glob("ml-platform-labs-*.md"))
         self.assertEqual(len(sources), 11)
         self.assertEqual(list(tech_source.glob("ml-platform-labs-*.md")), [])
-        tech = PageLinks(
-            self.page_path("/docs/tech/").read_text(encoding="utf-8")
-        ).links
+        tech = {
+            urlsplit(urljoin("https://johklo.github.io/docs/tech/ops/", href)).path
+            for href in PageLinks(
+                self.page_path("/docs/tech/ops/").read_text(encoding="utf-8")
+            ).links
+        }
         indexes = list(self.output.glob("*.search-data*.json"))
         indexed = set()
         for path in indexes:
             indexed.update(json.loads(path.read_text(encoding="utf-8")))
-        overview_url = "/docs/tech/ml-platform-engineering-labs/"
+        overview_url = "/docs/tech/ops/mlops/labs/"
         self.assertIn(overview_url, tech)
         overview = self.page_path(overview_url).read_text(encoding="utf-8")
         overview_links = PageLinks(overview).links
-        self.assertIn("/file/ml-platform-engineering-labs-index", overview)
+        self.assertIn("/file/mlops-labs-index", overview)
         for source in sources:
             url = f"{overview_url}{source.stem}/"
             with self.subTest(lesson=source.stem):
                 document = self.page_path(url).read_text(encoding="utf-8")
                 self.assertIn(url, overview_links)
                 self.assertIn(url, indexed)
-                old_url = f"/docs/tech/{source.stem}/"
-                self.assertNotIn(old_url, indexed)
-                redirect = self.page_path(old_url).read_text(encoding="utf-8")
-                self.assertIn(f"https://johklo.github.io{url}", redirect)
+                for old_url in (
+                    f"/docs/tech/{source.stem}/",
+                    f"/docs/tech/ml-platform-engineering-labs/{source.stem}/",
+                ):
+                    self.assertNotIn(old_url, indexed)
+                    redirect = self.page_path(old_url).read_text(encoding="utf-8")
+                    self.assertIn(f"https://johklo.github.io{url}", redirect)
                 self.assertIn("실습 저장소", document)
                 headings = re.findall(
                     r"(?m)^## (.+)$", source.read_text(encoding="utf-8")
@@ -213,7 +219,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertIn(heading, document)
                 self.assertGreater(len(source.read_text(encoding="utf-8")), 1500)
                 self.assertIn(
-                    "/collection/ml-platform-engineering-labs/edit/", document,
+                    "/collection/mlops-labs/edit/", document,
                 )
                 for href in PageLinks(document).links:
                     target = urlsplit(urljoin(f"https://johklo.github.io{url}", href))

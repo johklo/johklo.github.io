@@ -13,6 +13,8 @@ from test_ml_platform_series import PageLinks
 
 ROOT = Path(__file__).resolve().parents[1]
 TECH = ROOT / "content" / "docs" / "tech"
+OPS = "/docs/tech/ops/"
+PRIMERS = {"mlflow", "feast", "kubeflow-pipelines", "bentoml"}
 GUIDES = {
     "mlops": {
         "data-versioning", "mlflow", "tensorboard", "feast", "kubeflow",
@@ -50,9 +52,14 @@ class OperationsGuidesTest(unittest.TestCase):
             search.update(json.loads(path.read_text(encoding="utf-8")))
         sitemap = (self.output / "sitemap.xml").read_text(encoding="utf-8")
         tech_links = PageLinks(self.page("/docs/tech/").read_text(encoding="utf-8")).links
+        self.assertIn(OPS, tech_links)
+        ops_links = {
+            urlsplit(urljoin(f"https://johklo.github.io{OPS}", href)).path
+            for href in PageLinks(self.page(OPS).read_text(encoding="utf-8")).links
+        }
         for category, slugs in GUIDES.items():
-            hub = f"/docs/tech/{category}/"
-            self.assertIn(hub, tech_links)
+            hub = f"{OPS}{category}/"
+            self.assertIn(hub, ops_links)
             document = PageLinks(self.page(hub).read_text(encoding="utf-8"))
             self.assertGreater(document.mermaid_blocks, 0)
             for url in [hub] + [f"{hub}{slug}/" for slug in sorted(slugs)]:
@@ -69,7 +76,7 @@ class OperationsGuidesTest(unittest.TestCase):
 
     def test_all_guide_internal_links_and_anchors_resolve(self):
         for category, slugs in GUIDES.items():
-            base = f"/docs/tech/{category}/"
+            base = f"{OPS}{category}/"
             for url in [base] + [f"{base}{slug}/" for slug in sorted(slugs)]:
                 for href in PageLinks(self.page(url).read_text(encoding="utf-8")).links:
                     target = urlsplit(urljoin(f"https://johklo.github.io{url}", href))
@@ -84,14 +91,42 @@ class OperationsGuidesTest(unittest.TestCase):
                                 PageLinks(path.read_text(encoding="utf-8")).ids,
                             )
 
-    def test_llmops_legacy_aliases_keep_the_canonical_target(self):
-        for alias in ("/wiki/llmops/", "/docs/llmops/"):
-            html = self.page(alias).read_text(encoding="utf-8")
-            self.assertIn("https://johklo.github.io/docs/tech/llmops/", html)
+    def test_legacy_addresses_redirect_to_the_ops_section(self):
+        redirects = {
+            "/wiki/llmops/": f"{OPS}llmops/",
+            "/docs/llmops/": f"{OPS}llmops/",
+            "/docs/tech/llmops/": f"{OPS}llmops/",
+            "/docs/tech/llmops/qdrant/": f"{OPS}llmops/qdrant/",
+            "/docs/tech/mlops/": f"{OPS}mlops/",
+            "/docs/tech/mlops/feast/": f"{OPS}mlops/feast/",
+        }
+        for alias, target in redirects.items():
+            with self.subTest(alias=alias):
+                html = self.page(alias).read_text(encoding="utf-8")
+                self.assertIn(f"https://johklo.github.io{target}", html)
+
+    def test_tool_primers_are_published_beneath_the_basics_hub(self):
+        hub = f"{OPS}mlops/basics/"
+        document = PageLinks(self.page(hub).read_text(encoding="utf-8"))
+        resolved = {
+            urlsplit(urljoin(f"https://johklo.github.io{hub}", href)).path
+            for href in document.links
+        }
+        for slug in sorted(PRIMERS):
+            url = f"{hub}{slug}/"
+            with self.subTest(primer=slug):
+                self.assertIn(url, resolved)
+                primer = self.page(url).read_text(encoding="utf-8")
+                source = (TECH / "ops" / "mlops" / "basics" / f"{slug}.md").read_text(encoding="utf-8")
+                self.assertNotIn("\u00b7", source)
+                for href in PageLinks(primer).links:
+                    target = urlsplit(urljoin(f"https://johklo.github.io{url}", href))
+                    if target.netloc == "johklo.github.io":
+                        self.assertTrue(self.page(target.path).is_file(), href)
 
     def test_python_and_json_examples_parse(self):
-        for category in GUIDES:
-            for source in (TECH / category).glob("*.md"):
+        for folder in ("ops/mlops", "ops/llmops", "ops/mlops/basics"):
+            for source in (TECH / folder).glob("*.md"):
                 text = source.read_text(encoding="utf-8")
                 for language, code in re.findall(
                     r"^```(python|json)\n(.*?)^```", text, re.M | re.S

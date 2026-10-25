@@ -11,8 +11,12 @@ from test_ml_platform_series import PageLinks
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SERIES_URL = "/docs/tech/mlflow-azure-machine-learning/"
-LEGACY_URL = "/docs/tech/2026-10-21-mlflow-to-azure-machine-learning/"
+SERIES_URL = "/docs/tech/ops/mlops/labs/"
+OVERVIEW_URL = f"{SERIES_URL}mlflow-aml-overview/"
+LEGACY_URLS = (
+    "/docs/tech/2026-10-21-mlflow-to-azure-machine-learning/",
+    "/docs/tech/mlflow-azure-machine-learning/",
+)
 SOURCE = ROOT / "content" / SERIES_URL.lstrip("/")
 
 
@@ -74,24 +78,29 @@ class MLflowLearningPublicationTest(unittest.TestCase):
                 weighted.append((position, int(weight[1])))
         weights = [weight for _, weight in sorted(weighted)]
         self.assertEqual(weights, sorted(weights))
-        tech = PageLinks(
-            self.page_path("/docs/tech/").read_text(encoding="utf-8")
+        ops = PageLinks(
+            self.page_path("/docs/tech/ops/").read_text(encoding="utf-8")
         )
-        self.assertIn(SERIES_URL, tech.links)
-        self.assertNotIn(LEGACY_URL, tech.links)
+        resolved = {
+            urlsplit(urljoin("https://johklo.github.io/docs/tech/ops/", href)).path
+            for href in ops.links
+        }
+        self.assertIn(SERIES_URL, resolved)
 
         indexes = list(self.output.glob("*.search-data*.json"))
         self.assertTrue(indexes, "Search index was not generated")
         indexed = set()
         for path in indexes:
             data = json.loads(path.read_text(encoding="utf-8"))
-            self.assertNotIn(LEGACY_URL, data)
+            for legacy in LEGACY_URLS:
+                self.assertNotIn(legacy, data)
             indexed.update(url for url in data if url.startswith(SERIES_URL))
         self.assertEqual(indexed, {SERIES_URL, *self.urls})
 
-        redirect = self.page_path(LEGACY_URL).read_text(encoding="utf-8")
-        self.assertIn("http-equiv=refresh", redirect)
-        self.assertIn(f"url=https://johklo.github.io{SERIES_URL}", redirect)
+        for legacy in LEGACY_URLS:
+            redirect = self.page_path(legacy).read_text(encoding="utf-8")
+            self.assertIn("http-equiv=refresh", redirect)
+            self.assertIn(f"url=https://johklo.github.io{OVERVIEW_URL}", redirect)
 
     def test_series_links_and_cms_actions_resolve(self):
         for url in [SERIES_URL, *self.urls]:
@@ -101,11 +110,11 @@ class MLflowLearningPublicationTest(unittest.TestCase):
             with self.subTest(page=url):
                 if url == SERIES_URL:
                     self.assertTrue(any(
-                        "/file/mlflow-azure-machine-learning-index" in link
+                        "/file/mlops-labs-index" in link
                         for link in parsed.links
                     ))
                     self.assertTrue(any(
-                        "/collection/mlflow-azure-machine-learning/new" in link
+                        "/collection/mlops-labs/new" in link
                         for link in parsed.links
                     ))
                 else:
@@ -114,7 +123,7 @@ class MLflowLearningPublicationTest(unittest.TestCase):
                         source.relative_to(ROOT).as_posix(), safe=""
                     )
                     self.assertTrue(any(
-                        f"/collection/mlflow-azure-machine-learning/edit/{filename}"
+                        f"/collection/mlops-labs/edit/{filename}"
                         in link for link in parsed.links
                     ))
 
