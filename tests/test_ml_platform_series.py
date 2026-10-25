@@ -97,7 +97,8 @@ class MLPlatformPublicationTest(unittest.TestCase):
         return path / "index.html" if url_path.endswith("/") else path
 
     def test_only_overview_and_first_five_chapters_are_published(self):
-        self.assertEqual(set(self.articles.values()), set(range(14)))
+        # Chapters 4 and 5 are covered together in the 04 article.
+        self.assertEqual(set(self.articles.values()), set(range(14)) - {5})
         for slug in self.articles:
             with self.subTest(slug=slug):
                 self.assertEqual(
@@ -271,8 +272,6 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 "study-ch04-mlflow-runs.png", "study-ch04-mlflow-metrics.png",
                 "study-ch04-mlflow-model.png",
                 "study-ch04-feast-view.png",
-            ],
-            5: [
                 "study-ch05-kfp-cluster.png",
                 "study-ch05-kfp-cluster-result.png",
             ],
@@ -296,9 +295,8 @@ class MLPlatformPublicationTest(unittest.TestCase):
             )
 
     def test_cluster_instructions_publish_downloads_without_draft_status_messages(self):
-        chapter = self.page_path(f"{SERIES_URL}05-ml-pipelines/").read_text(
-            encoding="utf-8"
-        )
+        merged = f"{SERIES_URL}04-experiments-features-pipelines/"
+        chapter = self.page_path(merged).read_text(encoding="utf-8")
         for filename in (
             "Dockerfile", "submit_cluster.py",
             "object-store-patch.yaml", "executor-patch.yaml",
@@ -306,10 +304,24 @@ class MLPlatformPublicationTest(unittest.TestCase):
             url = f"/downloads/ml-platform-engineering/kfp-cluster/{filename}"
             self.assertIn(url, chapter)
             self.assertTrue(self.page_path(url).is_file())
-        for url in (SERIES_URL, f"{SERIES_URL}05-ml-pipelines/"):
+        for url in (SERIES_URL, merged):
             document = self.page_path(url).read_text(encoding="utf-8")
             self.assertNotIn("6장 이후", document)
             self.assertNotIn("초안입니다", document)
+
+    def test_chapters_four_and_five_merge_into_one_architecture_article(self):
+        merged = f"{SERIES_URL}04-experiments-features-pipelines/"
+        document = self.page_path(merged).read_text(encoding="utf-8")
+        self.assertGreaterEqual(PageLinks(document).mermaid_blocks, 5)
+        for term in (
+            "minio-service", "mlflow-artifacts", "inference-datasets",
+            "PostgreSQL", "Redis", "SeaweedFS",
+        ):
+            self.assertIn(term, document)
+        for old in ("04-experiments-and-features", "05-ml-pipelines"):
+            redirect = self.page_path(f"{SERIES_URL}{old}/").read_text(encoding="utf-8")
+            self.assertIn(f"https://johklo.github.io{merged}", redirect)
+            self.assertFalse(any(SOURCE.glob(f"{old}.md")))
 
     def test_book_home_consolidates_manual_checklist_and_review_links(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")

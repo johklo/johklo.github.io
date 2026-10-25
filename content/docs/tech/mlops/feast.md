@@ -55,4 +55,4 @@ print(response.to_dict())
 
 운영 수치는 online read p95, missing 비율, 공급 지연, entity별 분포입니다. 고객 ID는 메트릭 label에 넣지 않고 제한된 접근 로그에만 남깁니다. 온라인 저장소, registry, offline source의 권한과 백업은 서로 다릅니다.
 
-[공식 조회 문서](https://docs.feast.dev/getting-started/concepts/feature-retrieval) / [기존 Feast 실행, 화면 기록](../../machine-learning-platform-engineering/04-experiments-and-features/) / [KFP의 공급 작업](../kubeflow/)
+[공식 조회 문서](https://docs.feast.dev/getting-started/concepts/feature-retrieval) / [기존 Feast 실행, 화면 기록](../../machine-learning-platform-engineering/04-experiments-features-pipelines/) / [KFP의 공급 작업](../kubeflow/)

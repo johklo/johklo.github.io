@@ -71,23 +71,23 @@ class NativeStudyTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix=".book-study-test-", dir=ROOT) as directory:
             work = Path(directory)
-            for chapter, names in (
-                (4, ("income_study.py", "feature_study.py")),
-                (5, ("pipeline_study.py", "run_pipeline_study.py")),
-            ):
-                blocks = examples(chapter)
-                self.assertEqual(len(blocks), len(names))
-                for name, code in zip(names, blocks):
-                    (work / name).write_text(code, encoding="utf-8")
-                    result = subprocess.run(
-                        [sys.executable, str(work / name)],
-                        cwd=work, capture_output=True, text=True,
-                        encoding="utf-8", timeout=180,
-                    )
-                    self.assertEqual(
-                        result.returncode, 0,
-                        f"{name}\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}",
-                    )
+            names = (
+                "income_study.py", "feature_study.py",
+                "pipeline_study.py", "run_pipeline_study.py",
+            )
+            blocks = examples(4)
+            self.assertEqual(len(blocks), len(names))
+            for name, code in zip(names, blocks):
+                (work / name).write_text(code, encoding="utf-8")
+                result = subprocess.run(
+                    [sys.executable, str(work / name)],
+                    cwd=work, capture_output=True, text=True,
+                    encoding="utf-8", timeout=180,
+                )
+                self.assertEqual(
+                    result.returncode, 0,
+                    f"{name}\n{result.stdout[-4000:]}\n{result.stderr[-4000:]}",
+                )
             outputs = [
                 path for path in (work / "kfp-local-output").rglob("result")
                 if path.is_file()

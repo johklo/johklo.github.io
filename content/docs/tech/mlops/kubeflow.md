@@ -59,4 +59,4 @@ compiler.Compiler().compile(
 
 팀별 namespace, quota, service account를 분리하고 GPU 학습과 CPU 전처리의 자원을 따로 정합니다. 실행 메타데이터와 모델 artifact가 다른 저장소에 있으므로 양쪽 보존 정책도 맞춰야 합니다.
 
-[공식 KFP 개요](https://www.kubeflow.org/docs/components/pipelines/overview/) / [기존 클러스터 실행 기록](../../machine-learning-platform-engineering/05-ml-pipelines/) / [배포 경로와의 구분](../gitops/)
+[공식 KFP 개요](https://www.kubeflow.org/docs/components/pipelines/overview/) / [기존 클러스터 실행 기록](../../machine-learning-platform-engineering/04-experiments-features-pipelines/) / [배포 경로와의 구분](../gitops/)

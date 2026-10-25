@@ -50,8 +50,7 @@ ML 프로젝트를 한 번 끝내는 작업이 아니라 계속 돌아오는 생
 
 | 글 | 원문 챕터 | 핵심 쟁점 |
 | --- | --- | --- |
-| [04. 실험과 피처 관리](../04-experiments-and-features/) | Designing reliable ML systems | 이 모델이 어떤 실험과 피처에서 나왔는지 설명할 수 있는가? |
-| [05. ML 파이프라인](../05-ml-pipelines/) | Orchestrating ML pipelines | 서로 다른 컨테이너의 작업을 어떻게 하나의 실행으로 묶는가? |
+| [04. 실험, 피처, 파이프라인](../04-experiments-features-pipelines/) | Designing reliable ML systems, Orchestrating ML pipelines | 모델 버전과 피처 정의를 어떤 저장소 구성으로 배치 추론까지 이어 가는가? |
 | 06. 모델의 프로덕션화 | Productionizing ML models | 배포 후 입력 데이터가 달라지면 어떻게 알아차리는가? |
 
 MLflow, Feast, Kubeflow Pipelines, BentoML, Evidently가 차례로 등장합니다. 처음에는 도구 이름이 많아 보이지만, 실험 기록과 피처 관리, 실행 순서와 배포, 데이터 변화 관측이라는 서로 다른 문제를 맡습니다.
