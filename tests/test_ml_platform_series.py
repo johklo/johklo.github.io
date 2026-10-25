@@ -337,7 +337,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
         self.assertNotIn("name: reading_list", book_config)
         checkboxes = [item for item in parsed.inputs if item.get("type") == "checkbox"]
         items = re.findall(r"^- \[([ x])\] .+$", body, re.M)
-        self.assertEqual(len(items), 18)
+        self.assertEqual(len(items), 43)
         self.assertEqual(len(checkboxes), len(items))
         self.assertEqual(
             sum("checked" in checkbox for checkbox in checkboxes),
@@ -354,8 +354,20 @@ class MLPlatformPublicationTest(unittest.TestCase):
         self.assertFalse(
             (ROOT / "content" / "docs" / "book" / "book-list.md").exists()
         )
+        self.assertFalse(
+            (ROOT / "content" / "docs" / "book" / "ai-reading-plan.md").exists()
+        )
+        for title in ("AI Engineering", "The AI Engineering Bible"):
+            self.assertIn(f"- [x] {title}\n", body)
+        self.assertIn(
+            "- [x] [AI Agents and Applications]"
+            "(/docs/tech/ai-agents-and-applications/)", body
+        )
+        self.assertIn("- [ ] Large Language Models\n", body)
+        self.assertIn("- [ ] Generative AI on AWS\n", body)
         for alias in (
             "/docs/book/book-list/", "/wiki/blog/book-list/", "/blog/book-list/",
+            "/docs/book/ai-reading-plan/", "/wiki/book/ai-reading-plan/",
         ):
             redirect = self.page_path(alias).read_text(encoding="utf-8")
             self.assertIn("https://johklo.github.io/docs/book/", redirect)

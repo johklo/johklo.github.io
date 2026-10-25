@@ -9,6 +9,8 @@ aliases:
   - /docs/book/book-list/
   - /wiki/blog/book-list/
   - /blog/book-list/
+  - /docs/book/ai-reading-plan/
+  - /wiki/book/ai-reading-plan/
 ---
 
 ## Consulting
@@ -28,6 +30,43 @@ aliases:
 ## Tech
 
 - [ ] [Machine Learning Platform Engineering](/docs/tech/machine-learning-platform-engineering/)
+
+### Core / Theory / Foundation
+
+- [ ] Large Language Models
+- [ ] What Is ChatGPT Doing … and Why Does It Work?
+- [ ] The Hundred-Page Language Models Book
+- [ ] Build a Large Language Model (From Scratch)
+
+### Development / Engineering / Applications
+
+- [x] AI Engineering
+- [ ] The Agentic AI Bible
+- [ ] AI Agents in Action
+- [ ] Quick Start Guide to Large Language Models
+- [ ] Developing Apps with GPT-4 and ChatGPT
+- [ ] Building LLM Powered Applications
+- [ ] Generative AI with LangChain
+- [ ] LangChain Crash Course
+- [x] [AI Agents and Applications](/docs/tech/ai-agents-and-applications/)
+- [x] The AI Engineering Bible
+
+### Production / MLOps / System
+
+- [ ] LLM Engineer’s Handbook
+- [ ] LLMs in Production
+- [ ] Building LLMs for Production
+- [ ] Creating Production-Ready LLMs
+- [ ] Generative AI on AWS
+
+### Prompting / RAG / Specialized
+
+- [ ] Prompt Engineering for Generative AI
+- [ ] Prompt Engineering for LLMs
+- [ ] RAG-Driven Generative AI
+- [ ] Super Study Guide
+- [ ] Natural Language Processing with Transformers
+- [ ] The Developer’s Playbook for Large Language Model Security
 
 ## Org
 
