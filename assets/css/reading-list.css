@@ -28,19 +28,7 @@
   padding: 0.65rem 0;
 }
 
-.reading-list li label {
-  align-items: start;
-  display: flex;
-  flex: 1;
-  gap: 0.6rem;
+.reading-list li a {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.reading-list input[type="checkbox"] {
-  accent-color: currentColor;
-  flex: none;
-  height: 1.15rem;
-  margin-top: 0.2rem;
-  width: 1.15rem;
 }

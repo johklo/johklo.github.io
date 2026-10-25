@@ -311,7 +311,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             self.assertNotIn("6장 이후", document)
             self.assertNotIn("초안입니다", document)
 
-    def test_reading_list_preserves_cms_state_without_public_editing_controls(self):
+    def test_reading_list_shows_book_links_without_checkboxes_or_progress(self):
         document = self.page_path("/docs/book/").read_text(encoding="utf-8")
         self.assertNotIn("data-reading-add", document)
         self.assertNotIn("book-title", document)
@@ -326,13 +326,14 @@ class MLPlatformPublicationTest(unittest.TestCase):
         )
         metadata, _ = json.JSONDecoder().raw_decode(source)
         checkboxes = [item for item in parsed.inputs if item.get("type") == "checkbox"]
-        self.assertEqual(len(checkboxes), len(metadata["reading_list"]))
-        for checkbox, book in zip(checkboxes, metadata["reading_list"]):
-            self.assertIn("disabled", checkbox)
-            self.assertEqual("checked" in checkbox, book["read"])
+        self.assertEqual(checkboxes, [])
+        for book in metadata["reading_list"]:
+            self.assertNotIn("read", book)
             self.assertIn(book["title"], document)
-        count = sum(book["read"] for book in metadata["reading_list"])
-        self.assertIn(f"읽은 책 {count} / {len(checkboxes)}", document)
+            if book.get("url"):
+                self.assertIn(book["url"], parsed.links)
+                self.assertTrue(self.page_path(book["url"]).is_file())
+        self.assertNotRegex(document, r"읽은 책\s+\d+\s*/\s*\d+")
         modules = [
             script for script in parsed.scripts
             if "reading-list." in script.get("src", "")

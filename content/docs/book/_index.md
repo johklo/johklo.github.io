@@ -10,7 +10,7 @@
     {
       "id": "ml-platform-engineering",
       "title": "Machine Learning Platform Engineering",
-      "read": false
+      "url": "/docs/tech/machine-learning-platform-engineering/"
     }
   ]
 }

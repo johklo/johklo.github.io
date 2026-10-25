@@ -4,11 +4,9 @@
 <section id="{{ $id }}" class="reading-list" aria-labelledby="{{ $id }}-title">
   <h2 id="{{ $id }}-title">독서 목록</h2>
   {{- $books := .Page.Params.reading_list | default slice -}}
-  {{- $read := where $books "read" true -}}
-  <p>읽은 책 {{ len $read }} / {{ len $books }}</p>
   <ul>
     {{- range $books }}
-      <li><label><input type="checkbox" disabled{{ if .read }} checked{{ end }}> {{ .title }}</label></li>
+      <li>{{ with .url }}<a href="{{ . | relURL }}">{{ end }}{{ .title }}{{ with .url }}</a>{{ end }}</li>
     {{- else }}
       <li>등록한 책이 없습니다.</li>
     {{- end }}
