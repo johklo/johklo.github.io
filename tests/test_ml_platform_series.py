@@ -324,15 +324,20 @@ class MLPlatformPublicationTest(unittest.TestCase):
         source = (ROOT / "content" / "docs" / "book" / "_index.md").read_text(
             encoding="utf-8"
         )
-        metadata, _ = json.JSONDecoder().raw_decode(source)
+        self.assertTrue(source.startswith("---\n"))
+        frontmatter, body = source[4:].split("\n---\n", 1)
+        self.assertNotRegex(frontmatter, r"(?m)^\s+read:")
+        self.assertIn("{{< reading-list >}}", body)
+        config = (ROOT / ".pages.yml").read_text(encoding="utf-8")
+        book_config = config.split("      - name: book-index\n", 1)[1].split(
+            "      - { name: insight-index", 1
+        )[0]
+        self.assertIn("format: yaml-frontmatter", book_config)
         checkboxes = [item for item in parsed.inputs if item.get("type") == "checkbox"]
         self.assertEqual(checkboxes, [])
-        for book in metadata["reading_list"]:
-            self.assertNotIn("read", book)
-            self.assertIn(book["title"], document)
-            if book.get("url"):
-                self.assertIn(book["url"], parsed.links)
-                self.assertTrue(self.page_path(book["url"]).is_file())
+        self.assertIn("Machine Learning Platform Engineering", document)
+        self.assertIn(SERIES_URL, parsed.links)
+        self.assertTrue(self.page_path(SERIES_URL).is_file())
         self.assertNotRegex(document, r"읽은 책\s+\d+\s*/\s*\d+")
         modules = [
             script for script in parsed.scripts

@@ -206,7 +206,7 @@ content:
         label: Book 카테고리 페이지
         type: file
         path: content/docs/book/_index.md
-        format: json-frontmatter
+        format: yaml-frontmatter
         fields:
           - { name: title, component: title }
           - { name: description, component: description }
