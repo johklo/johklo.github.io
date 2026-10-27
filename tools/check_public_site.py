@@ -7,7 +7,9 @@ def unexpected_static_files(paths):
     allowed = re.compile(
         r"static/(?:robots\.txt|google[0-9a-f]+\.html|"
         r"downloads/ml-platform-engineering/kfp-cluster/"
-        r"(?:Dockerfile|submit_cluster\.py|object-store-patch\.yaml|executor-patch\.yaml)|"
+        r"(?:Dockerfile|submit_cluster\.py|feature_study\.py|income_study\.py|"
+        r"pipeline_study\.py|run_pipeline_study\.py|"
+        r"object-store-patch\.yaml|executor-patch\.yaml)|"
         r"images/(?:\.gitkeep|.+\.(?:avif|gif|ico|jpeg|jpg|png|svg|webp)))"
     )
     return [

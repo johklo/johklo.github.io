@@ -32,6 +32,8 @@ class PublicFilesTest(unittest.TestCase):
         allowed = [
             prefix + name for name in (
                 "Dockerfile", "submit_cluster.py",
+                "feature_study.py", "income_study.py",
+                "pipeline_study.py", "run_pipeline_study.py",
                 "object-store-patch.yaml", "executor-patch.yaml",
             )
         ]
