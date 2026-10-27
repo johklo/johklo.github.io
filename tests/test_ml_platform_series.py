@@ -129,18 +129,27 @@ class MLPlatformPublicationTest(unittest.TestCase):
             indexed.update(url for url in data if url.startswith(SERIES_URL))
         self.assertEqual(
             indexed,
-            {SERIES_URL, f"{SERIES_URL}book-ch04-05-sop/"} | {
+            {SERIES_URL} | {
                 f"{SERIES_URL}{slug}/" for slug in self.visible
             },
         )
 
-    def test_book_sop_is_in_book_category_with_legacy_redirect(self):
-        target = f"{SERIES_URL}book-ch04-05-sop/"
-        self.assertTrue(self.page_path(target).is_file())
-        category = PageLinks(self.page_path(SERIES_URL).read_text(encoding="utf-8"))
-        self.assertIn(target, category.links)
-        legacy = self.page_path("/docs/tech/ops/mlops/labs/book-ch04-05-sop/")
-        self.assertIn(f"https://johklo.github.io{target}", legacy.read_text(encoding="utf-8"))
+    def test_book_sop_is_appended_to_chapters_with_legacy_redirects(self):
+        target = f"{SERIES_URL}04-experiments-features-pipelines/"
+        html = self.page_path(target).read_text(encoding="utf-8")
+        document = PageLinks(html)
+        self.assertIn("book-lab-sop", document.ids)
+        self.assertLess(html.index("마치며"), html.index('id=book-lab-sop'))
+        for heading in ("A-4. 버킷 만들기", "D-7. 결과 확인"):
+            self.assertIn(heading, html)
+        self.assertIn("/images/ml-platform-engineering/sop/kfp-06-run-graph.png", html)
+        self.assertFalse((SOURCE / "book-ch04-05-sop.md").exists())
+        for old in (
+            f"{SERIES_URL}book-ch04-05-sop/",
+            "/docs/tech/ops/mlops/labs/book-ch04-05-sop/",
+        ):
+            legacy = self.page_path(old).read_text(encoding="utf-8")
+            self.assertIn(f"https://johklo.github.io{target}", legacy)
 
     def test_published_series_links_and_section_anchors_resolve(self):
         pages = [SERIES_URL] + [
