@@ -32,6 +32,6 @@ flowchart LR
 
 순서는 MLflow, Feast, Kubeflow Pipelines, BentoML을 권합니다. 각 가이드는 독립적으로 따라 할 수 있도록 별도 작업 폴더와 고정 버전을 사용합니다. 명령은 Linux, macOS 또는 Windows의 WSL2를 기준으로 합니다.
 
-기초를 익힌 다음에는 [책 4~5장 로컬 실습 SOP](/docs/tech/ops/mlops/labs/book-ch04-05-sop/)에서 MLflow, Feast, Kubeflow Pipelines를 책의 코드 그대로 한 클러스터에서 이어 보고, [MLOps 실습](/docs/tech/ops/mlops/labs/)에서 Azure ML 연결과 여러 도구를 묶은 프로젝트를, [MLOps 설계 가이드](/docs/tech/ops/mlops/)에서 가상 서점 Bookway의 운영 요구사항을 기준으로 한 도구 배치를 볼 수 있습니다.
+기초를 익힌 다음에는 [책 4~5장 로컬 실습 SOP](/docs/tech/machine-learning-platform-engineering/book-ch04-05-sop/)에서 MLflow, Feast, Kubeflow Pipelines를 책의 코드 그대로 한 클러스터에서 이어 보고, [MLOps 실습](/docs/tech/ops/mlops/labs/)에서 Azure ML 연결과 여러 도구를 묶은 프로젝트를, [MLOps 설계 가이드](/docs/tech/ops/mlops/)에서 가상 서점 Bookway의 운영 요구사항을 기준으로 한 도구 배치를 볼 수 있습니다.
 
 {{< section-list >}}

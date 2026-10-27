@@ -129,10 +129,18 @@ class MLPlatformPublicationTest(unittest.TestCase):
             indexed.update(url for url in data if url.startswith(SERIES_URL))
         self.assertEqual(
             indexed,
-            {SERIES_URL} | {
+            {SERIES_URL, f"{SERIES_URL}book-ch04-05-sop/"} | {
                 f"{SERIES_URL}{slug}/" for slug in self.visible
             },
         )
+
+    def test_book_sop_is_in_book_category_with_legacy_redirect(self):
+        target = f"{SERIES_URL}book-ch04-05-sop/"
+        self.assertTrue(self.page_path(target).is_file())
+        category = PageLinks(self.page_path(SERIES_URL).read_text(encoding="utf-8"))
+        self.assertIn(target, category.links)
+        legacy = self.page_path("/docs/tech/ops/mlops/labs/book-ch04-05-sop/")
+        self.assertIn(f"https://johklo.github.io{target}", legacy.read_text(encoding="utf-8"))
 
     def test_published_series_links_and_section_anchors_resolve(self):
         pages = [SERIES_URL] + [

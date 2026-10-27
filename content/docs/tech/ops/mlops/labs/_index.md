@@ -48,7 +48,7 @@ flowchart LR
 
 | 글 | 남길 결과 |
 | --- | --- |
-| [책 4~5장 로컬 실습 SOP](book-ch04-05-sop/) | MLflow에 등록된 `random-forest-classifier` Production 버전, Feast 레지스트리, KFP 실행 결과 `income_predictions.parquet` |
+| [책 4~5장 로컬 실습 SOP](/docs/tech/machine-learning-platform-engineering/book-ch04-05-sop/) | MLflow에 등록된 `random-forest-classifier` Production 버전, Feast 레지스트리, KFP 실행 결과 `income_predictions.parquet` |
 
 ## 2부. ML 플랫폼 통합
 

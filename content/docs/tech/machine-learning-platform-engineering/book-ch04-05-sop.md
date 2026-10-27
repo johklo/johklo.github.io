@@ -3,7 +3,9 @@ title: "책 4~5장 로컬 실습 SOP: 환경 세팅부터 KFP 배치 추론까�
 description: "Machine Learning Platform Engineering 4장 MLflow, Feast와 5장 Kubeflow Pipelines 실습을 kind 클러스터에서 번호 순서대로 따라 하는 절차"
 date: 2026-10-25T19:30:00+09:00
 lastmod: 2026-10-26T07:00:00+09:00
-weight: 4
+weight: 45
+aliases:
+  - "/docs/tech/ops/mlops/labs/book-ch04-05-sop/"
 tags: ["mlops", "mlflow", "feast", "kubeflow", "kind", "hands-on", "sop"]
 ---
 
