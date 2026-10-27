@@ -45,6 +45,7 @@ class MLflowLearningPublicationTest(unittest.TestCase):
             for path in sorted(
                 (cls.output / SERIES_URL.lstrip("/")).glob("*/index.html")
             )
+            if "http-equiv=refresh" not in path.read_text(encoding="utf-8")
         ]
 
     def page_path(self, url):
