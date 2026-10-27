@@ -1,6 +1,6 @@
 ---
 title: "06. 온라인 및 배치 추론과 모델 교체"
-description: "등록 모델을 온라인과 배치 추론에 연결하는 계약과 요청 형식, 점진적 전환을 구분하기"
+description: "등록 모델의 온라인 및 배치 추론 계약과 요청 형식, 점진적 전환을 구분한다."
 date: 2026-10-21T09:55:00+09:00
 lastmod: 2026-10-21T14:11:00+09:00
 weight: 60
@@ -9,17 +9,17 @@ aliases:
   - "/docs/tech/mlflow-azure-machine-learning/06-online-and-batch-inference/"
 ---
 
-등록한 모델을 사용하는 방식은 요청에 바로 응답하는 온라인 추론과 결과 파일을 남기는 배치 추론으로 나뉜다. 모델 버전과 실제 서비스를 연결하는 deployment, endpoint의 역할을 구분했다.
+온라인 추론은 요청에 응답하고 배치 추론은 결과 파일을 남긴다. 모델 버전과 서비스를 잇는 deployment, endpoint를 구분한다.
 
-[목차의 도구 역할 비교](/docs/tech/ops/mlops/labs/mlflow-aml-overview/#전체-mlops에서의-역할)에서 BentoML을 별도 서빙 구현의 예로 다뤘다. 해당 도구의 범위는 [BentoML 기능과 구성](/docs/tech/ops/mlops/labs/bentoml-capabilities/)에 정리했다. 이 편은 BentoML을 사용하는 실습이 아니라 AML의 MLflow 모델 배포 경로를 다룬다.
+BentoML의 역할은 [도구 비교](/docs/tech/ops/mlops/labs/mlflow-aml-overview/#전체-mlops에서의-역할)와 [기능 안내](/docs/tech/ops/mlops/labs/bentoml-capabilities/)를 참고한다. 여기서는 BentoML 대신 AML의 MLflow 배포를 다룬다.
 
 ## 준비 조건과 실습 범위
 
-[05편](/docs/tech/ops/mlops/labs/05-model-registration/)의 등록 모델과 `src\train.py`를 사용한다. 로컬에서는 요청 파일을 생성해 모델 입력과 맞는지 확인한다. 실제 endpoint와 deployment 생성은 링크한 공식 배포 절차에서 별도로 진행하는 후속 실습이다. 배포 권한, 추론 자원, 네트워크와 비용을 확인한 뒤 실행할 범위다.
+[05편](/docs/tech/ops/mlops/labs/05-model-registration/)의 모델과 `src\train.py`를 사용한다. 여기서는 로컬 요청 파일만 만들며 실제 endpoint와 deployment는 배포 권한, 자원, 네트워크, 비용을 확인한 뒤 후속 실습으로 진행한다.
 
 ## 등록된 모델을 추론에 연결
 
-이 편에서는 [배포 지침](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-mlflow-models?view=azureml-api-2), [온라인 배포](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-mlflow-models-online-endpoints?view=azureml-api-2), [배치 배포](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-mlflow-batch?view=azureml-api-2)를 묶어 읽었다. 앞의 스크립트는 등록까지 수행한다. 아래에서는 그 모델을 소비하는 구조와 후속 실습에서 확인할 조건을 정리한다.
+[배포 지침](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-mlflow-models?view=azureml-api-2), [온라인](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-mlflow-models-online-endpoints?view=azureml-api-2), [배치](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-mlflow-batch?view=azureml-api-2) 배포 문서를 참고한다. 앞의 스크립트는 등록까지 수행하며, 여기서는 모델 소비 구조와 후속 검증 조건을 다룬다.
 
 ### 등록 모델, deployment, endpoint
 
@@ -29,12 +29,12 @@ aliases:
 | Deployment | 모델을 실행하는 구현과 자원 설정 | 모델, 실행 환경, 컴퓨팅 등의 조합 |
 | Endpoint | 사용자가 호출하는 접점 | 어떤 deployment로 요청이나 작업을 보낼지 관리 |
 
-Registry에서 새 버전을 만들었다고 기존 deployment가 그 버전으로 교체되지는 않는다. 등록한 버전을 선택해 배포하고, 필요하면 endpoint의 연결을 변경하는 별도 과정이 있다.
+새 Registry 버전은 기존 deployment를 자동 교체하지 않는다. 버전을 선택해 배포하고 필요하면 endpoint 연결을 바꾼다.
 
 ```mermaid
 flowchart LR
     accTitle: 모델 등록 이후의 온라인 및 배치 추론
-    accDescr: 등록 모델의 구체 버전을 선택해 온라인 또는 배치 deployment를 만든다. 온라인 요청은 예측 응답으로, 배치 호출은 비동기 Job과 결과 파일로 이어진다.
+    accDescr: 등록 모델의 구체 버전으로 온라인 또는 배치 deployment를 만든다. 온라인 요청은 예측 응답을, 배치 호출은 비동기 Job과 결과 파일을 만든다.
     M["등록 모델의 특정 버전"] --> O["온라인 deployment"]
     M --> B["배치 deployment"]
     Q["클라이언트 요청"] --> E["온라인 endpoint"]
@@ -48,7 +48,7 @@ flowchart LR
 
 ### No-code 배포에서 자동화되는 범위
 
-No-code는 추론 코드와 환경이 필요 없다는 뜻보다, 모델 계약을 읽어 AML이 기본 추론 코드와 환경을 구성한다는 뜻으로 이해했다. 자동 추론 경로에서는 `python_function`인 PyFunc flavor가 기준이 된다.
+No-code는 추론 코드와 환경이 불필요하다는 뜻이 아니라 AML이 모델 계약을 읽어 기본 구성을 만든다는 뜻이다. 자동 추론은 `python_function` PyFunc flavor를 사용한다.
 
 | 자동으로 처리하는 부분 | 여전히 정할 부분 |
 | --- | --- |
@@ -57,9 +57,9 @@ No-code는 추론 코드와 환경이 필요 없다는 뜻보다, 모델 계약�
 | Signature를 이용한 입력 형식 확인 | 업무상 유효한 입력과 허용할 오류 |
 | 기본 요청 처리 코드 | 인증, 배포 권한, 트래픽 전환과 복구 |
 
-추론 환경을 직접 정의하는 경로에서는 모델 패키지 외에 추론 서버 패키지도 필요하다. 공식 배포 지침의 `azureml-inference-server-http`, `azureml-ai-monitoring` 등 요구 조건을 배포 방식에 맞춰 확인한다. 학습용 `conda.yml`을 그대로 추론 환경이라고 가정하지 않는다.
+직접 정의한 추론 환경에는 서버 패키지도 필요하다. 배포 방식에 따라 `azureml-inference-server-http`, `azureml-ai-monitoring` 요구를 확인하고 학습용 `conda.yml`을 그대로 쓰지 않는다.
 
-전처리와 후처리가 모델 안에 없거나 다른 flavor의 로딩 API가 필요하면 사용자 정의 scoring script를 선택할 수 있다. 이 경우 실행 환경도 함께 지정해야 한다. 기본 배포와 사용자 정의 배포의 책임이 달라지는 지점이다.
+모델에 전처리, 후처리가 없거나 다른 flavor가 필요하면 scoring script와 실행 환경을 직접 지정한다.
 
 ### 온라인 추론의 흐름
 
@@ -72,11 +72,11 @@ No-code는 추론 코드와 환경이 필요 없다는 뜻보다, 모델 계약�
 5. 일반 요청이 해당 deployment로 가도록 트래픽을 설정한다.
 6. 지연, 오류, 예측 결과를 확인한 뒤 유지 또는 복구를 판단한다.
 
-트래픽이 배정되지 않은 deployment를 직접 지정해 테스트하는 것과 endpoint의 일반 요청을 받게 만드는 것은 다르다. 배포 완료만으로 서비스 연결까지 확인했다고 보지 않는다.
+deployment 직접 테스트와 endpoint 일반 트래픽 수신은 다르다. 배포 완료만으로 서비스 연결을 확인했다고 보지 않는다.
 
 #### 요청 데이터의 형태
 
-로컬 `model.predict(DataFrame)` 호출에는 HTTP 본문이 없다. 이를 endpoint 호출로 바꿀 때는 서버가 기대하는 JSON 구조를 확인해야 한다.
+로컬 `model.predict(DataFrame)`에는 HTTP 본문이 없다. endpoint 호출에는 서버가 요구하는 JSON 구조를 맞춘다.
 
 | 실행 방식 | 표 데이터 입력의 바깥 구조 |
 | --- | --- |
@@ -84,7 +84,7 @@ No-code는 추론 코드와 환경이 필요 없다는 뜻보다, 모델 계약�
 | MLflow 내장 서버의 표 데이터 요청 | `dataframe_split` 안에 `columns`, `data` 등 |
 | AML no-code 온라인 endpoint | `input_data` 안에 `columns`, `data` 등 |
 
-따라서 모델 폴더에 있는 serving 입력 예시를 모든 서버에 그대로 보내도 된다고 가정하지 않는다. 다음 코드는 같은 Wine 테스트 데이터에서 AML 요청 파일만 만든다. Endpoint를 생성하거나 호출하는 코드는 아니다.
+serving 예시가 모든 서버에서 통한다고 가정하지 않는다. 다음 코드는 Wine 테스트 데이터로 AML 요청 파일만 만들며 endpoint를 생성, 호출하지 않는다.
 
 `make_request.py`:
 
@@ -120,11 +120,11 @@ $deployment = "<created-deployment-name>"
 az ml online-endpoint invoke --name $endpoint --deployment-name $deployment --request-file .\sample-request.json --resource-group $resourceGroup --workspace-name $workspace --subscription $subscription
 ```
 
-같은 두 행을 로컬의 등록 모델에 전달한 결과와 비교하면 저장 모델과 서빙 모델이 같은 입력 계약을 따르는지 확인할 수 있다. 이 비교와 별개로 동시 요청, 큰 입력, 초기화 지연, 잘못된 입력의 동작은 추가 검증 대상이다.
+두 행을 등록 모델과 비교해 입력 계약을 확인한다. 동시 요청, 큰 입력, 초기화 지연, 잘못된 입력은 별도로 검증한다.
 
 ### 배치 추론의 흐름
 
-배치 endpoint 호출은 요청 안의 몇 행을 바로 예측해 응답하는 온라인 호출과 다르다. 처리할 데이터 위치를 받아 비동기 추론 Job을 만들고, 결과를 저장소에 남긴다.
+배치 endpoint는 데이터 위치를 받아 비동기 추론 Job을 만들고 결과를 저장한다. 몇 행을 즉시 응답하는 온라인 호출과 다르다.
 
 1. 등록한 MLflow 모델 버전과 사용할 compute cluster를 확인한다.
 2. Batch endpoint와 model deployment를 만든다.
@@ -133,11 +133,11 @@ az ml online-endpoint invoke --name $endpoint --deployment-name $deployment --re
 5. Job 상태와 실패한 파일, 재시도 결과를 확인한다.
 6. 완료 후 결과 파일을 내려받아 입력 파일과 예측을 연결한다.
 
-기본 MLflow 배치 경로에서 표 데이터는 CSV와 Parquet 계열을 DataFrame으로 읽고, 지원 이미지 파일은 배열로 읽는다. 그 밖의 파일 형식이나 행 단위 분할, 특별한 전처리가 필요하면 scoring script를 사용하는 경로를 검토한다.
+기본 MLflow 배치는 CSV, Parquet을 DataFrame으로, 지원 이미지 파일을 배열로 읽는다. 다른 형식, 행 단위 분할, 특수 전처리에는 scoring script를 검토한다.
 
-`mini_batch_size`는 기본 경로에서 행 수가 아니라 파일 수다. CSV 파일 하나에 많은 행이 들어 있으면 작은 mini-batch 설정이어도 큰 메모리가 필요할 수 있다. 입력 파일을 나눌 단위와 각 파일의 처리 시간을 함께 봐야 한다.
+`mini_batch_size`는 행이 아닌 파일 수다. 한 CSV에 행이 많으면 작은 설정도 큰 메모리를 쓸 수 있으므로 파일 분할과 처리 시간을 함께 본다.
 
-Batch endpoint를 호출해 받은 Job ID는 완료된 예측 결과가 아니다. 입력 파일명과 행, 결과 파일의 예측을 연결할 기준도 남겨야 한다. Endpoint를 삭제해도 이미 만들어진 scoring Job과 결과가 함께 지워지는 것은 아니다.
+Job ID는 완료 결과가 아니다. 입력 파일, 행과 예측 파일을 연결할 기준을 남긴다. Endpoint 삭제도 기존 scoring Job과 결과를 지우지 않는다.
 
 ### 배포 도구와 모델 전환
 
@@ -152,11 +152,11 @@ MLflow 형식의 모델을 배포하는 것과 모든 배포를 MLflow SDK로 �
 
 [점진적 전환 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-deploy-mlflow-models-online-progressive?view=azureml-api-2)는 같은 endpoint 아래에 기존 deployment와 새 deployment를 두는 방법을 다룬다. 새 deployment를 일반 트래픽 0% 상태에서 직접 테스트한 뒤 일부 트래픽을 옮기고, 문제가 없으면 비중을 늘린다.
 
-이때 바꾸는 것은 Registry의 stage 이름이 아니라 endpoint의 트래픽 설정이다. 트래픽을 이전 deployment로 돌려도 새 deployment의 자원이 자동으로 삭제되지는 않는다. 두 배포를 유지하는 기간의 비용과 제거 시점도 별도 결정이다.
+전환 대상은 Registry stage가 아니라 endpoint 트래픽 설정이다. 이전 deployment로 되돌려도 새 자원은 자동 삭제되지 않으므로 유지 비용과 제거 시점을 정한다.
 
 ## 확인할 결과
 
-로컬 실습에서는 `sample-request.json`에 `input_data`가 있고 13개 입력 열과 두 행의 데이터가 있어야 한다. 온라인 배포를 진행했다면 같은 입력에서 등록 모델과 예측이 일치하는지 확인한다. 배치 실습은 호출 시 받은 Job ID, 작업 완료 상태, 저장된 예측 파일을 각각 확인한다.
+로컬에서는 `sample-request.json`의 `input_data`, 13개 열, 두 행을 확인한다. 온라인은 등록 모델과 예측을 비교하고, 배치는 Job ID, 완료 상태, 결과 파일을 각각 확인한다.
 
 ## 오류 확인
 
@@ -171,7 +171,7 @@ MLflow 형식의 모델을 배포하는 것과 모든 배포를 MLflow SDK로 �
 
 ## 비용과 정리
 
-01~05편의 학습 코드는 온라인 추론 엔드포인트를 만들지 않는다. 모델을 등록했다고 HTTP 서비스가 시작되는 것은 아니다. 이 편의 후속 배포 실습을 진행한다면 추론 자원과 정리 범위가 추가된다.
+01~05편은 온라인 endpoint를 만들지 않으며 모델 등록만으로 HTTP 서비스가 시작되지 않는다. 후속 배포에는 추론 자원과 정리 항목이 추가된다.
 
 | 대상 | 학습 후 확인할 것 |
 | --- | --- |
@@ -183,7 +183,7 @@ MLflow 형식의 모델을 배포하는 것과 모든 배포를 MLflow SDK로 �
 | 배치 추론 | 실행 중인 scoring Job, 공유 compute, 입력과 결과 파일 |
 | Workspace 관련 리소스 | 스토리지 등 컴퓨팅 중지 후에도 남는 비용 |
 
-Job이 끝나도 모든 관련 비용이 0이 되는 것은 아니다. 공유 workspace나 공유 클러스터는 실습 종료를 이유로 삭제하지 않는다.
+Job 완료 후에도 비용이 남을 수 있다. 공유 workspace와 클러스터는 실습 종료만으로 삭제하지 않는다.
 
 ## 생각할 점
 

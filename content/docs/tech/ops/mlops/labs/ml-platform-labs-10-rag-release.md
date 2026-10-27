@@ -11,11 +11,11 @@ aliases:
 ---
 
 
-목표는 RAG 도구를 하나씩 실행하는 것이 아니라, **같은 문서·검색 설정·프롬프트를 사용하는 후보를 검증하고 실제 질의 경로에 배포하는 것**입니다. 이 장의 기본 과정은 인터넷 API 호출, 클라우드 리소스 생성과 유료 LLM 없이 실행됩니다.
+목표는 RAG 도구를 하나씩 실행하는 것이 아니라, **같은 문서, 검색 설정, 프롬프트를 사용하는 후보를 검증하고 실제 질의 경로에 배포하는 것**이다. 이 장의 기본 과정은 인터넷 API 호출, 클라우드 리소스 생성과 유료 LLM 없이 실행된다.
 
 ## 준비와 산출물
 
-Python 3.11~3.12, uv와 저장소가 필요합니다. 모든 명령은 프로젝트 루트의 PowerShell 기준입니다.
+Python 3.11~3.12, uv와 저장소가 필요하다. 모든 명령은 프로젝트 루트의 PowerShell 기준이다.
 
 ```powershell
 uv sync --extra dev
@@ -23,14 +23,14 @@ uv run ml-labs rag release init-demo --output .ml-labs\rag-demo\inputs
 Get-ChildItem .ml-labs\rag-demo\inputs
 ```
 
-입력 디렉터리에는 다음 네 파일이 생깁니다.
+입력 디렉터리에는 다음 네 파일이 생긴다.
 
 - `documents.jsonl`: 직접 작성한 공개 합성 MLOps 문서
 - `config.json`: TF-IDF 검색과 응답 provider 설정
-- `prompt.json`: 이름·버전·템플릿이 있는 로컬 프롬프트
+- `prompt.json`: 이름, 버전, 템플릿이 있는 로컬 프롬프트
 - `evaluation.json`: 답변 가능 사례 두 개와 근거 없는 질문 한 개
 
-이미 존재하는 디렉터리를 덮어쓰지 않습니다. 재실습할 때는 `rag-demo2`처럼 새 경로를 사용합니다.
+이미 존재하는 디렉터리를 덮어쓰지 않는다. 재실습할 때는 `rag-demo2`처럼 새 경로를 사용한다.
 
 ## 1. 입력을 읽고 변경 지점을 이해하기
 
@@ -40,7 +40,7 @@ Get-Content .ml-labs\rag-demo\inputs\prompt.json
 Get-Content .ml-labs\rag-demo\inputs\evaluation.json
 ```
 
-기본 설정은 다음과 같습니다.
+기본 설정은 다음과 같다.
 
 ```json
 {
@@ -53,11 +53,11 @@ Get-Content .ml-labs\rag-demo\inputs\evaluation.json
 }
 ```
 
-`top_k`는 검색 결과 수의 상한이고 `min_score`는 최소 코사인 유사도입니다. 점수가 0인 문서는 임계값이 0이어도 제외합니다. n-gram과 stop words도 후보의 해시에 포함됩니다. 현재 검색기는 로컬 TF-IDF뿐이며 벡터 임베딩 모델이나 하이브리드 검색을 사용하지 않습니다.
+`top_k`는 검색 결과 수의 상한이고 `min_score`는 최소 코사인 유사도이다. 점수가 0인 문서는 임계값이 0이어도 제외한다. n-gram과 stop words도 후보의 해시에 포함된다. 현재 검색기는 로컬 TF-IDF뿐이며 벡터 임베딩 모델이나 하이브리드 검색을 사용하지 않는다.
 
-프롬프트 템플릿에는 `{context}`와 `{question}`이 반드시 있어야 합니다. 로컬 모드는 문서를 인용할 뿐 템플릿으로 새 문장을 생성하지 않습니다. 프롬프트를 바꾸어도 로컬 답변의 문체가 바뀌지 않는 것이 정상입니다. Azure 모드를 선택하면 이 고정 템플릿이 실제 생성 요청에 사용됩니다.
+프롬프트 템플릿에는 `{context}`와 `{question}`이 반드시 있어야 한다. 로컬 모드는 문서를 인용할 뿐 템플릿으로 새 문장을 생성하지 않는다. 프롬프트를 바꾸어도 로컬 답변의 문체가 바뀌지 않는 것이 정상이다. Azure 모드를 선택하면 이 고정 템플릿이 실제 생성 요청에 사용된다.
 
-평가 사례의 계약은 다음과 같습니다.
+평가 사례의 계약은 다음과 같다.
 
 ```json
 [
@@ -75,7 +75,7 @@ Get-Content .ml-labs\rag-demo\inputs\evaluation.json
 ]
 ```
 
-답변 가능 사례에는 `expected_ids`가 필요합니다. `answer_contains`는 선택 사항이며 대소문자를 무시한 부분 문자열 검사입니다. 거절 사례에는 기대 인용이나 답변 문자열을 지정하지 않습니다. 둘 중 한 종류만 있으면 후보 생성을 거부합니다. **위 예시는 형식 설명이며, 실제 데모 파일에는 feature store 사례도 포함됩니다.**
+답변 가능 사례에는 `expected_ids`가 필요하다. `answer_contains`는 선택 사항이며 대소문자를 무시한 부분 문자열 검사이다. 거절 사례에는 기대 인용이나 답변 문자열을 지정하지 않는다. 둘 중 한 종류만 있으면 후보 생성을 거부한다. **위 예시는 형식 설명이며, 실제 데모 파일에는 feature store 사례도 포함된다.**
 
 ## 2. v1 후보를 고정하고 첫 평가하기
 
@@ -87,7 +87,7 @@ $v1Report.passed
 $v1Report.summary
 ```
 
-기본 데모는 `passed: true`, `pass_rate: 1`이어야 합니다. 사례별 응답에는 검색 문서, 인용, 거절 여부, 후보 ID, 프롬프트 버전과 실제 측정된 지연이 있습니다.
+기본 데모는 `passed: true`, `pass_rate: 1`이어야 한다. 사례별 응답에는 검색 문서, 인용, 거절 여부, 후보 ID, 프롬프트 버전과 실제 측정된 지연이 있다.
 
 ```powershell
 $v1Report.cases | Select-Object id, passed, baseline_passed
@@ -95,9 +95,9 @@ $v1Report.hashes
 $v1Report.cases[0].response.metrics
 ```
 
-보고서는 설정·문서·프롬프트·평가 집합의 해시와 `candidate_id`를 포함합니다. 보고서 자체에도 `report_id` 해시가 있습니다. 숫자만 적힌 다른 보고서를 붙이거나 후보 파일을 편집하면 활성화 시 검증에 실패합니다.
+보고서는 설정, 문서, 프롬프트, 평가 집합의 해시와 `candidate_id`를 포함한다. 보고서 자체에도 `report_id` 해시가 있다. 숫자만 적힌 다른 보고서를 붙이거나 후보 파일을 편집하면 활성화 시 검증에 실패한다.
 
-이 검사는 로컬 파일의 변경을 탐지하는 기능입니다. 서명이나 제삼자의 증명은 아니므로 파일을 쓰는 사람을 신뢰해야 합니다. 운영 환경에서는 별도 권한과 서명·감사를 추가해야 합니다.
+이 검사는 로컬 파일의 변경을 탐지하는 기능이다. 서명이나 제삼자의 증명은 아니므로 파일을 쓰는 사람을 신뢰해야 한다. 운영 환경에서는 별도 권한과 서명, 감사를 추가해야 한다.
 
 ## 3. 통과한 v1을 활성화하고 조회하기
 
@@ -108,7 +108,7 @@ uv run ml-labs rag release query --store .ml-labs\rag-demo\store --query "model 
 uv run ml-labs rag release query --store .ml-labs\rag-demo\store --query "quasar teleportation warranty"
 ```
 
-첫 질의에는 `doc-mlflow-registry` 인용이 있어야 합니다. 두 번째 질의는 다음 상태를 반환해야 합니다.
+첫 질의에는 `doc-mlflow-registry` 인용이 있어야 한다. 두 번째 질의는 다음 상태를 반환해야 한다.
 
 ```json
 {
@@ -120,13 +120,13 @@ uv run ml-labs rag release query --store .ml-labs\rag-demo\store --query "quasar
 }
 ```
 
-실제 응답에는 `release_id`, `candidate_id`, 질의별 `trace_id`와 `metrics`도 포함됩니다. 배포는 `releases\<release_id>`에 검증된 후보와 보고서를 복사한 뒤 `active.json`을 같은 파일시스템에서 원자적으로 교체합니다. 준비 도중 오류가 나면 활성 포인터는 바뀌지 않습니다. 쓰기 작업은 로컬 잠금 파일로 직렬화합니다.
+실제 응답에는 `release_id`, `candidate_id`, 질의별 `trace_id`와 `metrics`도 포함된다. 배포는 `releases\<release_id>`에 검증된 후보와 보고서를 복사한 뒤 `active.json`을 같은 파일시스템에서 원자적으로 교체한다. 준비 도중 오류가 나면 활성 포인터는 바뀌지 않는다. 쓰기 작업은 로컬 잠금 파일로 직렬화한다.
 
-장애로 프로세스가 강제 종료되어 `.release.lock`이 남았다면 **실제 다른 작성자가 없는지 확인한 뒤에만** 잠금을 수동 정리합니다. NFS·여러 서버를 위한 분산 릴리스 관리 시스템은 아닙니다.
+장애로 프로세스가 강제 종료되어 `.release.lock`이 남았다면 **실제 다른 작성자가 없는지 확인한 뒤에만** 잠금을 수동 정리한다. NFS, 여러 서버를 위한 분산 릴리스 관리 시스템은 아니다.
 
 ## 4. 나빠진 검색 설정을 만들고 회귀를 차단하기
 
-`min_score`를 지나치게 높이면 관련 문서가 있어도 검색하지 못합니다. 원본과 v1 스냅샷은 건드리지 않고 새 설정을 만듭니다.
+`min_score`를 지나치게 높이면 관련 문서가 있어도 검색하지 못한다. 원본과 v1 스냅샷은 건드리지 않고 새 설정을 만든다.
 
 ```powershell
 $badConfig = Get-Content .ml-labs\rag-demo\inputs\config.json -Raw | ConvertFrom-Json
@@ -299,4 +299,4 @@ uv run python -m pytest tests\test_rag_lifecycle.py -q
 [基礎: RAGとLLMOps](/docs/tech/ops/mlops/labs/ml-platform-labs-06-rag-llmops/) / [Azure実行](/docs/tech/ops/mlops/labs/ml-platform-labs-07-azure/)
 
 
-실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받습니다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/10-rag-release.md)
+실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받는다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/10-rag-release.md)

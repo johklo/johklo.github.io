@@ -11,9 +11,9 @@ aliases:
 ---
 
 
-내일 볼 영화를 추천하는 모델이 내일의 평점까지 보고 학습했다면 시험 답안을 미리 본 것과 같습니다. 추천 데이터의 분할은 행을 무작위로 나누는 것보다 언제 알 수 있었던 정보인지가 중요합니다.
+미래 평점으로 학습하면 시험 답안을 미리 본 셈이다. 추천 데이터는 무작위 행이 아니라 정보가 알려진 시점으로 나눈다.
 
-이번 과정에서는 사용자마다 먼저 발생한 평점을 학습에 사용하고, 이후 평점을 검증과 테스트에 사용합니다. 생성 데이터에서는 사용자와 영화의 숨은 취향 벡터로 평점을 만들지만, 모델에는 그 벡터를 알려 주지 않습니다.
+사용자별 과거 평점으로 학습하고 이후 데이터로 검증, 테스트한다. 합성 평점 생성에 쓴 숨은 취향 벡터는 모델에 공개하지 않는다.
 
 ## 작은 데이터로 전체 연결하기
 
@@ -24,21 +24,21 @@ uv run ml-labs movies evaluate --candidate .ml-labs/runs/movies/candidate.json -
 uv run ml-labs register --candidate .ml-labs/runs/movies/candidate.json --report .ml-labs/reports/movies.json --name movie-recommender
 ```
 
-`ratings.csv`에는 `user_id`, `item_id`, `rating`, `timestamp`, `split`이 필요합니다. 같은 사용자와 영화 쌍의 중복, 범위를 벗어난 평점, 사용자별로 뒤섞인 분할 시점을 검사합니다.
+`ratings.csv`는 `user_id`, `item_id`, `rating`, `timestamp`, `split`을 포함하며 중복, 평점 범위와 사용자별 분할 시점을 검사한다.
 
-`train`은 사용자 평균에서 벗어난 취향을 저차원 행렬로 근사하는 SVD를 사용합니다. 본 영화는 추천 목록에서 제외하고, 처음 보는 사용자는 학습 평점으로 계산한 영화 평균 순위를 사용합니다. 이 인기 기준선은 노출 수와 신뢰도를 보정한 서비스용 순위가 아닙니다.
+`train`은 사용자 평균 대비 취향을 저차원 행렬로 근사하는 SVD를 쓴다. 본 영화는 제외하고 신규 사용자는 학습 평점의 영화 평균을 쓰지만, 노출 수와 신뢰도는 보정하지 않는다.
 
 ## 결과를 읽는 순서
 
-`candidate.json`의 `validation_rmse`를 `baseline_rmse`와 비교합니다. RMSE는 평점 예측 오차이고, 낮을수록 좋습니다. `rank`를 키웠다고 항상 좋아지지는 않습니다. 기본 게이트는 검증 RMSE 상한이며 `--min-ndcg-lift`를 추가하면 인기 기준선보다 검증 NDCG@5가 얼마나 좋아야 하는지도 검사합니다.
+`candidate.json`의 `validation_rmse`를 `baseline_rmse`와 비교한다. RMSE는 낮을수록 좋지만 `rank`가 높다고 개선되지는 않는다. 기본 게이트는 RMSE 상한이며 `--min-ndcg-lift`는 인기 기준선 대비 NDCG@5 개선 폭도 검사한다.
 
-검증 게이트를 통과한 뒤에만 테스트 평점에서 Recall@5를 계산합니다. 여기서는 평점 4 이상을 관련 영화로 정의하고, 그 영화 중 상위 다섯 추천에 포함된 비율을 합산합니다. 관련 영화가 없으면 지표는 `null`이며 실패를 0점처럼 숨기지 않습니다.
+검증 통과 후 테스트에서 평점 4 이상 영화의 Recall@5를 계산한다. 관련 영화가 없으면 `null`을 기록한다.
 
-평점 오차가 낮아도 추천 순서가 좋다는 보장은 없습니다. 테스트를 반복해서 보고 rank를 고르면 테스트도 사실상 모델 선택에 사용됩니다. 후보 비교는 검증 데이터로 하고, 테스트는 고른 후보의 마지막 확인에 사용하세요.
+낮은 평점 오차가 좋은 순위를 보장하지 않는다. rank 선택은 검증에서 하고 테스트는 최종 확인에만 쓴다.
 
 ## 실제 MovieLens로 교체하기
 
-합성 데이터는 연결 확인용입니다. 현실의 희소성과 인기 편향을 보려면 [GroupLens MovieLens latest-small](https://grouplens.org/datasets/movielens/latest/)에서 이용 조건을 읽고 ZIP을 직접 내려받습니다. 자동 다운로드와 재배포는 하지 않습니다.
+합성 데이터는 연결 확인용이다. 희소성과 인기 편향은 이용 조건에 따라 [MovieLens latest-small](https://grouplens.org/datasets/movielens/latest/) ZIP을 내려받아 확인한다. 자동 다운로드, 재배포는 하지 않는다.
 
 ```powershell
 uv run ml-labs movies import-movielens --archive .\ml-latest-small.zip --output data/movielens
@@ -46,31 +46,31 @@ uv run ml-labs movies train --data data/movielens --output .ml-labs/runs/moviele
 uv run ml-labs movies evaluate --candidate .ml-labs/runs/movielens/candidate.json --data data/movielens --report .ml-labs/reports/movielens.json
 ```
 
-가져오기는 사용자당 최소 10건과 서로 다른 시점 세 개 이상을 요구합니다. 동일 타임스탬프의 이벤트는 같은 분할에 묶습니다. 시점 그룹의 약 80%, 10%, 10%로 나누므로 행 개수 비율은 정확히 같지 않습니다.
+가져오기는 사용자당 10건, 시점 3개 이상이 필요하다. 같은 타임스탬프는 같은 분할에 넣고 시점 그룹을 약 80, 10, 10%로 나눠 행 비율은 다를 수 있다.
 
-MovieLens의 0.5~5점은 학습 데이터 계약에 맞춰 `1 + (원래 평점 - 0.5) × 4 / 4.5`로 변환합니다. 원본 ZIP의 지문과 변환식은 manifest에 남습니다. 변환 후 4점 기준은 원래 4점과 같지 않다는 점도 평가 해석에 포함해야 합니다.
+MovieLens 0.5~5점은 `1 + (원래 평점 - 0.5) × 4 / 4.5`로 바꾸고 ZIP 지문과 변환식을 manifest에 기록한다. 4점 기준도 달라진다.
 
-이 과정은 latest-small을 대상으로 합니다. 수천만 건을 현재의 조밀 행렬 구현에 바로 넣으면 메모리 문제가 생깁니다. 대규모 과정으로 확장하려면 희소 행렬과 ANN, 후보 생성 및 순위화를 별도로 설계해야 합니다.
+대상은 latest-small이다. 수천만 건은 조밀 행렬 구현의 메모리를 넘으므로 확장에는 희소 행렬, ANN, 후보 생성과 순위화 설계가 필요하다.
 
 ## 평가 게이트의 거절 경로
 
-아주 낮은 RMSE 상한으로 기존 후보를 평가합니다.
+아주 낮은 RMSE 상한으로 기존 후보를 평가한다.
 
 ```powershell
 uv run ml-labs movies evaluate --candidate .ml-labs/runs/movies/candidate.json --data data/movies --report .ml-labs/reports/movies-rejected.json --max-rmse 0.01
 ```
 
-종료 코드가 0이 아니고, 보고서에 `passed: false`가 기록되어야 합니다. 그 보고서를 `register`에 넘겼을 때도 등록이 거절되어야 합니다. 이것이 단순히 경고를 출력하는 것과 평가 게이트의 차이입니다.
+종료 코드는 0이 아니어야 하고 보고서에는 `passed: false`가 남아야 한다. 해당 보고서의 `register`도 거절되어야 경고가 아닌 게이트로 동작한다.
 
-이어서 새 사용자와 기존 사용자를 HTTP로 조회합니다. [서빙 과정](/docs/tech/ops/mlops/labs/ml-platform-labs-05-serving-monitoring/)에서 두 응답의 `status`와 추천 목록을 비교할 수 있습니다.
+[서빙 과정](/docs/tech/ops/mlops/labs/ml-platform-labs-05-serving-monitoring/)에서 신규, 기존 사용자의 응답을 비교한다.
 
 ## 후보 비교와 추가 평가 범위
 
-rank 2, 4, 8의 후보는 같은 데이터와 검증 기준으로 비교해야 합니다. 현재 학습은 인기 기준선과 모델의 검증 Recall@5 및 NDCG@5를 함께 기록합니다. [통합 운영 실험](/docs/tech/ops/mlops/labs/ml-platform-labs-09-integrated-operations/)은 검증 NDCG로 후보를 선택한 뒤 선택 후보만 테스트합니다. 장르별 커버리지와 사용자 활동량별 세그먼트 평가는 현재 평가 범위에 포함하지 않았습니다.
+rank 2, 4, 8을 같은 데이터와 기준으로 비교한다. 학습은 인기 기준선과 모델의 검증 Recall@5, NDCG@5를 기록한다. [통합 운영 실험](/docs/tech/ops/mlops/labs/ml-platform-labs-09-integrated-operations/)은 검증 NDCG로 고른 후보만 테스트하며 장르 커버리지와 활동량 세그먼트는 평가 범위 밖이다.
 
-추천에서는 평점 오차, 순위 품질, 처음 보는 사용자와 시간 누수를 서로 다른 문제로 확인합니다.
+
 
 [이전: 구조와 준비](/docs/tech/ops/mlops/labs/ml-platform-labs-00-foundation/) / [다음: 객체 탐지](/docs/tech/ops/mlops/labs/ml-platform-labs-02-cards/)
 
 
-실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받습니다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/01-movies.md)
+실행 코드는 [실습 저장소](https://github.com/johklo/ml-platform-engineering-labs)에서 내려받는다. [원본 가이드](https://github.com/johklo/ml-platform-engineering-labs/blob/main/docs/01-movies.md)

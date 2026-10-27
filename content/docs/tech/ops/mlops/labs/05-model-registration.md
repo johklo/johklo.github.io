@@ -1,6 +1,6 @@
 ---
 title: "05. 모델 등록과 버전 관리"
-description: "AML에 기록한 모델의 출처를 유지하며 이름과 구체 버전으로 등록하고 다시 읽기"
+description: "AML에 기록한 모델의 출처를 유지하며 이름과 버전으로 등록하고 다시 읽는다."
 date: 2026-10-21T09:55:00+09:00
 lastmod: 2026-10-21T14:11:00+09:00
 weight: 50
@@ -9,7 +9,7 @@ aliases:
   - "/docs/tech/mlflow-azure-machine-learning/05-model-registration/"
 ---
 
-실행에 모델 파일을 남기는 일과 관리할 모델 버전을 만드는 일을 나눴다. 여러 후보 중 선택한 run의 모델을 같은 AML workspace의 Models에 등록하는 흐름이다.
+run에 모델을 기록하는 것과 Registry 버전을 만드는 것은 별개다. 선택한 run의 모델을 같은 AML workspace에 등록한다.
 
 ## 준비 조건
 
@@ -26,7 +26,7 @@ aliases:
 
 ## 모델 재로딩과 버전 등록
 
-학습 때 사용한 Python 객체가 아니라 저장된 모델을 다시 읽어 예측한다. 테스트 데이터는 이 단계에서 선택된 후보에만 적용한다. 테스트 결과를 보며 계속 다른 `C`를 고르면 이 데이터도 모델 선택에 사용된 셈이 된다.
+학습 객체 대신 저장 모델을 다시 읽어 예측한다. 테스트 데이터는 선택 후보에 한 번 적용하며, 결과를 보고 `C`를 바꾸면 테스트 데이터가 선택에 사용된 셈이다.
 
 `finalize.py`:
 
@@ -81,9 +81,9 @@ print(f"registered_model_uri={model_uri}")
 | `runs:/<run-id>/model` | 특정 실행에 기록한 모델 |
 | `models:/wine-logistic-study/<version>` | 이름과 버전으로 등록한 모델 |
 
-등록 후에는 처리 결과로 받은 구체적인 버전을 사용한다. 다시 실행하면 새 버전이 만들어지므로 항상 `1`이라고 가정하지 않는다.
+등록 결과의 구체 버전을 사용한다. 재실행 시 새 버전이 생길 수 있으므로 `1`로 고정하지 않는다.
 
-모델 등록은 배포가 아니다. 아직 HTTP API나 추론용 VM을 만든 것은 아니다. 학습 환경과 다른 Python 환경에서 모델을 읽을 때는 필요한 의존성을 별도로 갖춰야 한다. 직렬화된 모델을 읽는 작업이므로, 출처를 신뢰할 수 없는 모델 파일을 가져와 실행하지 않는다.
+등록은 배포가 아니며 HTTP API나 추론 VM도 만들지 않는다. 다른 Python 환경에서는 의존성을 준비하고, 출처를 신뢰할 수 없는 직렬화 모델은 실행하지 않는다.
 
 ### 저장, 기록, 등록의 차이
 
@@ -94,7 +94,7 @@ print(f"registered_model_uri={model_uri}")
 | 관리할 버전 등록 | `mlflow.register_model()` | Registry에 모델 이름과 버전 생성 |
 | 모델 재사용 | `mlflow.pyfunc.load_model()` | 참조한 모델을 읽고 현재 Python에서 추론 |
 
-`log_model()`에 `registered_model_name`을 지정해 기록과 등록을 함께 수행하는 방식도 있다. 이번 예제는 여러 후보를 기록한 뒤 선택한 것만 등록하려고 두 단계를 분리했다. 자동 기록이 모든 후보를 곧바로 출시 가능한 모델로 만든다는 뜻은 아니다.
+`log_model()`의 `registered_model_name`으로 기록과 등록을 묶을 수도 있다. 여기서는 후보를 비교한 뒤 선택 모델만 등록하며, 자동 기록이 출시 승인을 뜻하지는 않는다.
 
 ### 이미 학습한 모델을 가져오는 경로
 
@@ -121,19 +121,19 @@ registered = mlflow.register_model(
 )
 ```
 
-폴더를 가져와 등록했다고 이전 학습의 코드, 데이터, 메트릭이 새로운 AML run으로 복원되지는 않는다. 모델을 실행할 수 있다는 확인과 학습 이력을 복원했다는 확인은 다르다.
+폴더 등록은 이전 코드, 데이터, 메트릭을 AML run으로 복원하지 않는다. 모델 실행 가능성과 학습 이력 복원은 별개다.
 
 ### Workspace 모델과 공유 Registry
 
-이 노트의 Registry는 같은 AML workspace 안의 Models를 뜻한다. 여러 workspace 사이에서 자산을 공유하는 별도 AML registry 리소스와 같지 않다.
+여기서 Registry는 workspace 내부 Models다. 여러 workspace 간 자산 공유용 AML registry와 다르다.
 
 [모델 관리 지원 표](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-manage-models-mlflow?view=azureml-api-2#review-supported-capabilities-for-managing-models)에 따르면 MLflow의 run 참조를 이용한 등록은 같은 workspace 안에서 수행하며, 조직 단위 registry 관리는 AML CLI나 SDK 등 별도 경로로 다룬다. Tracking URI와 Registry URI를 각각 임의의 다른 workspace로 바꿔도 같은 run을 등록할 수 있다고 일반화하지 않는다.
 
-MLflow stage도 배포 상태와 다르다. AML에서는 stage를 MLflow SDK로 다루는 범위와 studio 또는 배포에서 쓰는 범위가 같지 않다. 모델을 `Production` stage로 표시하는 작업이 온라인 트래픽 전환을 실행하는 것은 아니다. 이 예제는 배포나 재로딩의 대상을 설명할 때 구체적인 모델 버전을 사용한다.
+MLflow stage는 배포 상태가 아니다. `Production` 표시는 온라인 트래픽을 전환하지 않으며 AML SDK, Studio, 배포의 지원 범위도 다르다. 이 예제는 구체 버전을 사용한다.
 
 ## 확인할 결과
 
-`finalize.py`는 테스트 정확도와 `models:/wine-logistic-study/<version>` 형태의 URI를 출력한다. 고정한 예제의 로컬 확인에서는 테스트 정확도가 약 `0.9722`였다. 실제 AML 결과는 해당 실행에서 확인한다. Models에서는 이름과 버전, 원천 run을 함께 확인한다. 등록된 모델을 다시 읽은 예측은 원천 run에서 읽은 모델과 같아야 한다.
+`finalize.py`는 테스트 정확도와 `models:/wine-logistic-study/<version>`를 출력한다. 고정 로컬 예제는 약 `0.9722`였으며 AML 값은 해당 실행에서 확인한다. Models의 이름, 버전, 원천 run과 재로딩 예측의 일치도 확인한다.
 
 ## 오류 확인
 
@@ -147,7 +147,7 @@ MLflow stage도 배포 상태와 다르다. AML에서는 stage를 MLflow SDK로 
 
 ## 생각할 점
 
-등록 성공이 성능, 지연, 입력 품질, 접근 제어를 충족했다는 뜻은 아니다. 이 실습의 검증 점수를 그대로 프로덕션 승인 기준으로 쓰지는 않는다.
+등록은 성능, 지연, 입력 품질, 접근 제어의 충족을 뜻하지 않는다. 실습 점수를 프로덕션 승인 기준으로 쓰지 않는다.
 
 - 모델을 파일로 가져온 것과 원래 학습 이력을 복원한 것은 왜 다른가.
 - 구체 버전을 쓰지 않고 최신 모델을 참조하면 재실행에서 무엇이 달라질 수 있는가.

@@ -134,14 +134,29 @@ class MLPlatformPublicationTest(unittest.TestCase):
             },
         )
 
-    def test_book_sop_is_appended_to_chapters_with_legacy_redirects(self):
+    def test_chapters_explain_tools_within_the_sop_and_keep_legacy_redirects(self):
         target = f"{SERIES_URL}04-experiments-features-pipelines/"
         html = self.page_path(target).read_text(encoding="utf-8")
         document = PageLinks(html)
         self.assertIn("book-lab-sop", document.ids)
-        self.assertLess(html.index("마치며"), html.index('id=book-lab-sop'))
-        for heading in ("A-4. 버킷 만들기", "D-7. 결과 확인"):
-            self.assertIn(heading, html)
+        positions = [
+            re.search(r"<h[23]\b[^>]*>\s*" + re.escape(heading), html).start()
+            for heading in (
+                "A-4. 버킷 만들기", "B. MLflow로 학습과 모델 등록",
+                "C. Feast로 피처 정의와 조회",
+                "D. Kubeflow Pipelines로 배치 추론", "D-7. 결과 확인",
+                "E. 결과 해석과 오류 대응",
+            )
+        ]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("7. 책 코드로 따라 하는 로컬 실습 SOP", html)
+        for script in (
+            "feature_study.py", "income_study.py",
+            "pipeline_study.py", "run_pipeline_study.py",
+        ):
+            url = f"/downloads/ml-platform-engineering/kfp-cluster/{script}"
+            self.assertIn(url, html)
+            self.assertTrue(self.page_path(url).is_file())
         self.assertIn("/images/ml-platform-engineering/sop/kfp-06-run-graph.png", html)
         self.assertFalse((SOURCE / "book-ch04-05-sop.md").exists())
         for old in (
@@ -292,11 +307,9 @@ class MLPlatformPublicationTest(unittest.TestCase):
             2: [],
             3: ["study-ch03-api-ready.png"],
             4: [
-                "study-ch04-mlflow-runs.png", "study-ch04-mlflow-metrics.png",
-                "study-ch04-mlflow-model.png",
-                "study-ch04-feast-view.png",
-                "study-ch05-kfp-cluster.png",
-                "study-ch05-kfp-cluster-result.png",
+                "sop/mlflow-01-runs.png", "sop/mlflow-02-registry.png",
+                "sop/jupyter-01-notebook.png", "sop/storage-03-all-buckets.png",
+                "sop/kfp-06-run-graph.png", "sop/kfp-08-write-io.png",
             ],
         }
         for chapter, filenames in expected.items():

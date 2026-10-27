@@ -10,35 +10,35 @@ aliases:
   - "/docs/tech/2026-10-21-mlflow-to-azure-machine-learning/"
 ---
 
-책에서 읽은 MLflow를 직접 실행해 보고, 같은 코드를 Azure Machine Learning에 연결하는 순서로 나눴다. Azure Machine Learning은 아래에서 AML로 줄여 쓴다. 전체 흐름은 이 목차에 두고, 개념과 실습은 주제별 여섯 편으로 구분했다.
+책에서 읽은 MLflow를 실행한 뒤 같은 코드를 Azure Machine Learning(AML)에 연결한다. 이 목차가 전체 흐름을, 여섯 편이 개념과 실습을 다룬다.
 
-모든 편은 같은 Wine 분류 예제를 이어서 사용한다. 서로 다른 프로젝트를 매번 만드는 것이 아니라 하나의 `mlflow-aml-lab` 폴더에 파일과 실행 기록을 추가하는 구조다.
+여섯 편은 같은 Wine 분류 예제를 이어가며, 하나의 `mlflow-aml-lab` 폴더에 파일과 실행 기록을 쌓는다.
 
-이 기초 과정 이후에는 같은 실습 목록의 [ML 플랫폼 실습 00~10](/docs/tech/ops/mlops/labs/ml-platform-labs-00-foundation/)으로 이어갈 수 있다. 별도 저장소에서 영화 추천, 합성 카드 탐지와 RAG를 실행하며 Feast, Kubeflow Pipelines, BentoML과 데이터 변화 관측까지 연결한다. 기존 Wine 예제를 대체하기보다 실험 추적과 모델 등록을 익힌 뒤 확장하는 과정이다.
+기초 과정 뒤에는 [ML 플랫폼 실습 00~10](/docs/tech/ops/mlops/labs/ml-platform-labs-00-foundation/)에서 영화 추천, 카드 탐지, RAG, Feast와 Kubeflow Pipelines로 확장한다.
 
-전체 기능은 [MLflow 기능과 구성](/docs/tech/ops/mlops/labs/mlflow-capabilities/)과 [BentoML 기능과 구성](/docs/tech/ops/mlops/labs/bentoml-capabilities/)에 나눠 정리했다. 두 글은 도구의 범위를 살펴보는 참고 자료이며, 번호가 붙은 01~06편은 같은 코드를 이어서 실행하는 실습이다. 최신 기능 소개와 AML 실습의 고정 버전도 구분했다.
+[MLflow 기능과 구성](/docs/tech/ops/mlops/labs/mlflow-capabilities/)과 [BentoML 기능과 구성](/docs/tech/ops/mlops/labs/bentoml-capabilities/)은 도구 소개이고, 01~06편은 같은 코드를 잇는 실습이다. 최신 기능과 AML 실습의 고정 버전도 구분한다.
 
 ## MLflow와 BentoML의 의미
 
 ### MLflow
 
-MLflow는 실험 추적, 모델 평가, 모델 패키징과 버전 관리, 배포 도구를 제공하는 오픈소스 프로젝트다. [공식 ML 문서](https://mlflow.org/docs/latest/ml/)도 이 기능들을 하나의 모델 개발 생애주기로 다룬다.
+MLflow는 실험 추적, 모델 평가, 패키징, 버전 관리와 배포를 제공하는 오픈소스 프로젝트다. [공식 ML 문서](https://mlflow.org/docs/latest/ml/)는 이를 모델 개발 생애주기로 다룬다.
 
-이 시리즈에서는 어떤 데이터와 설정으로 학습했고 어떤 결과를 얻었는지 남기는 Tracking, 모델을 다시 읽기 위한 모델 형식, 선택한 모델을 관리하는 Registry에 초점을 둔다. 학습 자체는 scikit-learn이 실행하고 MLflow는 그 과정과 결과를 기록한다.
+이 시리즈는 데이터와 설정, 결과를 남기는 Tracking, 모델 형식, 선택 모델을 관리하는 Registry에 초점을 둔다. 학습은 scikit-learn이, 과정과 결과 기록은 MLflow가 맡는다.
 
-예를 들어 같은 데이터로 규제 설정을 세 번 바꾸면 MLflow에는 세 개의 run이 남는다. 그중 하나의 모델을 선택해 이름과 버전을 부여하면, 나중에 배포한 모델이 어느 실험에서 나왔는지 연결할 근거가 생긴다.
+같은 데이터에서 규제 설정을 세 번 바꾸면 run 세 개가 생긴다. 모델 하나에 이름과 버전을 부여하면 배포 모델의 원천 실험을 추적할 수 있다.
 
-MLflow를 실험 기록 전용 도구로만 이해하지는 않았다. 자체 모델 서빙과 배포 연동 기능도 있다. 다만 MLflow API를 쓴다는 사실만으로 학습용 컴퓨팅이나 운영 인프라까지 자동으로 준비되는 것은 아니다.
+MLflow에는 자체 모델 서빙과 배포 연동도 있지만, API 사용만으로 학습 컴퓨팅이나 운영 인프라가 준비되지는 않는다.
 
 ### BentoML
 
-BentoML은 학습한 모델을 사용하는 추론 서비스의 코드, 입출력과 실행 환경을 정의하고 배포하는 오픈소스 서빙 프레임워크다. [Service 문서](https://docs.bentoml.com/en/latest/build-with-bentoml/services.html)는 모델 로딩, 전처리와 예측 같은 처리 흐름을 API로 노출하는 단위로 Service를 설명한다.
+BentoML은 추론 서비스의 코드, 입출력과 환경을 정의하고 배포하는 오픈소스 프레임워크다. [Service 문서](https://docs.bentoml.com/en/latest/build-with-bentoml/services.html)는 모델 처리 흐름을 API로 노출하는 단위로 Service를 설명한다.
 
-모델의 `predict()`가 메모리 안의 함수 호출이라면, BentoML Service는 외부 요청을 받아 그 함수를 실행하고 응답을 돌려주는 서비스 구현에 해당한다. 입력 형식, 전처리, 여러 모델의 호출, 시간 제한과 자원 설정 같은 결정을 함께 다룰 수 있다.
+모델의 `predict()`가 메모리 안의 함수라면, Service는 외부 요청을 받아 실행하고 응답한다. 입력, 전처리, 다중 모델 호출, 시간 제한과 자원도 정의한다.
 
-Bento는 이런 서비스를 배포하기 위한 패키지다. [패키징 문서](https://docs.bentoml.com/en/latest/get-started/packaging-for-deployment.html)는 서비스 코드, Python 의존성, 모델 관련 파일과 설정을 묶는 형식으로 설명한다. 모델 참조와 패키지 구성을 바탕으로 컨테이너 이미지를 만들 수도 있다.
+Bento는 서비스 코드, Python 의존성, 모델 파일과 설정을 묶는 배포 패키지다([패키징 문서](https://docs.bentoml.com/en/latest/get-started/packaging-for-deployment.html)). 이를 바탕으로 컨테이너 이미지를 만들 수 있다.
 
-BentoML과 BentoCloud는 구분한다. BentoML로 서비스를 만들고 컨테이너 환경에서 실행할 수 있으며, BentoCloud는 그 위에서 배포와 컴퓨팅 운영을 제공하는 관리형 플랫폼이다. BentoML을 사용한다는 사실이 반드시 BentoCloud를 사용한다는 뜻은 아니다.
+BentoML은 서비스를 만들고 컨테이너에서 실행하는 프레임워크이며, BentoCloud는 배포와 컴퓨팅을 관리하는 플랫폼이다. BentoML 사용이 BentoCloud 사용을 뜻하지는 않는다.
 
 ### 두 도구를 구분할 기준
 
@@ -49,11 +49,11 @@ BentoML과 BentoCloud는 구분한다. BentoML로 서비스를 만들고 컨테�
 | 모델을 다루는 방식 | 실험 출처와 모델 버전을 연결 | 서비스에서 사용할 모델을 읽고 배포 구성에 연결 |
 | 실행 시 확인할 것 | 기록 대상, 비교 조건, 모델과 환경의 재현성 | 요청 처리, 입출력, 자원과 서비스 동작 |
 
-기능이 완전히 나뉘는 것은 아니다. MLflow에도 서빙 기능이 있고 BentoML에도 모델 저장과 관리 기능이 있다. 이 표는 기능의 존재 여부보다 각각을 어떤 책임으로 사용하는지 구분하기 위한 것이다.
+기능은 겹친다. MLflow에도 서빙이, BentoML에도 모델 저장과 관리가 있다. 표는 기능 유무보다 역할을 구분한다.
 
 ## 전체 MLOps에서의 역할
 
-MLOps는 모델을 학습하고 API로 만드는 두 작업만을 뜻하지 않는다. 업무 목적과 데이터의 정의, 학습과 검증, 출시 판단, 운영 관측과 개선을 반복 가능하게 연결하는 일이다.
+MLOps는 업무 목적, 데이터, 검증, 출시, 관측과 개선을 반복 가능하게 연결한다.
 
 ```mermaid
 flowchart TD
@@ -71,7 +71,7 @@ flowchart TD
     O -->|"후보 모델 재검증"| C
 ```
 
-위 도식은 서빙 경로를 비교한 예시이지 모든 시스템이 두 도구를 함께 사용해야 한다는 뜻은 아니다. 각 단계에서 기록할 정보와 다음 단계에 넘길 계약을 기준으로 역할을 나누었다.
+도식은 단계별 기록과 전달 계약에 따른 역할 구분이며 두 도구를 모두 써야 한다는 뜻은 아니다.
 
 | MLOps 구간 | MLflow를 연결할 부분 | BentoML을 연결할 부분 |
 | --- | --- | --- |
@@ -81,21 +81,21 @@ flowchart TD
 | 배포와 추론 | 모델의 로딩 계약과 배포 연동 제공 | API 처리와 실행 환경을 서비스 단위로 패키징 |
 | 운영과 개선 | 평가와 재학습 결과를 새 실행 및 모델 이력에 연결 | 서빙 동작과 관측 지점을 구성하고 서비스 변경 반영 |
 
-두 도구가 데이터 품질 기준, 출시 승인, 접근 제어, 장애 대응의 책임까지 대신 결정하지는 않는다. 운영 관측에서도 서비스 지연과 오류, 입력 변화, 정답 기반 모델 품질을 구분할 필요가 있다.
+두 도구는 데이터 품질 기준, 출시 승인, 접근 제어와 장애 대응을 결정하지 않는다. 관측에서는 지연, 오류, 입력 변화, 정답 기반 품질을 구분한다.
 
 ## 이 시리즈에서 사용하는 경로
 
-이 시리즈는 MLflow로 기록한 모델을 AML에 등록하고, AML의 온라인 또는 배치 추론으로 소비하는 경로를 다룬다. AML의 MLflow no-code 배포에서는 모델 계약을 읽어 기본 추론 코드와 환경을 구성하므로, 이 경로를 따라가기 위해 BentoML을 추가할 필요는 없다.
+AML에 MLflow 모델을 등록해 온라인, 배치 추론에 쓴다. MLflow no-code 배포가 모델 계약에 맞춰 코드와 환경을 구성하므로 BentoML은 필요 없다.
 
-서비스의 입출력이나 여러 모델의 호출을 별도 애플리케이션으로 구성하려는 경우에는 BentoML 같은 서빙 프레임워크를 다른 선택지로 검토할 수 있다. [BentoML의 MLflow 연동 예제](https://docs.bentoml.com/en/latest/examples/mlflow.html)는 MLflow 모델을 가져와 BentoML의 모델 저장소와 Service에서 사용하는 흐름을 보여 준다.
+별도 앱에서 입출력과 다중 모델 호출을 구성한다면 BentoML을 검토한다. [연동 예제](https://docs.bentoml.com/en/latest/examples/mlflow.html)는 MLflow 모델을 Model Store와 Service에서 사용한다.
 
-이 경우에도 MLflow의 모델 버전과 Bento의 패키지 버전은 다른 식별자다. 어떤 모델을 어떤 서비스 코드와 환경으로 배포했는지 연결해 남겨야 한다. AML에 모델이 등록되었다고 BentoML 서비스까지 자동 생성되거나, BentoML을 사용한다고 AML 인증과 모델 접근이 자동 구성되지는 않는다.
+MLflow 모델과 Bento 버전은 별개이므로 모델, 서비스 코드, 환경의 관계를 기록한다. AML 등록은 BentoML 서비스나 인증, 모델 접근을 구성하지 않는다.
 
-BentoML은 여기서 역할을 비교하는 대상이며 여섯 편의 실행 예제에 추가 설치하지 않는다. MLflow와 AML을 먼저 익히고, 별도 서빙 구현이 필요한지 판단할 때 이어서 볼 범위로 두었다.
+BentoML은 비교 대상이며 실습에 설치하지 않는다. MLflow와 AML 학습 후 별도 서빙이 필요할 때 살펴본다.
 
 ## 학습 순서
 
-[MLflow 기능과 구성](/docs/tech/ops/mlops/labs/mlflow-capabilities/)과 [BentoML 기능과 구성](/docs/tech/ops/mlops/labs/bentoml-capabilities/)에서 기능 범위를 살펴보고, 01~06편을 순서대로 이어서 볼 수 있다.
+기능 소개 두 편을 참고하고 01~06편을 순서대로 실행한다.
 
 | 편 | 글 |
 | --- | --- |
@@ -117,13 +117,13 @@ BentoML은 여기서 역할을 비교하는 대상이며 여섯 편의 실행 �
 
 ## 전체 흐름: 로컬 학습 결과를 AML 모델로 등록하기
 
-이 예제에서 MLflow는 로컬 Python 코드가 호출하는 라이브러리다. 별도의 로컬 MLflow 서버에 모델을 보낸 뒤 그 서버가 AML로 옮기는 구조가 아니다. `azureml-mlflow` 플러그인을 설치하고 기록 대상을 AML workspace로 지정하면, 같은 Python 코드의 MLflow 호출이 AML에 실행 정보와 모델을 남긴다.
+MLflow는 로컬 Python 코드가 호출하는 라이브러리다. 로컬 MLflow 서버를 거치지 않고 `azureml-mlflow`를 설치해 AML workspace를 지정하면 같은 호출로 실행 정보와 모델을 기록한다.
 
-학습, 실행 기록, 모델 등록을 나누어 보니 흐름을 이해하기 쉬웠다. `model.fit()`은 모델을 학습하고, `log_model()`은 학습한 모델을 특정 run의 결과물로 기록하며, `register_model()`은 그 결과물을 모델 이름 아래의 버전으로 등록한다. 모델을 학습했다는 사실만으로 뒤의 두 작업까지 수행되지는 않는다.
+`model.fit()`은 학습, `log_model()`은 모델을 run에 기록, `register_model()`은 모델 이름 아래 버전 등록을 수행한다. 학습만으로 기록과 등록이 자동 수행되지는 않는다.
 
 ### 로컬 Python과 AML 사이의 호출 순서
 
-아래는 04편의 AML 연결과 05편의 모델 등록을 기준으로 그린 흐름이다. 학습과 비교 코드는 로컬에서 실행하고, 기록과 등록은 같은 AML workspace를 대상으로 한다. SDK와 플러그인도 로컬 Python 프로세스 안에서 동작하는 라이브러리이며, 그림에서 나눈 칸은 별도 서버를 뜻하지 않는다.
+04편은 AML 연결, 05편은 등록 흐름이다. 학습, 비교는 로컬에서 실행하고 기록, 등록은 같은 workspace에 보낸다. SDK와 플러그인은 로컬 라이브러리이지 별도 서버가 아니다.
 
 ```mermaid
 sequenceDiagram
@@ -154,7 +154,7 @@ sequenceDiagram
     M-->>P: models:/wine-logistic-study/version
 ```
 
-AML이 실행 메타데이터를 관리하고, 모델 파일과 보고서는 workspace에 연결된 아티팩트 저장소에 보관한다. `log_model()` 단계에서는 모델 파일도 원격에 기록한다. 모델 이름과 버전을 부여하는 등록 요청은 이 예제의 `register_model()` 단계에서 별도로 보낸다.
+AML은 실행 메타데이터를, workspace 아티팩트 저장소는 모델과 보고서를 관리한다. `log_model()`은 모델 파일을 기록하고 `register_model()`은 이름과 버전을 별도 등록한다.
 
 ### 각 호출이 만드는 결과
 
@@ -178,7 +178,7 @@ registered = mlflow.register_model(
 
 `runs:/<run_id>/model`은 로컬 폴더 경로가 아니다. 현재 Tracking URI가 가리키는 저장소에서 특정 run에 기록한 `model`을 참조한다. Registry URI도 같은 AML workspace로 맞췄으므로 그 모델이 같은 workspace의 모델 버전으로 등록된다.
 
-AML studio에서는 실행과 지표를 Jobs의 experiment에서, 등록한 모델 이름과 버전을 Models에서 확인한다. 로컬에서 학습한 실행도 Jobs에 보일 수 있다. 화면에 Job으로 표시된다는 사실과 AML 클러스터가 학습을 수행했다는 사실은 구분한다.
+AML studio의 Jobs에서 실행, 지표를, Models에서 등록 이름, 버전을 확인한다. 로컬 학습도 Jobs에 보일 수 있지만 AML 클러스터가 실행한 것은 아니다.
 
 ## 라이브러리와 서비스의 역할
 
@@ -192,7 +192,7 @@ AML studio에서는 실행과 지표를 Jobs의 experiment에서, 등록한 모�
 | AML workspace | 실험과 실행, 모델 자산을 관리하는 서비스 범위 | 기록과 등록의 대상 |
 | 아티팩트 저장소 | 모델과 보고서 등의 실제 파일 보관 | workspace에 연결된 저장소 |
 
-AML SDK v2의 `MLClient`를 만든다고 학습 메트릭이 자동으로 기록되는 것은 아니다. 리소스와 Job 관리는 CLI나 SDK v2로, 학습 결과의 구조화된 기록은 MLflow로 나누었다. 이 시리즈는 CLI를 사용하므로 로컬에 `azure-ai-ml`을 별도로 설치하지 않는다.
+`MLClient`는 메트릭을 자동 기록하지 않는다. CLI, SDK v2는 리소스와 Job, MLflow는 학습 결과를 관리한다. CLI 사용으로 로컬 `azure-ai-ml` 설치는 불필요하다.
 
 ## 로컬 연습과 AML 연결의 구분
 
@@ -215,13 +215,13 @@ Tracking URI를 바꾸는 것만으로 이전 로컬 run이 AML로 복사되지�
 
 ## 실행 범위와 비용
 
-로컬 학습과 비교, 모델 재로딩 및 등록, 자동 기록, 요청 파일 생성은 로컬에서 확인한 범위다. 실제 AML workspace 연결, 원격 학습과 배포는 사용하는 구독의 권한, 네트워크와 컴퓨팅 조건에서 별도로 확인한다.
+로컬 확인 범위는 학습, 비교, 모델 재로딩, 등록, 자동 기록, 요청 파일 생성이다. AML 연결, 원격 학습과 배포는 구독 권한, 네트워크, 컴퓨팅에 달려 있다.
 
-04편부터는 AML 리소스와 비용이 관계된다. 06편은 등록 모델을 온라인 또는 배치 추론에 연결하는 후속 학습이다. 학습 코드를 실행했다고 endpoint가 자동 생성되지는 않는다. 공유 리소스를 실습 종료를 이유로 삭제하지 않는다.
+04편부터 AML 리소스와 비용이 발생한다. 06편은 등록 모델의 온라인, 배치 추론을 다루며 학습 코드만으로 endpoint가 생성되지는 않는다. 공유 리소스는 임의로 삭제하지 않는다.
 
 ## 다른 Azure 실행 환경으로 확장
 
-로컬 Python에서 기록 대상과 모델 등록 대상을 구분한 뒤에는 실행 환경을 Databricks나 Synapse로 옮겨 볼 수 있다. 학습이 실행되는 제품과 모델을 관리하거나 배포하는 제품이 반드시 같아야 하는 것은 아니다.
+기록과 등록 대상을 구분한 뒤 실행 환경을 Databricks나 Synapse로 옮길 수 있다. 학습 환경과 모델 관리, 배포 제품은 달라도 된다.
 
 | 확장 경로 | 문서에서 구분하는 것 | 앞의 실습과 다른 준비 |
 | --- | --- | --- |
@@ -229,13 +229,13 @@ Tracking URI를 바꾸는 것만으로 이전 로컬 run이 AML로 복사되지�
 | Azure Synapse Analytics | Spark 환경에서 AML로 기록한 뒤 AML 배포나 Spark 추론으로 소비하는 경로 | Spark pool의 패키지, 추적 URI, 인증과 데이터 접근 |
 | 기본 flavor가 없는 모델 | 원래 모델의 로딩과 `predict()`를 감싸는 PyFunc 패키지 | 전처리와 후처리, 추가 파일과 의존성, 입출력 동등성 |
 
-Databricks의 dual tracking이 모델 Registry에도 자동으로 이중 등록한다는 뜻은 아니다. 기록 대상과 등록 대상을 별도로 확인해야 한다. 해당 문서는 Private Link를 사용하는 AML workspace에 대한 dual tracking 제약도 설명하므로, 같은 설정을 모든 네트워크에 적용하지 않는다.
+Databricks dual tracking은 Registry의 이중 등록을 뜻하지 않으므로 기록, 등록 대상을 따로 확인한다. 문서는 Private Link AML workspace의 제약도 설명하므로 네트워크별 설정을 검토한다.
 
-Synapse에서는 패키지를 로컬 PC에 설치한 것만으로 Spark 세션에서 사용할 수 있는 것은 아니다. 관리 대상인 pool 또는 실행 환경의 의존성과 인증을 확인해야 한다. Spark UDF로 모델을 실행하는 것과 AML endpoint에 모델을 배포하는 것도 별도 경로다.
+Synapse Spark 세션은 로컬 패키지 설치와 별개다. Pool의 의존성과 인증을 확인하고 Spark UDF 실행과 AML endpoint 배포를 구분한다.
 
 ## 참고 자료와 학습 후 확인할 결과
 
-아래는 세 출발 문서와 직접 연결된 주요 문서를 읽으며 정리한 범위다. AML의 모든 기능을 같은 실습에 넣지는 않고, 기본 경로와 후속 확장 경로를 나누었다. 확인 기준은 2026-10-21이다.
+공식 문서 확인 기준일은 2026-10-21이다.
 
 ### 도구의 의미와 역할 비교
 
@@ -282,4 +282,4 @@ Synapse에서는 패키지를 로컬 PC에 설치한 것만으로 Spark 세션�
 | [Workspace 권한](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-assign-roles?view=azureml-api-2) | 실험과 Job, 모델 관리, compute와 배포 권한의 구분 |
 | [Command Job YAML 명세](https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-job-command?view=azureml-api-2) | 코드 업로드 범위, inputs, 환경, compute와 Job 이름 |
 
-MLflow API, AML 서비스의 지원 범위, 플러그인의 의존성은 따로 바뀐다. 환경을 다시 만들 때는 이 노트의 고정 버전과 공식 문서의 버전 조건을 함께 확인한다.
+API, AML 지원과 플러그인 의존성은 바뀔 수 있으므로 고정 버전과 문서 조건을 확인한다.

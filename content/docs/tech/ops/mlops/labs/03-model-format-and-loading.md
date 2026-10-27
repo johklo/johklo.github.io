@@ -1,6 +1,6 @@
 ---
 title: "03. 모델 형식과 재사용"
-description: "MLmodel, flavor, signature와 환경을 구분하고 저장 모델의 예측과 입력 계약을 확인하기"
+description: "MLmodel, flavor, signature와 환경을 구분하고 저장 모델의 예측과 입력 계약을 확인한다."
 date: 2026-10-21T09:55:00+09:00
 lastmod: 2026-10-21T14:11:00+09:00
 weight: 30
@@ -9,7 +9,7 @@ aliases:
   - "/docs/tech/mlflow-azure-machine-learning/03-model-format-and-loading/"
 ---
 
-모델 파일을 보관하는 것만으로는 다른 환경에서 같은 방식으로 읽고 예측하기 어렵다. 저장된 파일과 로딩 방법, 입력 계약, 의존성을 하나의 모델 패키지로 묶는 의미를 정리했다.
+모델 파일만으로는 다른 환경에서 같은 방식으로 예측하기 어렵다. 파일, 로딩 방법, 입력 계약, 의존성을 모델 패키지로 묶는다.
 
 ## 준비 조건
 
@@ -17,7 +17,7 @@ aliases:
 
 ## MLflow 모델 폴더의 구조
 
-모델의 기준은 폴더 이름이 아니라 안에 있는 `MLmodel` 파일이다. 이 실습에서는 `model`이라는 경로를 선택했지만, 이름을 `classifier`로 바꾸어도 같은 형식을 쓸 수 있다.
+모델 형식은 폴더명이 아니라 내부 `MLmodel`이 정의한다. `model` 대신 `classifier` 경로를 써도 형식은 같다.
 
 ```text
 model
@@ -30,7 +30,7 @@ model
   serving_input_example.json
 ```
 
-위 목록은 이번 scikit-learn 예제의 구조다. 다른 프레임워크는 가중치 파일이나 추가 코드의 형식이 달라질 수 있다.
+목록은 scikit-learn 예제 기준이며 프레임워크마다 가중치와 코드 형식이 다르다.
 
 | 구성 | 설명하는 것 | 확인할 이유 |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ model
 | 환경 파일 | Python과 패키지 의존성 | 학습 시점과 추론 시점의 환경 비교 |
 | 입력 예시 파일 | 모델에 전달할 데이터의 예 | 열 이름, 형태, 요청 예시 확인 |
 
-모델 파일 하나를 임의의 폴더에 넣고 이름만 `mlflow_model`로 지정해도 이 구조가 생기는 것은 아니다. MLflow의 저장 또는 로깅 API로 모델의 로딩 방식과 의존성까지 표현해야 한다.
+파일명을 `mlflow_model`로 바꾸는 것만으로 구조가 생기지 않는다. MLflow 저장, 로깅 API로 로딩 방식과 의존성을 함께 기록한다.
 
 ## Flavor와 signature
 
@@ -50,13 +50,13 @@ Flavor는 모델을 저장하고 읽는 방법이다. 이번 모델의 `MLmodel`
 | `mlflow.sklearn.load_model()` | 원래의 scikit-learn Pipeline | `predict()`와 `predict_proba()` 등 원래 인터페이스 사용 |
 | `mlflow.pyfunc.load_model()` | 공통 `predict()` 인터페이스의 모델 래퍼 | 프레임워크에 덜 의존하는 추론 호출 |
 
-이 예제의 PyFunc `predict()`는 클래스 번호를 반환한다. PyFunc로 읽었다고 예측 확률로 바뀌지는 않는다. 확률이나 후처리 결과를 반환하려면 로깅 단계에서 예측 동작을 바꾸거나 별도 래퍼로 패키징해야 한다.
+이 모델의 PyFunc `predict()`는 클래스 번호를 반환하며 확률로 바꾸지 않는다. 확률이나 후처리가 필요하면 로깅 동작을 바꾸거나 별도 래퍼로 패키징한다.
 
-Signature는 그 인터페이스가 기대하는 입력과 출력을 설명한다. Wine 예제는 13개 수치 열을 가진 DataFrame을 받는 column 기반 signature다. 이미지나 다차원 배열은 tensor 기반 signature로 차원과 타입을 표현할 수 있다. 타입 검사를 통과했다는 사실과 값이 업무상 올바르다는 사실은 다르다.
+Signature는 입력, 출력을 설명한다. Wine 모델은 수치 열 13개의 DataFrame을 받는 column 기반 형식이며, 이미지와 다차원 배열은 tensor 기반 signature로 차원과 타입을 표현한다. 타입 검증은 업무상 유효성을 보장하지 않는다.
 
 ## 모델 환경과 AML 실행 환경
 
-MLflow 모델의 `conda.yaml`은 모델을 읽고 예측하는 데 필요한 의존성이다. 04편에서 만드는 실습 루트의 `conda.yml`은 AML 학습 Job의 실행 환경이다. 이름이 비슷해도 적용 대상이 다르다.
+모델의 `conda.yaml`은 로딩, 추론 의존성이고, 04편 루트의 `conda.yml`은 AML 학습 Job 환경이다.
 
 | 환경 | 적용 대상 | 확인할 내용 |
 | --- | --- | --- |
@@ -65,7 +65,7 @@ MLflow 모델의 `conda.yaml`은 모델을 읽고 예측하는 데 필요한 의
 | AML Job 환경 | 원격 학습 컨테이너 | 학습 코드와 패키지, 이미지가 맞는지 |
 | AML 배포 환경 | 온라인 또는 배치 추론 런타임 | 추론 서버와 모델 의존성, 네트워크 조건이 맞는지 |
 
-환경 파일이 있다고 로컬의 `load_model()`이 의존성을 자동 설치하는 것은 아니다. AML의 no-code 배포가 모델 환경으로 추론 환경을 구성하는 것과도 구분한다.
+환경 파일은 로컬 `load_model()`에서 자동 설치되지 않는다. AML no-code 배포의 환경 구성과 구분한다.
 
 ## 실습: 저장 모델과 입력 계약 확인
 
@@ -123,11 +123,11 @@ else:
 
 ## 확인할 결과
 
-원래 모델의 타입은 `Pipeline`이며, native와 PyFunc 경로의 예측이 같아야 한다. 입력 signature에는 Wine 데이터의 13개 열이 나타나고 예측 행 수는 2다. 필수 열을 뺀 요청은 `missing inputs` 오류로 거절되어야 한다. 예상한 입력 오류와 그 밖의 실행 오류를 구분해 처리했다.
+원래 타입은 `Pipeline`이며 native와 PyFunc 예측이 같아야 한다. Signature에는 13개 열이 표시되고 두 행을 예측한다. 필수 열 누락은 `missing inputs`로 거절하며 다른 오류와 구분한다.
 
 ## 사용자 정의 모델로 확장
 
-기본 flavor가 없거나 예측 반환값을 바꾸려는 경우는 자동 기록만으로 해결되지 않을 수 있다. [기존 모델의 MLflow 변환](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-convert-custom-model-to-mlflow?view=azureml-api-2)과 [사용자 정의 모델 로깅](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-log-mlflow-models?view=azureml-api-2#log-custom-models)은 `PythonModel`의 로딩과 `predict()` 구현, 모델 파일, signature, 환경을 함께 패키징하는 방식으로 연결해 읽었다. 변환 전후의 같은 입력에서 예측이 유지되는지 별도 확인할 대상이다.
+기본 flavor가 없거나 반환값을 바꾸려면 [기존 모델 변환](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-convert-custom-model-to-mlflow?view=azureml-api-2)과 [사용자 정의 모델 로깅](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-log-mlflow-models?view=azureml-api-2#log-custom-models)에서 `PythonModel`, `predict()`, 파일, signature, 환경을 함께 패키징하는 방법을 참고한다. 변환 전후의 예측 동등성도 확인한다.
 
 ## 오류 확인
 
@@ -141,7 +141,7 @@ else:
 
 ## 생각할 점
 
-저장한 모델을 읽는 것, 같은 코드를 실행하는 것, 같은 수치를 얻는 것은 다른 확인이다. 데이터와 분할 조건에 더해 Python, 의존성, 실행 환경까지 기록하는 이유로 남았다.
+모델 로딩, 코드 재실행, 동일 수치 재현은 서로 다른 검증이다. 데이터, 분할뿐 아니라 Python, 의존성, 실행 환경도 기록한다.
 
 - 모델의 타입을 그대로 읽는 것과 공통 추론 인터페이스로 읽는 것은 언제 각각 필요한가.
 - 입력 타입이 맞아도 의미가 틀린 데이터를 signature만으로 걸러낼 수 있는가.

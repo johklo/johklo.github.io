@@ -9,13 +9,13 @@ aliases:
   - "/docs/tech/llmops/observatory/"
 ---
 
-기존 LLMOps 글에는 Observatory를 만들면서 관측과 평가의 차이를 정리한 기록이 있었습니다. 아래는 **2026년 4월 당시 글의 분석**을 보존한 것입니다. 현재 제품 구현 상태나 당시 계획의 완료 여부를 검증한 자료는 아닙니다.
+기존 LLMOps 글에는 Observatory를 만들면서 관측과 평가의 차이를 정리한 기록이 있었다. 아래는 **2026년 4월 당시 글의 분석**을 보존한 것이다. 현재 제품 구현 상태나 당시 계획의 완료 여부를 검증한 자료는 아니다.
 
 ## 당시의 구조
 
-목표는 프로덕션 LLM 앱을 디버깅, 평가, 개선하는 운영 가시성이었습니다. Azure Application Insights의 OpenTelemetry 데이터를 KQL로 읽고, trace, waterfall, 도구 호출, 비용을 보는 방향으로 정리했습니다.
+목표는 프로덕션 LLM 앱을 디버깅, 평가, 개선하는 운영 가시성이었다. Azure Application Insights의 OpenTelemetry 데이터를 KQL로 읽고, trace, waterfall, 도구 호출, 비용을 보는 방향으로 정리했다.
 
-관측이 있다는 사실과 출시 결정을 신뢰할 수 있다는 사실은 달랐습니다. 당시 기록에서는 단어 겹침 기반 품질 휴리스틱을 의미적 근거성 판정으로 사용하기 어렵다는 점, 사용자 피드백, 검토 큐, 평가 데이터셋으로 이어지는 경로가 부족하다는 점을 남겼습니다.
+관측이 있다는 사실과 출시 결정을 신뢰할 수 있다는 사실은 달랐다. 당시 기록에서는 단어 겹침 기반 품질 휴리스틱을 의미적 근거성 판정으로 사용하기 어렵다는 점, 사용자 피드백, 검토 큐, 평가 데이터셋으로 이어지는 경로가 부족하다는 점을 남겼다.
 
 | 당시 분석한 빈틈 | Bookway에서 필요한 연결 |
 | --- | --- |
@@ -36,8 +36,8 @@ OTel / 실행 trace
   → 승인, 출시, 관측
 ```
 
-관측 데이터를 Azure 안에 둔다고 앱 전체 데이터가 자동으로 그 경계 안에 머무는 것은 아닙니다. 모델 endpoint, 평가자, 로그 exporter, 백업까지 확인해야 합니다. 반대로 외부 SaaS를 쓰지 않는다는 이유만으로 보존, 접근 정책을 생략할 수는 없습니다.
+관측 데이터를 Azure 안에 둔다고 앱 전체 데이터가 자동으로 그 경계 안에 머무는 것은 아니다. 모델 endpoint, 평가자, 로그 exporter, 백업까지 확인해야 한다. 반대로 외부 SaaS를 쓰지 않는다는 이유만으로 보존, 접근 정책을 생략할 수는 없다.
 
-운영 성숙도는 특정 도구의 설치 수나 임의의 레벨보다, 이 루프가 실제 변경과 실패에서 유지되는지로 판단하는 편이 구체적입니다. Bookway 가이드에서는 [OTel](/docs/tech/ops/llmops/opentelemetry/), [trace, 피드백](/docs/tech/ops/llmops/langfuse/), [평가](/docs/tech/ops/llmops/promptfoo/), [출시 계약](/docs/tech/ops/llmops/release/)을 이 책임으로 나눴습니다.
+운영 성숙도는 특정 도구의 설치 수나 임의의 레벨보다, 이 루프가 실제 변경과 실패에서 유지되는지로 판단하는 편이 구체적이다. Bookway 가이드에서는 [OTel](/docs/tech/ops/llmops/opentelemetry/), [trace, 피드백](/docs/tech/ops/llmops/langfuse/), [평가](/docs/tech/ops/llmops/promptfoo/), [출시 계약](/docs/tech/ops/llmops/release/)을 이 책임으로 나눴다.
 
 [기존 주소를 유지한 LLMOps 상위 글](/docs/tech/ops/llmops/) / [MLOps 관측 경로](/docs/tech/ops/mlops/monitoring/)

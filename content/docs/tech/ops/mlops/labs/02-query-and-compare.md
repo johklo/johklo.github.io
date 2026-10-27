@@ -1,6 +1,6 @@
 ---
 title: "02. 실행 비교와 메트릭 및 아티팩트 조회"
-description: "실행의 비교 조건을 고정하고 메트릭 이력과 모델 파일을 코드로 다시 조회하기"
+description: "실행 비교 기준을 고정하고 메트릭 이력과 모델 파일을 조회한다."
 date: 2026-10-21T09:55:00+09:00
 lastmod: 2026-10-21T14:11:00+09:00
 weight: 20
@@ -9,7 +9,7 @@ aliases:
   - "/docs/tech/mlflow-azure-machine-learning/02-query-and-compare/"
 ---
 
-좋은 실행을 화면에서 찾는 것과 같은 기준으로 다시 선택할 수 있는 것은 다르다. 01편의 기록을 코드로 비교하고, 선택한 run의 지표와 파일을 다시 읽는 과정으로 나눴다.
+화면에서 실행을 고르는 것과 같은 기준으로 재선택하는 것은 다르다. 01편의 기록을 코드로 비교하고 선택한 run의 지표와 파일을 읽는다.
 
 ## 준비 조건
 
@@ -23,7 +23,7 @@ $env:MLFLOW_EXPERIMENT_NAME = "mlflow-wine-study"
 
 ## 실행 비교와 선택 기록
 
-UI에서 좋은 실행을 찾는 것과 같은 기준으로 다시 선택할 수 있는 것은 다르다. 비교 기준을 코드로 남겨 두었다.
+UI 선택을 재현할 수 있도록 비교 기준을 코드로 남긴다.
 
 ### 비교 대상과 정렬 기준
 
@@ -80,7 +80,7 @@ print("Selection written to selected-run.json")
 .\.venv\Scripts\python.exe .\compare.py
 ```
 
-고정한 환경에서 로컬로 실행했을 때의 결과는 다음과 같았다. 표의 수치는 이 작은 데이터셋의 한 번의 분할에서 얻은 값이지, 다른 데이터의 성능 목표는 아니다.
+고정 환경의 로컬 실행 결과다. 수치는 이 데이터의 한 번의 분할 결과이며 다른 데이터의 성능 목표가 아니다.
 
 | C | 검증 정확도 | 검증 log loss |
 | --- | --- | --- |
@@ -88,13 +88,13 @@ print("Selection written to selected-run.json")
 | 0.1 | 0.972222 | 0.182284 |
 | 1.0 | 1.000000 | 0.081011 |
 
-이 결과에서는 `C=1.0`인 실행을 선택한다. `C=0.01`과 `0.1`은 정확도가 같지만 log loss에는 차이가 있다. 같은 정확도만으로 예측 확률의 품질까지 같다고 볼 수는 없다.
+`C=1.0`을 선택한다. `C=0.01`과 `0.1`의 정확도는 같지만 log loss는 다르므로 정확도만으로 확률 품질을 판단할 수 없다.
 
-이 조회는 해당 experiment의 조건에 맞는 최대 1,000개 실행을 비교한다. 학습 코드나 평가 방식까지 바뀐다면 같은 그룹에 섞지 않고 experiment나 tag로 비교 범위를 나눌 필요가 있다.
+조회는 조건에 맞는 최대 1,000개 run을 비교한다. 학습 코드나 평가 방식이 달라지면 experiment나 tag로 범위를 분리한다.
 
-정렬은 조회 후 DataFrame에서 처리했다. [AML의 실행 조회 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-track-experiments-mlflow?view=azureml-api-2#order-runs)는 서버의 `order_by`에서 `metrics.*` 정렬을 지원하지 않는다고 명시한다. 로컬에서 동작하는 조회 문법이 원격 서비스에서도 모두 같다고 가정하지 않았다.
+조회 결과를 DataFrame에서 정렬한다. [AML 실행 조회 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-track-experiments-mlflow?view=azureml-api-2#order-runs)에 따르면 서버 `order_by`는 `metrics.*` 정렬을 지원하지 않는다. 로컬 문법이 원격에서도 같다고 가정하지 않는다.
 
-`selected-run.json`에는 run ID와 기록 위치를 함께 남긴다. 서로 다른 저장소에 있는 같은 이름의 experiment를 혼동하지 않기 위해서다.
+`selected-run.json`에 run ID와 Tracking URI를 함께 저장해 다른 저장소의 동명 experiment와 구분한다.
 
 ### 마지막 메트릭과 전체 기록
 
@@ -141,7 +141,7 @@ print("downloaded model folder:", model_path)
 .\.venv\Scripts\python.exe .\inspect_run.py
 ```
 
-이번 학습은 검증 정확도를 한 번 기록하므로 그 메트릭의 이력도 한 점이다. epoch별 기록을 추가하면 같은 조회 API로 여러 step을 볼 수 있다. 다운로드한 폴더의 `MLmodel`과 환경 파일을 읽으면 03편의 모델 계약을 실제 결과물에서 확인할 수 있다.
+검증 정확도는 한 번 기록해 이력도 한 점이다. epoch별 기록을 추가하면 같은 API로 여러 step을 조회할 수 있다. 다운로드 폴더의 `MLmodel`과 환경 파일은 03편의 모델 계약과 연결된다.
 
 ### 조회와 기록을 확장할 때의 조건
 
@@ -153,11 +153,11 @@ print("downloaded model folder:", model_path)
 | 많은 메트릭 기록 | 개별 동기 호출의 반복과 배치 기록 또는 비동기 기록을 비교 |
 | 비동기 기록 직후 조회 | 호출 반환과 저장 완료가 같지 않으므로 필요 시 반환된 작업의 `wait()` 사용 |
 
-이 실습은 한 번에 몇 개의 메트릭만 남기므로 동기 기록을 유지했다. 비동기 기록이나 nested run은 기본 흐름을 이해한 뒤 확장할 기능이지, AML 연결의 필수 조건은 아니다.
+소수 메트릭만 기록하므로 동기 방식을 쓴다. 비동기 기록과 nested run은 선택 확장이지 AML 연결의 필수 조건이 아니다.
 
 ## 확인할 결과
 
-`compare.py`는 비교 표와 `selected-run.json`을 남긴다. 고정한 예제에서는 `C=1.0`을 선택한다. `inspect_run.py`는 같은 run의 설정, 마지막 메트릭, 메트릭 이력과 아티팩트 경로를 출력한다. 다운로드한 모델 폴더는 다음 편의 모델 구조와 연결해 확인할 자료다.
+`compare.py`는 비교 표와 `selected-run.json`을 만들고 예제에서는 `C=1.0`을 선택한다. `inspect_run.py`는 run 설정, 마지막 메트릭, 이력, 아티팩트 경로를 출력하며 모델 폴더는 다음 편에서 확인한다.
 
 ## 오류 확인
 
@@ -171,7 +171,7 @@ print("downloaded model folder:", model_path)
 
 ## 생각할 점
 
-데이터 지문은 이번 표의 내용을 식별하는 정보이지 데이터 이용 권한이나 수집 시점을 설명하는 정보는 아니다. 실제 데이터라면 저장 위치, 스냅샷, 사용 범위, 라벨 정의도 필요하다.
+데이터 지문은 표의 데이터 식별자일 뿐 이용 권한이나 수집 시점을 설명하지 않는다. 실제 데이터에는 저장 위치, 스냅샷, 사용 범위, 라벨 정의도 기록한다.
 
 - 점수 차이를 모델 설정의 차이로 설명하려면 어떤 조건이 같아야 하는가.
 - 마지막 메트릭 값과 전체 이력은 각각 어떤 질문에 답하는가.

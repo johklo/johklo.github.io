@@ -1,6 +1,6 @@
 ---
 title: "04. AML 연결과 원격 학습 Job"
-description: "로컬 코드를 AML에 연결해 기록한 뒤 같은 학습을 원격 command Job으로 실행하기"
+description: "로컬 코드를 AML에 연결해 기록하고 같은 학습을 원격 command Job으로 실행한다."
 date: 2026-10-21T09:55:00+09:00
 lastmod: 2026-10-21T14:11:00+09:00
 weight: 40
@@ -9,7 +9,7 @@ aliases:
   - "/docs/tech/mlflow-azure-machine-learning/04-azureml-tracking-and-jobs/"
 ---
 
-AML 연결을 기록 대상의 변경과 학습 실행 위치의 변경으로 나눴다. 로컬에서 학습하고 AML에 기록하는 단계부터 확인한 뒤, 같은 코드를 원격 Job으로 제출한다.
+AML 전환을 기록 대상 변경과 실행 위치 변경으로 나눈다. 먼저 로컬 학습 결과를 AML에 기록하고, 이어 같은 코드를 원격 Job으로 제출한다.
 
 ## 준비 조건
 
@@ -17,7 +17,7 @@ AML 연결을 기록 대상의 변경과 학습 실행 위치의 변경으로 �
 
 ## 로컬 학습의 기록 위치를 AML로 변경
 
-여기부터는 AML workspace가 필요하다. workspace가 없다면 [초기 리소스 만들기](https://learn.microsoft.com/en-us/azure/machine-learning/quickstart-create-resources?view=azureml-api-2)를 별도의 준비 작업으로 둔다. workspace의 생성과 사용에는 연결된 스토리지 등의 비용도 관계된다.
+AML workspace가 필요하다. 없으면 [초기 리소스 만들기](https://learn.microsoft.com/en-us/azure/machine-learning/quickstart-create-resources?view=azureml-api-2)를 참고한다. 생성과 사용에는 연결 스토리지 비용도 든다.
 
 ### 인증과 권한
 
@@ -30,9 +30,9 @@ AML 연결에 필요한 플러그인은 원격 기록 단계에서 설치한다.
 azureml-mlflow==1.62.0.post6
 ```
 
-로컬 실행은 Azure CLI에 로그인한 사용자로 인증한다. 이 편에서는 workspace의 실험과 Job을 다룰 권한이 필요하다. 05편에서 모델 등록까지 진행하려면 모델 생성과 갱신 권한도 별도로 확인한다. workspace 범위의 `AzureML Data Scientist` 역할이 학습용 권한의 한 예다. 실제 부여는 조직의 권한 관리에 맞춘다.
+로컬에서는 Azure CLI 사용자로 인증하며 workspace 실험과 Job 권한이 필요하다. 05편 등록에는 모델 생성, 갱신 권한도 필요하다. `AzureML Data Scientist`는 학습 권한의 한 예이며 실제 역할은 조직 정책에 맞춘다.
 
-[Workspace 권한 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-assign-roles?view=azureml-api-2#mlflow-operations)는 실험과 Job, 모델 조회, 모델 생성 및 갱신의 권한을 나누어 설명한다. 기록 권한만 있어도 모델 등록까지 가능한 것으로 보지 않는다. 또한 `AzureML Data Scientist`는 compute 생성과 삭제를 포함하지 않으므로, 새 클러스터가 필요하면 그 준비 권한도 별도로 확인한다.
+[Workspace 권한 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-assign-roles?view=azureml-api-2#mlflow-operations)에서 실험, Job, 모델 조회, 생성, 갱신 권한을 구분한다. 기록 권한만으로 등록할 수 없고, `AzureML Data Scientist`에는 compute 생성, 삭제가 포함되지 않는다.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r .\requirements-azure.txt
@@ -47,7 +47,7 @@ $workspace = "<workspace-name>"
 az account set --subscription $subscription
 ```
 
-이 로그인은 직접 실행하는 학습용 절차다. 무인 CI에 사용자의 브라우저 인증을 가져가는 방식은 아니다. 자동화할 때의 인증과 권한은 별도로 설계하고, 비밀 정보를 학습 코드나 Job YAML에 넣지 않는다.
+CLI 로그인은 대화형 학습용이다. 무인 CI에서는 별도 인증, 권한을 설계하고 비밀 정보를 코드나 Job YAML에 넣지 않는다.
 
 ### Tracking URI 조회
 
@@ -62,11 +62,11 @@ $env:MLFLOW_REGISTRY_URI = $env:MLFLOW_TRACKING_URI
 $env:MLFLOW_EXPERIMENT_NAME = "mlflow-wine-study"
 ```
 
-Tracking URI는 CLI가 반환한 값을 그대로 쓴다. 리전 이름 등으로 직접 조립하지 않는다. Private Link를 사용하는 workspace에서는 클라이언트의 네트워크 접근 경로와 이름 확인도 필요하다.
+CLI가 반환한 Tracking URI를 그대로 사용하고 리전 이름으로 조립하지 않는다. Private Link workspace는 네트워크 경로와 DNS도 확인한다.
 
-Tracking URI를 설정한 것만으로 인증과 통신이 확인되지는 않는다. 실제 experiment 조회나 run 시작처럼 서비스에 접근하는 작업에서 연결이 확인된다.
+URI 설정만으로 인증, 통신이 검증되지는 않는다. experiment 조회나 run 시작으로 연결을 확인한다.
 
-[연결 설정 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-use-mlflow-configure-tracking?view=azureml-api-2)의 인증은 실행 환경에 따라 Azure CLI 로그인, 환경 자격 증명, 관리 ID 등 사용 가능한 방식을 이용한다. 이 로컬 실습은 CLI 로그인을 사용한다. URI에 사용자 비밀이나 토큰을 붙여 인증하는 구조로 이해하지 않는다.
+[연결 설정 문서](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-use-mlflow-configure-tracking?view=azureml-api-2)는 Azure CLI, 환경 자격 증명, 관리 ID 등 실행 환경별 인증을 안내한다. 이 실습은 CLI를 쓰며 URI에 비밀이나 토큰을 붙이지 않는다.
 
 ### 같은 코드로 재실행
 
@@ -79,19 +79,19 @@ foreach ($c in @("0.01", "0.1", "1.0")) {
 .\.venv\Scripts\python.exe .\inspect_run.py
 ```
 
-학습은 계속 로컬 PC에서 실행된다. AML 학습 클러스터를 사용한 것은 아니다. Azure Machine Learning studio의 Jobs에서 experiment를 열어 파라미터, 메트릭, 파일과 모델을 확인한다.
+이 단계의 학습은 로컬에서 실행하며 AML 클러스터는 쓰지 않는다. Studio Jobs에서 파라미터, 메트릭, 파일, 모델을 확인한다.
 
-AML workspace는 MLflow 호환 API를 제공한다. workspace 안에 MLflow 서버용 VM을 직접 만드는 절차가 아니다.
+AML workspace는 MLflow 호환 API를 제공하므로 별도 MLflow 서버 VM은 필요하지 않다.
 
-URI를 바꾸는 것만으로 기존 로컬 run과 모델이 이전되지는 않는다. 여기서는 같은 코드를 다시 실행해 AML에 새 run을 만든다. `compare.py`를 다시 실행하는 이유도 AML 쪽의 run ID를 선택하기 위해서다.
+URI 변경은 로컬 run과 모델을 이전하지 않는다. 코드를 재실행해 AML run을 만들고, `compare.py`로 AML의 run ID를 선택한다.
 
-이 실습에서는 Tracking과 Registry를 같은 workspace에 맞췄다. 로컬의 `runs:/...`를 그대로 AML Registry에 넘기는 방식이 아니다.
+Tracking과 Registry는 같은 workspace를 사용한다. 로컬 `runs:/...` URI를 AML Registry에 바로 넘기지 않는다.
 
 ## 학습 실행 위치를 AML Job으로 변경
 
 이 단계는 기존 AML CPU compute cluster를 사용한다. 아래의 `cpu-cluster`는 실제 이름으로 바꾼다. 클러스터가 없다면 [compute cluster 만들기](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-create-attach-compute-cluster?view=azureml-api-2)를 준비 작업으로 둔다.
 
-학습용이라도 리전의 SKU와 할당량, 최소 노드 수, 최대 노드 수, 유휴 시 축소 설정을 확인한다. 로컬에서 원격 기록만 보내던 단계와 달리, 여기부터는 원격 학습용 컴퓨팅도 사용한다.
+원격 학습에는 compute가 사용된다. 리전 SKU, quota, 최소, 최대 노드 수, 유휴 축소 설정을 확인한다.
 
 ### 실행 환경
 
@@ -113,7 +113,7 @@ dependencies:
       - sqlalchemy==2.0.43
 ```
 
-로컬에 설치한 플러그인이 Job 컨테이너에도 있는 것은 아니다. 원격 환경에도 `azureml-mlflow`와 같은 학습 의존성을 포함한다.
+로컬 플러그인은 Job 컨테이너에 자동 포함되지 않으므로 원격 환경에도 `azureml-mlflow` 등 의존성을 설치한다.
 
 ### Job 정의
 
@@ -138,7 +138,7 @@ tags:
   study: mlflow-aml
 ```
 
-`code`는 `src`만 지정했다. 실습 폴더 전체를 올리면 가상환경, 로컬 DB, 인증용 파일이 함께 전송될 수 있다.
+`code`는 `src`만 지정한다. 폴더 전체를 올리면 가상환경, 로컬 DB, 인증 파일까지 전송될 수 있다.
 
 학습 코드에 Tracking URI나 `set_experiment()`를 추가하지 않는다. AML Job에서는 실행하는 workspace가 추적 대상으로 설정되고, `experiment_name`과 `display_name`은 Job 정의에서 정한다. `start_run()`에 별도의 `run_name`도 전달하지 않는다.
 
@@ -162,7 +162,7 @@ foreach ($name in $jobNames) {
 }
 ```
 
-Job 제출 성공과 학습 완료는 다른 상태다. studio 또는 아래 명령으로 각 Job이 `Completed`인지 확인한다. 실패했다면 비교로 넘어가기 전에 로그에서 원인을 확인한다.
+제출 성공은 학습 완료를 뜻하지 않는다. Studio나 CLI에서 `Completed`를 확인하고, 실패 시 로그를 조사한다.
 
 ```powershell
 foreach ($name in $jobNames) {
@@ -177,11 +177,11 @@ foreach ($name in $jobNames) {
 .\.venv\Scripts\python.exe .\inspect_run.py
 ```
 
-이 실습은 AML CLI v2의 command Job을 사용한다. `MLproject` 파일을 이용한 AML 학습 제출 경로와는 구분했다. [공식 MLflow 개요](https://learn.microsoft.com/en-us/azure/machine-learning/concept-mlflow?view=azureml-api-2#training-with-mlflow-projects-preview)에는 해당 경로의 2026년 9월 종료와 Jobs로의 전환이 안내되어 있다. MLflow Tracking 자체가 종료된다는 뜻은 아니다.
+여기서는 AML CLI v2 command Job을 사용한다. [공식 개요](https://learn.microsoft.com/en-us/azure/machine-learning/concept-mlflow?view=azureml-api-2#training-with-mlflow-projects-preview)는 `MLproject` 제출 경로가 2026년 9월 종료되고 Jobs로 전환된다고 안내한다. MLflow Tracking 종료를 뜻하지 않는다.
 
 ## 확인할 결과
 
-원격 기록 단계에서는 로컬에서 학습한 run이 AML Jobs의 experiment에 나타나야 한다. 원격 Job 단계에서는 제출한 작업의 상태가 `Completed`이고 모델과 메트릭이 같은 workspace에 남아야 한다. `compare.py`를 AML 대상으로 다시 실행하면 선택 파일의 Tracking URI와 run ID도 AML 기록으로 바뀐다.
+로컬 학습 run은 AML experiment에, 원격 Job은 `Completed` 상태와 모델, 메트릭을 같은 workspace에 남겨야 한다. AML에서 `compare.py`를 다시 실행하면 선택 파일도 AML URI와 run ID를 가리킨다.
 
 ## 오류 확인
 

@@ -8,11 +8,11 @@ aliases:
   - "/docs/tech/mlops/runtime/"
 ---
 
-같은 조리법도 가스와 냉장고가 없으면 실행되지 않습니다. Docker는 실행 환경을 이미지로 포장하고, Kubernetes는 컨테이너의 실행, 교체, 네트워크를 관리하며, Helm은 관련 선언을 템플릿과 설정으로 묶습니다. 세 도구 모두 추천 품질이나 승인 기준을 판단하지 않습니다.
+Docker는 실행 환경을 이미지화하고 Kubernetes는 컨테이너, 네트워크를 관리하며 Helm은 선언을 템플릿화한다. 추천 품질, 승인은 이 도구들의 책임이 아니다.
 
 ## Bookway의 배포 단위
 
-`rec-r17`은 모델 17, 피처 v1, 전처리, 이미지 digest를 가리킵니다. 이미지에 모델을 포함하면 크기는 늘지만 초기화 시 외부 다운로드를 줄일 수 있습니다. 별도로 다운로드하면 무결성, 접근 권한, 보존, 준비 상태 검사가 필요합니다.
+`rec-r17`은 모델 17, 피처 v1, 전처리, image digest를 식별한다. 이미지를 키우면 모델 다운로드를 줄이고, 외부 다운로드는 무결성, 권한, 보존, 준비 상태를 검사한다.
 
 | 객체 | 책임 | 놓치기 쉬운 조건 |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ aliases:
 
 ## 상태 검사의 의미
 
-아래 YAML은 이미 존재하는 컨테이너 spec의 probe 부분입니다. 앱이 `/startup`, `/ready`, `/live`를 실제 구현했다는 전제입니다.
+아래 YAML은 이미 존재하는 컨테이너 spec의 probe 부분이다. 앱이 `/startup`, `/ready`, `/live`를 실제 구현했다는 전제이다.
 
 ```yaml
 startupProbe:
@@ -39,18 +39,18 @@ livenessProbe:
   periodSeconds: 10
 ```
 
-startup은 모델 초기화, readiness는 트래픽을 받을 준비, liveness는 프로세스 복구 필요성을 뜻하도록 나눕니다. Feast 장애를 매번 liveness 실패로 연결하면 모든 Pod가 재시작하며 상황을 악화시킬 수 있습니다. 외부 의존성 장애는 요청 오류, readiness, 대체 경로 정책 중 어디에 반영할지 설계해야 합니다.
+startup은 모델 초기화, readiness는 트래픽 준비, liveness는 프로세스 복구를 검사한다. Feast 장애를 liveness에 연결하면 Pod가 모두 재시작할 수 있으므로 외부 장애 반영 위치를 정한다.
 
 ## Helm과 환경 차이
 
-차트에서 공통 Deployment, Service를 정의하고 환경별 values로 replica, 자원, endpoint를 분리합니다. Secret 값은 values를 Git에 쓰지 않고 승인된 secret 주입 경로로 전달합니다. 렌더링된 YAML 검토, schema 검사, 시험 namespace 적용을 순서대로 진행합니다.
+차트는 Deployment, Service를 공유하고 환경별 values로 replica, 자원, endpoint를 나눈다. Secret을 Git에 두지 말고 승인 경로로 주입해 렌더링, schema, 시험 namespace를 검증한다.
 
-운영 이미지는 digest로 고정하고 비특권 사용자, 최소 권한, 이미지 취약점 검사를 적용합니다. 네트워크 정책은 추천 API가 Feast, 관측 endpoint 등에 필요한 통신만 하게 제한합니다. 인증이 없는 내부 서비스가 외부 LoadBalancer로 노출되지 않도록 합니다.
+운영 이미지는 digest로 고정하고 비특권, 최소 권한, 취약점 검사를 적용한다. 네트워크는 필요한 Feast, 관측 통신만 허용하고 내부 인증 없는 서비스를 외부에 노출하지 않는다.
 
 ## 배포 장애의 분류
 
-`Pending`은 자원, 스케줄링, `ImagePullBackOff`는 이미지, 인증, `CrashLoopBackOff`는 앱 시작, 설정, 의존성부터 봅니다. Service가 응답하지 않으면 selector, port, readiness, 네트워크를 분리합니다. 예측 값이 틀린 문제를 replica 증가로 해결할 수는 없습니다.
+`Pending`은 자원, 스케줄링, `ImagePullBackOff`는 이미지, 인증, `CrashLoopBackOff`는 시작, 설정, 의존성을 본다. Service 장애는 selector, port, readiness, 네트워크로 나누며 오답은 replica로 해결되지 않는다.
 
-LLMOps에서는 여기에 GPU 메모리, 모델 가중치, 동시 sequence 제한이 추가됩니다. 앱 Pod와 추론 Pod를 분리하면 검색 API 확장과 GPU 확장을 독립적으로 조절할 수 있습니다.
+LLMOps에서는 여기에 GPU 메모리, 모델 가중치, 동시 sequence 제한이 추가된다. 앱 Pod와 추론 Pod를 분리하면 검색 API 확장과 GPU 확장을 독립적으로 조절할 수 있다.
 
 [Kubernetes probe 문서](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) / [Helm 차트](https://helm.sh/docs/topics/charts/) / [기존 Kubernetes 실행 기록](/docs/tech/machine-learning-platform-engineering/03-kubernetes-foundation/)

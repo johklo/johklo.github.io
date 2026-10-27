@@ -72,12 +72,15 @@ class NativeStudyTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix=".book-study-test-", dir=ROOT) as directory:
             work = Path(directory)
             names = (
-                "income_study.py", "feature_study.py",
+                "feature_study.py", "income_study.py",
                 "pipeline_study.py", "run_pipeline_study.py",
             )
-            blocks = examples(4)
-            self.assertEqual(len(blocks), len(names))
-            for name, code in zip(names, blocks):
+            downloads = (
+                ROOT / "static" / "downloads" / "ml-platform-engineering"
+                / "kfp-cluster"
+            )
+            for name in names:
+                code = (downloads / name).read_text(encoding="utf-8")
                 (work / name).write_text(code, encoding="utf-8")
                 result = subprocess.run(
                     [sys.executable, str(work / name)],

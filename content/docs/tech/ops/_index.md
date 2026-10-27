@@ -8,7 +8,7 @@ sidebar:
   open: false
 ---
 
-식당 운영을 배운다면 조리 도구 사용법, 실제 코스 요리 실습, 메뉴 기획과 주방 운영 설계를 따로 익힙니다. 이 섹션도 같은 방식으로 나눴습니다. 모델을 학습하고 서비스하는 MLOps와, 검색과 생성, 도구 실행이 더해지는 LLMOps를 하위에 두었습니다.
+이 섹션은 도구 기초, 실습, 운영 설계로 나뉜다. 모델 학습, 서빙을 다루는 MLOps와 검색, 생성, 도구 실행을 다루는 LLMOps를 연결한다.
 
 | 하위 섹션 | 담은 내용 | 시작하기 좋은 글 |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ sidebar:
 ```mermaid
 flowchart TD
     accTitle: MLOps & LLMOps 섹션 구성
-    accDescr: 상위 섹션 아래 MLOps와 LLMOps가 있고, MLOps에는 도구 기초 가이드, 실습, Bookway 설계 가이드가 있습니다. LLMOps에는 Bookway 안내 도우미 기준의 도구 가이드가 있습니다.
+    accDescr: 상위 섹션 아래 MLOps와 LLMOps가 있다. MLOps에는 도구 기초, 실습, Bookway 설계 가이드, LLMOps에는 Bookway 안내 도우미 도구 가이드가 있다.
     R["MLOps & LLMOps"] --> M["MLOps"]
     R --> L["LLMOps"]
     M --> MB["도구 기초 가이드<br/>MLflow, Feast, KFP, BentoML"]
@@ -29,6 +29,6 @@ flowchart TD
     L --> LD["Bookway 안내 도우미 가이드<br/>검색, 평가, 관측, 가드레일, 출시"]
 ```
 
-처음이라면 도구 기초 가이드로 사용법을 익히고, 실습으로 여러 도구를 묶어 본 뒤, 설계 가이드에서 요구사항에 따라 도구를 배치하는 방법을 보는 순서를 권합니다. 책 독서노트는 [Machine Learning Platform Engineering](/docs/tech/machine-learning-platform-engineering/)과 [AI Agents and Applications](/docs/tech/ai-agents-and-applications/)에 따로 정리했습니다.
+도구 기초, 실습, 요구사항별 설계 순으로 읽을 수 있다. 책 독서노트는 [Machine Learning Platform Engineering](/docs/tech/machine-learning-platform-engineering/)과 [AI Agents and Applications](/docs/tech/ai-agents-and-applications/)에 있다.
 
 {{< section-list >}}
