@@ -1,8 +1,8 @@
 ---
-title: "04. 실험, 피처, 파이프라인 연결하기"
+title: "04~05. 실험, 피처, 파이프라인 연결하기"
 description: "책 4~5장의 환경 설치와 실습을 따라가며 MLflow, Feast, Kubeflow Pipelines의 역할과 연결 구조 이해하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-10-28T07:00:00+09:00
+lastmod: 2026-11-06T14:55:00+09:00
 weight: 40
 draft: false
 tags: ["book-club", "ml-platform-engineering", "mlflow", "feature-store", "kubeflow"]

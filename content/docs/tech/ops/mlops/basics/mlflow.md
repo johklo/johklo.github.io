@@ -438,5 +438,5 @@ min_samples_leaf=5 validation_accuracy=0.9556
   - [05. 모델 등록](/docs/tech/ops/mlops/labs/05-model-registration/)
   - [06. 온라인 및 배치 추론](/docs/tech/ops/mlops/labs/06-online-and-batch-inference/)
 - [MLflow 운영 설계 가이드](/docs/tech/ops/mlops/mlflow/)
-- [Machine Learning Platform Engineering 04장: 실험, 피처, 파이프라인](/docs/tech/machine-learning-platform-engineering/04-experiments-features-pipelines/)
+- [Machine Learning Platform Engineering 04~05장: 실험, 피처, 파이프라인](/docs/tech/machine-learning-platform-engineering/04-experiments-features-pipelines/)
 - 함께 읽을 기초 가이드: [Feast](/docs/tech/ops/mlops/basics/feast/), [Kubeflow Pipelines](/docs/tech/ops/mlops/basics/kubeflow-pipelines/), [BentoML](/docs/tech/ops/mlops/basics/bentoml/)

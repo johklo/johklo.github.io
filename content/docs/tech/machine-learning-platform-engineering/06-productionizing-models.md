@@ -1,8 +1,8 @@
 ---
 title: "06. 모델을 프로덕션으로"
-description: "BentoML의 서빙·패키징 구조와 데이터 드리프트의 원리를 이해하고 소득 분류 API와 Evidently 관측에 연결하기"
+description: "BentoML의 서빙 구조와 데이터 드리프트 원리를 이해하고 소득 분류 API의 운영 관측에 연결하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-06T14:33:00+09:00
+lastmod: 2026-11-06T14:55:00+09:00
 weight: 60
 draft: false
 tags: ["book-club", "ml-platform-engineering", "bentoml", "monitoring"]
@@ -20,7 +20,7 @@ tags: ["book-club", "ml-platform-engineering", "bentoml", "monitoring"]
 
 | 구분 | 배치 추론 | 온라인 추론 |
 | --- | --- | --- |
-| 실행 계기 | 일정이나 준비된 데이터 묶음 | 사용자·애플리케이션의 요청 |
+| 실행 계기 | 일정이나 준비된 데이터 묶음 | 사용자와 애플리케이션의 요청 |
 | 입력 | 파일, 테이블, 대상 기간 | 요청 본문과 요청 시점에 조회한 피처 |
 | 응답 시점 | 작업 완료 후 결과 파일 제공 | 요청을 기다리는 클라이언트에 응답 |
 | 주요 운영 기준 | 완료 시간, 처리량, 재실행과 결과 중복 | 지연, 동시성, 가용성과 오류 처리 |
@@ -40,9 +40,15 @@ BentoML은 학습 프레임워크를 대체하지 않는다. 서로 다른 프�
 | Runner | Runnable을 worker에서 실행하는 계산 단위 | 분류기를 로드하고 예측 호출 처리 |
 | Bento | 서비스 코드, 모델과 의존성 구성을 묶은 배포 산출물 | 같은 서비스를 다시 실행할 패키지 |
 | 컨테이너 이미지 | Bento를 컨테이너 런타임에서 실행할 이미지 | 클러스터에 전달할 실행 환경 |
-| Deployment | 특정 버전을 자원·복제본·주소와 함께 실행한 상태 | 실제 요청을 받는 API와 Runner |
+| Deployment | 특정 버전을 자원, 복제본, 주소와 함께 실행한 상태 | 실제 요청을 받는 API와 Runner |
 
 Service는 요청을 어떻게 해석하고 어떤 연산을 호출할지 정한다. Runner는 모델 계산을 worker에서 실행한다. 두 역할을 나누면 API 처리량과 모델 계산에 필요한 자원을 따로 조정할 수 있다. Runner는 Kubernetes의 학습 Job을 뜻하지 않으며, 항상 별도 Pod인 것도 아니다. 로컬 실행에서는 worker 프로세스로, 책의 Yatai 배포에서는 분리된 Pod로 실행하는 구성을 다룬다.
+
+![Service가 있는 API 서버와 모델이 있는 Runner 서버가 HTTP 또는 gRPC로 통신하는 BentoML 구조.](https://raw.githubusercontent.com/bentoml/BentoML/fa278835a5333c5d378a0b03a9b56a9fc4ce21e4/docs/source/_static/img/concepts/runners/default.png)
+
+그림 6-1. API 처리와 모델 실행을 분리한 Runner 구조. 출처: [BentoML 1.1.10 공식 문서](https://github.com/bentoml/BentoML/blob/fa278835a5333c5d378a0b03a9b56a9fc4ce21e4/docs/source/concepts/runner.rst), [Apache-2.0](https://github.com/bentoml/BentoML/blob/fa278835a5333c5d378a0b03a9b56a9fc4ce21e4/LICENSE). 원본 도식을 변경 없이 사용했다.
+
+그림의 경계는 API 요청을 처리하는 프로세스와 계산을 실행하는 프로세스의 구분이다. 아래는 여기에 이 장의 Feast 조회와 전처리를 넣어 읽은 흐름이다.
 
 ```mermaid
 flowchart LR
@@ -70,13 +76,13 @@ Runner는 모델과 설정이 지원하면 여러 요청의 계산을 묶는 ada
 
 `bentofile.yaml`은 어떤 서비스와 파일, 모델, 의존성을 포함할지 선언한다. 빌드는 이 선언으로 Bento를 만드는 작업이고, push는 만들어진 산출물을 원격 저장소로 전달하는 작업이다. 패키지 저장과 서비스 실행은 다른 상태다.
 
-책의 Yatai는 Kubernetes에서 Bento의 배포를 관리하는 제어 계층이다. Bento와 모델을 관리하고 이미지 빌드, API·Runner의 자원과 복제본, 서비스 노출을 연결한다. 실제 계산은 배포된 worker와 Pod가 수행한다. Yatai가 모델의 예측 품질이나 학습 데이터의 적합성을 판정하지는 않는다.
+책의 Yatai는 Kubernetes에서 Bento의 배포를 관리하는 제어 계층이다. 모델과 Bento의 관리, 이미지 빌드, API 서버와 Runner의 자원 및 복제본 설정, 서비스 노출을 연결한다. 실제 계산은 배포된 worker와 Pod가 수행한다. Yatai가 모델의 예측 품질이나 학습 데이터의 적합성을 판정하지는 않는다.
 
 | 관리 대상 | 필요한 이유 |
 | --- | --- |
 | 모델 태그와 Bento 태그 | 무엇을 어떤 코드로 서비스했는지 구분 |
 | 컨테이너 이미지와 의존성 | 다른 환경에서도 같은 실행 조건 구성 |
-| CPU·메모리·GPU와 복제본 | 모델 크기와 요청 부하에 맞는 실행 용량 |
+| CPU, 메모리, GPU와 복제본 | 모델 크기와 요청 부하에 맞는 실행 용량 |
 | 준비 상태와 서비스 주소 | 모델 로드 전의 실행과 요청 가능한 상태 구분 |
 | 배포 버전과 전환 기록 | 새 서비스의 문제를 추적하고 이전 구성으로 복구 |
 
@@ -86,7 +92,7 @@ API 복제본을 늘리는 것과 Runner 복제본을 늘리는 것은 같은 �
 
 BentoML의 `/metrics`와 Prometheus 연계는 요청 수, 지연과 오류 같은 서비스 동작을 관찰하는 데 쓰인다. 메트릭을 노출하는 것, Prometheus가 수집하는 것, 대시보드와 알림을 만드는 것은 별도 구성이다.
 
-요청이 빠르고 HTTP 200이 많아도 예측이 틀릴 수 있다. 반대로 모델 품질이 유지되어도 피처 조회 장애로 서비스를 쓰지 못할 수 있다. 그래서 이 장의 다음 주제인 데이터·모델 관측을 인프라 관측과 구분한다.
+요청이 빠르고 HTTP 200이 많아도 예측이 틀릴 수 있다. 반대로 모델 품질이 유지되어도 피처 조회 장애로 서비스를 쓰지 못할 수 있다. 그래서 이 장의 다음 주제인 데이터와 모델 관측을 인프라 관측과 구분한다.
 
 ## 6.2 데이터 드리프트와 Evidently의 관측 원리 {#drift-concepts}
 
@@ -101,7 +107,7 @@ BentoML의 `/metrics`와 Prometheus 연계는 요청 수, 지연과 오류 같�
 | Concept drift | 입력과 정답의 관계 `P(y\|X)` | 같은 피처 조건에서도 소득 범주의 발생 관계가 달라짐 |
 | Prediction drift | 예측 분포 `P(y_hat)` | 모델이 반환하는 범주나 확률의 구성이 달라짐 |
 
-이 구분은 원인을 설명하는 틀이며, 운영에서는 여러 변화가 함께 발생할 수 있다. 입력 분포만 비교해서 concept drift를 확인했다고 할 수는 없다. 정답이 늦게 도착하는 서비스에서는 입력·예측의 변화를 먼저 관찰하고, 정답이 모였을 때 실제 품질을 확인한다.
+이 구분은 원인을 설명하는 틀이며, 운영에서는 여러 변화가 함께 발생할 수 있다. 입력 분포만 비교해서 concept drift를 확인했다고 할 수는 없다. 정답이 늦게 도착하는 서비스에서는 입력과 예측의 변화를 먼저 관찰하고, 정답이 모였을 때 실제 품질을 확인한다.
 
 예를 들어 직업 분류를 수집하는 시스템이 바뀌어 특정 값이 대량으로 결측 처리되면 모델 재학습보다 수집 경로 복구가 우선일 수 있다. 반면 같은 직업과 학력에서도 소득 관계가 지속적으로 달라졌다면 모델과 피처의 재검토가 필요하다.
 
@@ -117,8 +123,15 @@ Evidently는 기준 데이터(reference)와 평가할 현재 데이터(current)�
 | --- | --- | --- |
 | Kolmogorov–Smirnov(KS) 검정 | 수치형 변수의 경험적 누적분포 차이 | p-value와 분포 차이의 크기를 함께 확인 |
 | 카이제곱 검정 | 범주별 관측 빈도 차이 | 범주별 표본과 기대 빈도, p-value 확인 |
-| Wasserstein distance | 한 수치 분포를 다른 분포로 옮기는 차이 | 거리와 적용한 정규화·임계치 확인 |
-| Jensen–Shannon 계열 지표 | 범주별 확률분포 차이 | 사용한 거리·발산 정의와 임계치 확인 |
+| Wasserstein distance | 한 수치 분포를 다른 분포로 옮기는 차이 | 거리, 정규화 방식, 임계치 확인 |
+| Jensen–Shannon 계열 지표 | 범주별 확률분포 차이 | 거리나 발산의 정의, 적용한 임계치 확인 |
+| PSI | 구간이나 범주별 비율의 변화 | 구간 정의와 비교 임계치 확인 |
+
+![occupation 피처의 reference와 current 분포, 선택한 PSI 지표와 드리프트 판정을 함께 보여 주는 Evidently 보고서.](https://raw.githubusercontent.com/evidentlyai/evidently/49cce31eaa49ec354d32ccd2edb3c9d492949db1/docs/book/.gitbook/assets/reports/metric_data_drift_table_expand_1-min.png)
+
+그림 6-2. 직업 피처의 분포와 검사 결과를 함께 보는 공식 보고서 예시. 출처: [Evidently 0.5.0 보고서 이미지](https://github.com/evidentlyai/evidently/blob/49cce31eaa49ec354d32ccd2edb3c9d492949db1/docs/book/.gitbook/assets/reports/metric_data_drift_table_expand_1-min.png), [Apache-2.0](https://github.com/evidentlyai/evidently/blob/49cce31eaa49ec354d32ccd2edb3c9d492949db1/LICENSE). 이 글의 실습 결과가 아닌 공식 예제다.
+
+표본 수가 다르면 원시 건수로 그린 막대의 높이도 달라진다. 그림의 인상만으로 판정하지 말고 상대 비율과 선택한 검사, 임계치를 함께 확인한다. 화면의 PSI 값은 아래에서 설명하는 p-value와 같은 지표가 아니다.
 
 p-value는 “드리프트가 발생했을 확률”이 아니다. 같은 분포라는 가정 아래 관측 차이가 얼마나 이례적인지를 해석하는 값이다. 표본이 매우 크면 작은 차이도 통계적으로 드러날 수 있고, 표본이 적으면 중요한 변화를 놓칠 수 있다.
 
@@ -140,11 +153,11 @@ p-value는 “드리프트가 발생했을 확률”이 아니다. 같은 분포
 | --- | --- | --- |
 | Metric | 결측 비율, 분포 차이, 모델 오차 등의 값 계산 | 모든 지표에 업무상 합격 기준 부여 |
 | Report | 선택한 지표와 시각화 결과를 묶음 | 파이프라인이나 API를 자동 차단 |
-| Test / Test Suite | 지정한 조건에 대한 통과·실패 판정 | 재학습·출시 승인 정책 전체 구현 |
+| Test / Test Suite | 지정한 조건에 대한 통과나 실패 판정 | 재학습과 출시 승인 정책 전체 구현 |
 | Workspace / Project | 보고서와 실행 구간을 모아 관리 | 기준 데이터의 적합성 자동 결정 |
 | Dashboard | 기간별 지표와 변화 추세 표시 | 원인 분석과 서비스 유지 판단 대체 |
 
-정답이 있으면 분류·회귀 성능도 계산할 수 있지만, 입력만 있는 보고서가 정확도를 새로 알아내는 것은 아니다. 보고서를 만든 뒤 경고, 처리 보류나 추가 평가로 연결하는 정책은 별도로 정해야 한다. 뒤의 D-2에서는 이 구분을 저자의 실제 코드와 대조한다.
+정답이 있으면 문제 유형에 맞는 분류나 회귀 성능도 계산할 수 있지만, 입력만 있는 보고서가 정확도를 새로 알아내는 것은 아니다. 보고서를 만든 뒤 경고, 처리 보류나 추가 평가로 연결하는 정책은 별도로 정해야 한다. 뒤의 D-2에서는 이 구분을 저자의 실제 코드와 대조한다.
 
 ### 배치, 마이크로배치와 슬라이딩 윈도우
 
@@ -153,10 +166,10 @@ p-value는 “드리프트가 발생했을 확률”이 아니다. 같은 분포
 | 비교 단위 | 특징 | 정할 것 |
 | --- | --- | --- |
 | 배치 | 파일이나 대상 기간 단위로 비교 | 같은 대상의 재실행, 검사 후 추론 정책 |
-| 고정 윈도우 | 겹치지 않는 일정 시간·건수의 묶음 | 보고서 간격, 트래픽이 적을 때의 최소 표본 |
+| 고정 윈도우 | 고정된 시간이나 건수로 나눈 겹치지 않는 묶음 | 보고서 간격, 트래픽이 적을 때의 최소 표본 |
 | 슬라이딩 윈도우 | 최근 표본을 유지하며 반복 비교 | 윈도우 크기, 검사 간격과 겹침 |
 
-작은 윈도우는 빠르게 반응하지만 변동이 크고, 큰 윈도우는 안정적이지만 변화 발견이 늦을 수 있다. 요일·시간대의 정상적인 변화를 서로 다른 기준과 비교하면 경고가 반복될 수 있다. 겹치는 윈도우의 연속 경고도 독립된 여러 사건처럼 세지 않는다.
+작은 윈도우는 빠르게 반응하지만 변동이 크고, 큰 윈도우는 안정적이지만 변화 발견이 늦을 수 있다. 요일과 시간대의 정상적인 변화를 서로 다른 기준과 비교하면 경고가 반복될 수 있다. 겹치는 윈도우의 연속 경고도 독립된 여러 사건처럼 세지 않는다.
 
 새로운 current를 매번 reference로 교체하면 지속적인 변화를 정상으로 흡수할 수 있다. 기준을 고정할지 갱신할지, 갱신 전에 무엇을 검증할지도 관측 설계의 일부다.
 
@@ -177,18 +190,18 @@ flowchart TD
     V --> M["모델 추론"]
     M --> R["응답"]
     R --> C
-    API -.-> E["관측 기록<br/>실제 피처·예측·버전·시각"]
+    API -.-> E["관측 기록<br/>실제 피처, 예측, 버전, 시각"]
     M -.-> E
-    E --> COL["수집기 또는 이벤트·로그 경로"]
+    E --> COL["수집기 또는 이벤트와 로그 경로"]
     COL --> STORE[("추론 데이터 저장소")]
     STORE --> JOB["별도 모니터링 작업<br/>스케줄 또는 윈도우 트리거"]
     REF[("모델에 대응하는 기준 데이터")] --> JOB
-    JOB --> MET["지표·보고서·경고"]
+    JOB --> MET["지표, 보고서, 경고"]
     LABEL["나중에 도착한 정답"] --> JOIN["예측 ID로 연결"]
     STORE --> JOIN
     JOIN --> PERF["실제 모델 성능 평가"]
     PERF --> MET
-    MET --> TRIAGE["원인·영향 조사와 대응 결정"]
+    MET --> TRIAGE["원인과 영향 조사, 대응 결정"]
 ```
 
 점선은 서비스가 관측용 기록을 남긴다는 관계이며, 수집 자체가 무조건 지연이나 실패 없이 끝난다는 뜻은 아니다. collector 전송을 동기 호출하면 그 시간과 실패도 요청 경로에 영향을 줄 수 있다. 비동기 전송, 버퍼나 별도 로그 경로를 택하더라도 메모리 한도, 재시도, 누락과 밀린 기록의 처리가 필요하다.
@@ -197,25 +210,25 @@ flowchart TD
 
 ### 어디에서 무엇을 수집하는가
 
-이 책의 `/predict`는 `user_id`만 받는다. HTTP 요청과 응답만 저장하면 사용자 ID와 소득 범주는 남지만, 실제 모델이 본 학력·직업 등의 분포는 알 수 없다.
+이 책의 `/predict`는 `user_id`만 받는다. HTTP 요청과 응답만 저장하면 사용자 ID와 소득 범주는 남지만, 실제 모델이 본 학력과 직업 등의 분포는 알 수 없다.
 
-따라서 피처 조회 후의 값, 필요하다면 전처리 후의 모델 입력을 관측 대상으로 삼아야 한다. 나중에 같은 사용자 ID로 Redis를 다시 조회하면 값이 바뀌어 있을 수 있으므로 당시 입력을 재구성한 것이 되지 않는다. [Azure ML 데이터 수집 문서](https://learn.microsoft.com/en-us/azure/machine-learning/concept-data-collection?view=azureml-api-2)도 HTTP payload logging과 전처리 전·중·후의 데이터를 남기는 custom logging을 구분한다.
+따라서 피처 조회 후의 값, 필요하다면 전처리 후의 모델 입력을 관측 대상으로 삼아야 한다. 나중에 같은 사용자 ID로 Redis를 다시 조회하면 값이 바뀌어 있을 수 있으므로 당시 입력을 재구성한 것이 되지 않는다. [Azure ML 데이터 수집 문서](https://learn.microsoft.com/en-us/azure/machine-learning/concept-data-collection?view=azureml-api-2)도 HTTP payload logging과 전처리 전, 처리 중, 처리 후의 데이터를 남기는 custom logging을 구분한다.
 
 | 관측 지점 | 알 수 있는 것 | 기준 데이터와 맞출 것 |
 | --- | --- | --- |
 | 외부 요청 | 입력 규격, 요청 대상과 오류 | API 계약 |
 | Feast 조회 직후 | 실제 사용한 피처, 결측과 최신성 | 같은 피처 정의와 시점 의미의 reference |
 | 전처리 직후 | 인코딩, 스케일과 모델 입력 형태 | 같은 전처리 버전의 입력 표현 |
-| 모델 출력 | 범주·확률의 분포와 모델 동작 | 같은 모델 버전의 비교 가능한 예측 |
-| 실제 결과 도착 후 | 예측 오차와 집단별 품질 | 예측과 연결되는 정답·평가 기간 |
+| 모델 출력 | 범주나 확률의 분포, 모델 동작 | 같은 모델 버전의 비교 가능한 예측 |
+| 실제 결과 도착 후 | 예측 오차와 집단별 품질 | 예측과 연결되는 정답과 평가 기간 |
 
 다음은 특정 플랫폼의 필수 형식이 아니라 관측 기록에 담을 항목의 예다.
 
 | 항목 | 필요한 이유 |
 | --- | --- |
-| `prediction_id`, 예측 시각 | 요청·응답과 늦게 도착한 결과 연결 |
+| `prediction_id`, 예측 시각 | 요청, 응답, 늦게 도착한 결과 연결 |
 | 모델 버전과 배포 버전 | 트래픽 분할이나 모델 교체의 영향 구분 |
-| 피처 정의·전처리·스키마 버전 | 서로 다른 의미의 값을 같은 분포로 섞지 않기 위해 |
+| 피처 정의, 전처리, 스키마 버전 | 서로 다른 의미의 값을 같은 분포로 섞지 않기 위해 |
 | 선택한 피처와 예측값 | 분포, 결측과 예측 변화 계산 |
 | 피처 시각과 조회 상태 | 오래된 피처, 조회 실패와 실제 값 변화 구분 |
 | 표본 추출 조건과 데이터 구간 | 전체 트래픽을 얼마나 대표하는지 해석 |
@@ -226,9 +239,9 @@ flowchart TD
 
 | 검사 | 실행 위치의 예 | 실패의 의미 |
 | --- | --- | --- |
-| 필수 필드·타입·크기 검사 | API 요청 경로 | 이 요청이 계약을 위반함 |
-| 피처 누락·허용 범위·최신성 검사 | 피처 조회 후, 추론 전 | 유효한 모델 입력을 만들지 못함 |
-| 입력·예측 분포 비교 | 별도 배치 작업 또는 collector의 윈도우 | 입력 집단이나 모델 동작이 기준과 달라짐 |
+| 필수 필드, 타입, 크기 검사 | API 요청 경로 | 이 요청이 계약을 위반함 |
+| 피처 누락, 허용 범위, 최신성 검사 | 피처 조회 후, 추론 전 | 유효한 모델 입력을 만들지 못함 |
+| 입력과 예측 분포 비교 | 별도 배치 작업 또는 collector의 윈도우 | 입력 집단이나 모델 동작이 기준과 달라짐 |
 | 정답 기반 품질 평가 | 결과가 모인 뒤 별도 작업 | 실제 예측 품질이 평가 기준과 다름 |
 | 배치 데이터 품질 게이트 | 배치 추론 파이프라인 내부 | 해당 묶음의 후속 처리를 보류할 조건 |
 
@@ -236,39 +249,45 @@ flowchart TD
 
 빠른 탐지가 필요하면 [Evidently collector 구조](https://docs-old.evidentlyai.com/user-guide/monitoring/collector_service)처럼 별도 서비스가 건수나 시간 조건으로 윈도우를 모아 계산할 수 있다. 온라인 추론이라는 이유만으로 각 API worker가 보고서 전체를 계산해야 하는 것은 아니다. 반대로 배치 작업에서는 명시적인 품질 검사 결과에 따라 다음 단계를 중단하는 구성이 유효하다.
 
+![ML 서비스가 입력과 예측을 별도 collector에 보내고, collector가 검사 결과를 snapshot으로 저장해 대시보드에 전달하는 구조.](https://raw.githubusercontent.com/evidentlyai/evidently/49cce31eaa49ec354d32ccd2edb3c9d492949db1/docs/book/.gitbook/assets/monitoring/monitoring_collector_min.png)
+
+그림 6-3. 추론 서비스와 collector를 분리한 관측 구조. 출처: [Evidently collector 공식 문서](https://docs-old.evidentlyai.com/user-guide/monitoring/collector_service), [원본 이미지](https://github.com/evidentlyai/evidently/blob/49cce31eaa49ec354d32ccd2edb3c9d492949db1/docs/book/.gitbook/assets/monitoring/monitoring_collector_min.png), [Apache-2.0](https://github.com/evidentlyai/evidently/blob/49cce31eaa49ec354d32ccd2edb3c9d492949db1/LICENSE). 원본 도식을 변경 없이 사용했다.
+
+POST는 수집 지점으로 데이터를 보내는 동작이고, 보고서를 계산하는 작업은 collector의 트리거를 따른다. 그림처럼 역할을 나눠도 전송 지연과 누락을 어떻게 처리할지는 서비스에서 정해야 한다.
+
 ### 모니터링 작업 자체의 입력과 상태
 
-모니터링 작업에는 기준 버전, 현재 데이터 구간, 검사할 열, 비교 방법, 최소 표본과 경고 조건이 필요하다. 모델이 교체됐는데 이전 모델의 전처리·예측 기준과 새 결과를 섞으면 배포 차이를 데이터 변화로 오해할 수 있다.
+모니터링 작업에는 기준 버전, 현재 데이터 구간, 검사할 열, 비교 방법, 최소 표본과 경고 조건이 필요하다. 모델이 교체됐는데 이전 모델의 전처리와 예측 기준을 새 결과와 섞으면 배포 차이를 데이터 변화로 오해할 수 있다.
 
 | 설계 항목 | 판단할 내용 |
 | --- | --- |
 | 주기와 윈도우 | 얼마나 빨리 알아야 하는지, 그동안 충분한 표본이 쌓이는지 |
 | 지연 도착 | 예측 시각과 수집 시각 중 어떤 시간으로 묶고 얼마나 기다릴지 |
-| 집단과 버전 | 모델·지역·사용자 유형별 변화가 전체 평균에 가려지는지 |
+| 집단과 버전 | 모델, 지역, 사용자 유형별 변화가 전체 평균에 가려지는지 |
 | 기준 갱신 | 정상으로 검증한 새 기준인지, 단순히 최근 자료로 덮어쓰는 것인지 |
 | 경고의 지속 조건 | 한 번의 변동과 반복되는 변화를 어떻게 구분할지 |
-| 수집·작업 상태 | 누락, 처리 지연, 마지막 성공 시각과 실제 평가 행 수 |
+| 수집과 작업 상태 | 누락, 처리 지연, 마지막 성공 시각과 실제 평가 행 수 |
 
 표본이 없거나 너무 적으면 “드리프트 없음”보다 “평가할 자료 부족”으로 표현해야 한다. 수집이 멈췄는데 마지막 정상 보고서만 계속 보여 주면 서비스가 안정적이라는 잘못된 인상을 줄 수 있다.
 
-Prometheus에는 요청 수, 지연, 수집 오류, 작업 성공 시각과 같은 운영 지표를 내보낼 수 있다. 요청별 피처와 사용자·예측 ID를 모두 시계열 label로 넣는 방식은 다른 문제다. [Prometheus의 계측 지침](https://prometheus.io/docs/practices/instrumentation/)도 label 조합이 늘 때의 비용을 설명한다. 개별 예측 기록은 평가용 저장소에서, 집계된 운영 상태는 메트릭에서 다루는 역할 구분이 필요하다.
+Prometheus에는 요청 수, 지연, 수집 오류, 작업 성공 시각과 같은 운영 지표를 내보낼 수 있다. 요청별 피처, 사용자 ID, 예측 ID를 모두 시계열 label로 넣는 방식은 다른 문제다. [Prometheus의 계측 지침](https://prometheus.io/docs/practices/instrumentation/)도 label 조합이 늘 때의 비용을 설명한다. 개별 예측 기록은 평가용 저장소에서, 집계된 운영 상태는 메트릭에서 다루는 역할 구분이 필요하다.
 
 ### 정답은 나중에 연결할 수 있어야 한다
 
-입력 drift와 prediction drift는 정답 없이 계산할 수 있지만 정확도·오차는 실제 결과가 있어야 계산할 수 있다. [Evidently의 지연 정답 처리](https://docs-old.evidentlyai.com/user-guide/monitoring/batch_monitoring)는 입력 검사, 예측 변화, 정답 도착 후 성능 평가를 별도로 수행하는 흐름을 설명한다.
+입력 drift와 prediction drift는 정답 없이 계산할 수 있지만 정확도와 오차는 실제 결과가 있어야 계산할 수 있다. [Evidently의 지연 정답 처리](https://docs-old.evidentlyai.com/user-guide/monitoring/batch_monitoring)는 입력 검사, 예측 변화, 정답 도착 후 성능 평가를 별도로 수행하는 흐름을 설명한다.
 
 예측 ID와 모델 버전을 기준으로 결과를 연결하고, 결과가 충분히 도착한 예측 구간을 평가한다. 정답이 있는 일부 사례의 품질을 전체 트래픽의 품질로 바로 해석하지 말고 라벨 도착률과 평가 대상도 함께 남긴다. 이 소득 분류 예제에 `/predict`가 있다는 사실만으로 실제 소득 정답까지 수집되는 것은 아니다.
 
 ### 경고에서 대응으로 넘어가는 과정
 
-드리프트 경고는 조사할 근거이지 새 모델의 배포 승인 신호가 아니다. [Evidently의 대응 지침](https://www.evidentlyai.com/blog/ml-monitoring-data-drift-how-to-handle)도 수집·품질 오류를 먼저 확인하고, 변화의 의미에 따라 유지·재학습·재보정을 구분한다.
+드리프트 경고는 조사할 근거이지 새 모델의 배포 승인 신호가 아니다. [Evidently의 대응 지침](https://www.evidentlyai.com/blog/ml-monitoring-data-drift-how-to-handle)도 수집과 품질 오류를 먼저 확인하고, 변화의 의미에 따라 유지, 재학습, 재보정을 구분한다.
 
 | 조사 결과 | 대응 방향 |
 | --- | --- |
 | 로그 누락이나 collector 장애로 집단 비율이 달라짐 | 수집 경로 복구와 해당 구간 재평가 |
-| Feast 정의 변경 뒤 특정 피처가 결측으로 바뀜 | 피처·변환 경로 수정, 잘못된 입력의 처리 정책 적용 |
-| 계절성이나 알려진 사용자 구성 변화, 품질 유지 | 세부 집단 확인과 관측 지속, 필요하면 기준·경고 조건 검토 |
-| 새로운 집단에서 지속적인 품질 저하 | 필요한 라벨·데이터 확보, 후보 재학습과 같은 조건의 평가 |
+| Feast 정의 변경 뒤 특정 피처가 결측으로 바뀜 | 피처와 변환 경로 수정, 잘못된 입력의 처리 정책 적용 |
+| 계절성이나 알려진 사용자 구성 변화, 품질 유지 | 세부 집단 확인과 관측 지속, 필요하면 기준과 경고 조건 검토 |
+| 새로운 집단에서 지속적인 품질 저하 | 필요한 라벨과 데이터 확보, 후보 재학습과 같은 조건의 평가 |
 | 새 배포 뒤 오류나 잘못된 전처리가 증가 | 해당 배포 조사, 호환되는 이전 구성으로 복구 검토 |
 
 재학습을 자동으로 시작할 수는 있지만, 새 데이터의 검증과 기존 모델 대비 평가, 서비스 제약 확인, 배포 전환은 서로 다른 판단이다. 어떤 단계까지 자동화할지 정하지 않고 경고가 날 때마다 최신 모델을 바꾸면 데이터 오류를 학습하거나 더 나쁜 모델로 전환할 수 있다.
@@ -279,7 +298,7 @@ Prometheus에는 요청 수, 지연, 수집 오류, 작업 성공 시각과 같�
 
 이 장의 원본은 API 프로세스 안에서 피처를 모으고 보고서를 계산하는 교육용 경로를 보여 준다. 윈도우 계산을 이해하기에는 직접적이지만 여러 worker의 상태 공유, 재시작, 수집 누락과 요청 지연까지 해결한 구조는 아니다.
 
-아래 D-3에서 원본의 동작을 먼저 확인한 뒤, 운영에서는 관측용 피처 기록을 어느 지점에서 만들고 어떤 별도 작업이 평가할지 생각하면 된다. [7장의 데이터 계약](../07-data-preparation/#training-serving-contract)에서 다룰 스키마·전처리·데이터 버전은 이 비교가 같은 의미의 입력을 대상으로 하게 만드는 기반이다.
+아래 D-3에서 원본의 동작을 먼저 확인한 뒤, 운영에서는 관측용 피처 기록을 어느 지점에서 만들고 어떤 별도 작업이 평가할지 생각하면 된다. [7장의 데이터 계약](../07-data-preparation/#training-serving-contract)에서 다룰 스키마, 전처리, 데이터 버전은 이 비교가 같은 의미의 입력을 대상으로 하게 만드는 기반이다.
 
 ## 실습 순서 {#book-ch06-sop}
 
@@ -517,7 +536,7 @@ flowchart LR
 | 윈도우보다 표본이 적음 | 기다린다는 로그를 남기고 반환 |
 | 윈도우를 채움 | reference와 비교해 보고서 생성 |
 | 가득 찬 뒤 새 요청이 들어옴 | 최근 윈도우를 유지하고 다시 보고서 생성 |
-| 서비스 재시작 또는 worker 분리 | 윈도우는 프로세스 메모리 상태이므로 공유·보존되지 않음 |
+| 서비스 재시작 또는 worker 분리 | 윈도우는 프로세스 메모리 상태이므로 공유되거나 보존되지 않음 |
 
 윈도우 크기와 보고서 생성 간격은 다른 값이다. 원본은 윈도우를 채운 뒤 매 요청에서 검사를 다시 수행하며, 보고서 계산과 전송도 요청 경로 안에서 호출한다. 비동기 수집기나 별도 검사 작업으로 분리된 구조는 아니다.
 
@@ -555,10 +574,10 @@ HTTP 200과 드리프트 없음은 정확도 보증이 아니다. 분포가 바�
 
 ## 참고 자료
 
-- [Evidently 모니터링 구조](https://docs-old.evidentlyai.com/user-guide/monitoring/monitoring_overview), [배치·지연 정답 평가](https://docs-old.evidentlyai.com/user-guide/monitoring/batch_monitoring), [collector](https://docs-old.evidentlyai.com/user-guide/monitoring/collector_service): 온라인 예측과 별도 관측 작업의 연결.
+- [Evidently 모니터링 구조](https://docs-old.evidentlyai.com/user-guide/monitoring/monitoring_overview), [배치와 지연 정답 평가](https://docs-old.evidentlyai.com/user-guide/monitoring/batch_monitoring), [collector](https://docs-old.evidentlyai.com/user-guide/monitoring/collector_service): 온라인 예측과 별도 관측 작업의 연결.
 - [Azure ML 모델 모니터링](https://learn.microsoft.com/en-us/azure/machine-learning/concept-model-monitoring?view=azureml-api-2), [추론 데이터 수집](https://learn.microsoft.com/en-us/azure/machine-learning/concept-data-collection?view=azureml-api-2): 수집 지점, 기준 데이터, 윈도우와 예약 평가의 구체적인 예.
 - [Evidently의 드리프트 대응](https://www.evidentlyai.com/blog/ml-monitoring-data-drift-how-to-handle): 원인 조사와 재학습 외의 대응 선택지.
-- [출판사의 6장 개요](https://www.manning.com/preview/machine-learning-platform-engineering/chapter-6): BentoML·Yatai 서빙과 Evidently 관측의 장별 범위.
+- [출판사의 6장 개요](https://www.manning.com/preview/machine-learning-platform-engineering/chapter-6): BentoML과 Yatai를 이용한 서빙, Evidently 관측의 장별 범위.
 - [BentoML 1.1.10의 Service](https://github.com/bentoml/BentoML/blob/v1.1.10/docs/source/concepts/service.rst), [Runner](https://github.com/bentoml/BentoML/blob/v1.1.10/docs/source/concepts/runner.rst), [Bento](https://github.com/bentoml/BentoML/blob/v1.1.10/docs/source/concepts/bento.rst): 책에서 사용하는 버전의 책임과 실행 구조.
 - [Evidently 구버전의 드리프트 알고리즘](https://docs-old.evidentlyai.com/reference/data-drift-algorithm): 열별 검사와 데이터셋 수준 판정, 입력 조건.
 - [저자 chapter-6 README와 코드](https://github.com/practical-mlops/chapter-6/tree/890db04409cb3f48c4e493470d79095ec6ab63d6): BentoML 1.1.10, 기본 서비스와 Evidently 통합 경로.
@@ -568,4 +587,4 @@ HTTP 200과 드리프트 없음은 정확도 보증이 아니다. 분포가 바�
 
 이 장에서는 모델 파일을 가져오는 것보다 요청, 피처, 전처리와 모델 버전을 같은 실행으로 묶는 부분이 중요하다. 배포 이후에는 서비스 상태와 데이터 변화, 정답 기반 품질을 서로 다른 증거로 확인해야 한다.
 
-[이전: 04. 실험, 피처, 파이프라인](../04-experiments-features-pipelines/), [시리즈 목차](../), [다음: 07. 데이터 분석과 준비](../07-data-preparation/)
+[이전: 04~05. 실험, 피처, 파이프라인](../04-experiments-features-pipelines/), [시리즈 목차](../), [다음: 07. 데이터 분석과 준비](../07-data-preparation/)

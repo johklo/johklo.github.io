@@ -335,6 +335,35 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 self.assertIn("accTitle:", document)
                 self.assertIn("accDescr:", document)
 
+    def test_chapter_illustrations_have_descriptions_and_source_captions(self):
+        for chapter in (6, 7):
+            slug = next(
+                slug for slug, number in self.articles.items() if number == chapter
+            )
+            source = (SOURCE / f"{slug}.md").read_text(encoding="utf-8")
+            document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
+                encoding="utf-8"
+            )
+            parsed = PageLinks(document)
+            images = [
+                image for image in parsed.images
+                if image.get("src", "").startswith(
+                    "https://raw.githubusercontent.com/"
+                )
+            ]
+            with self.subTest(chapter=chapter):
+                self.assertNotIn("\u00b7", source)
+                self.assertGreaterEqual(len(images), 2)
+                self.assertTrue(all(
+                    image.get("alt", "").strip() for image in images
+                ))
+                captions = [
+                    paragraph for paragraph in parsed.paragraphs
+                    if paragraph.startswith(f"그림 {chapter}-")
+                ]
+                self.assertGreaterEqual(len(captions), len(images))
+                self.assertTrue(all("출처:" in caption for caption in captions))
+
     def test_chapters_publish_application_ui_without_rendered_log_images(self):
         expected = {
             1: [],
@@ -382,6 +411,10 @@ class MLPlatformPublicationTest(unittest.TestCase):
     def test_chapters_four_and_five_merge_into_one_architecture_article(self):
         merged = f"{SERIES_URL}04-experiments-features-pipelines/"
         document = self.page_path(merged).read_text(encoding="utf-8")
+        self.assertRegex(
+            document,
+            r"<h1\b[^>]*>\s*04~05\. 실험, 피처, 파이프라인 연결하기",
+        )
         self.assertGreaterEqual(PageLinks(document).mermaid_blocks, 5)
         for term in (
             "minio-service", "mlflow-artifacts", "inference-datasets",
