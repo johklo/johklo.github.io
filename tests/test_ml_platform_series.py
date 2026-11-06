@@ -301,8 +301,18 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertTrue(original.is_file(), f"Missing source image: {image['src']}")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
 
-    def test_chapters_six_and_seven_publish_accessible_mermaid_diagrams(self):
-        for chapter in (6, 7):
+    def test_chapters_six_and_seven_explain_concepts_before_the_workflows(self):
+        sections = {
+            6: (
+                "model-serving", "drift-concepts", "production-monitoring",
+                "book-ch06-sop",
+            ),
+            7: (
+                "notebook-concepts", "pipeline-data-concepts",
+                "dataset-concepts", "training-serving-contract", "book-ch07-sop",
+            ),
+        }
+        for chapter, anchors in sections.items():
             slug = next(
                 slug for slug, number in self.articles.items() if number == chapter
             )
@@ -310,7 +320,18 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 encoding="utf-8"
             )
             with self.subTest(chapter=chapter):
-                self.assertGreaterEqual(PageLinks(document).mermaid_blocks, 1)
+                parsed = PageLinks(document)
+                positions = []
+                for anchor in anchors:
+                    self.assertIn(anchor, parsed.ids)
+                    heading = re.search(
+                        rf'<h[1-6]\b[^>]*\bid=["\']?{re.escape(anchor)}\b',
+                        document,
+                    )
+                    self.assertIsNotNone(heading, f"No heading for {anchor}")
+                    positions.append(heading.start())
+                self.assertEqual(positions, sorted(positions))
+                self.assertGreaterEqual(parsed.mermaid_blocks, 1)
                 self.assertIn("accTitle:", document)
                 self.assertIn("accDescr:", document)
 
