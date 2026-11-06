@@ -87,7 +87,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             for path in SOURCE.glob("[0-9][0-9]-*.md")
         }
         cls.visible = {
-            slug for slug, chapter in cls.articles.items() if chapter <= 5
+            slug for slug, chapter in cls.articles.items() if chapter <= 7
         }
         cls.hidden = cls.articles.keys() - cls.visible
 
@@ -96,7 +96,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
         path = self.output / url_path.lstrip("/")
         return path / "index.html" if url_path.endswith("/") else path
 
-    def test_only_overview_and_first_five_chapters_are_published(self):
+    def test_only_overview_and_first_seven_chapters_are_published(self):
         # Chapters 4 and 5 are covered together in the 04 article.
         self.assertEqual(set(self.articles.values()), set(range(14)) - {5})
         for slug in self.articles:
@@ -262,7 +262,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
 
     def test_book_diagrams_have_sources_and_are_copied_to_the_site(self):
         for slug in self.visible:
-            if self.articles[slug] == 0:
+            if self.articles[slug] not in {1, 2, 3, 4}:
                 continue
             document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
                 encoding="utf-8"
@@ -300,6 +300,19 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertTrue(output.is_file(), f"Missing published image: {image['src']}")
                     self.assertTrue(original.is_file(), f"Missing source image: {image['src']}")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
+
+    def test_chapters_six_and_seven_publish_accessible_mermaid_diagrams(self):
+        for chapter in (6, 7):
+            slug = next(
+                slug for slug, number in self.articles.items() if number == chapter
+            )
+            document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
+                encoding="utf-8"
+            )
+            with self.subTest(chapter=chapter):
+                self.assertGreaterEqual(PageLinks(document).mermaid_blocks, 1)
+                self.assertIn("accTitle:", document)
+                self.assertIn("accDescr:", document)
 
     def test_chapters_publish_application_ui_without_rendered_log_images(self):
         expected = {

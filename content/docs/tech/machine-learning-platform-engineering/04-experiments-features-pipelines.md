@@ -593,4 +593,4 @@ python run_pipeline_study.py
 
 책 코드대로 실행하는 과정과 운영에 필요한 보완을 구분해 보면, MLflow와 Feast, KFP가 자동으로 모든 것을 연결해 주는 도구는 아니라는 점이 보인다. 각 단계가 다음 단계에 무엇을 넘기는지 확인하고, 그 연결을 기록으로 남기는 것이 이 두 장에서 가져갈 핵심이다.
 
-[이전: 03. Kubernetes 기반](../03-kubernetes-foundation/), [시리즈 목차](../)
+[이전: 03. Kubernetes 기반](../03-kubernetes-foundation/), [시리즈 목차](../), [다음: 06. 모델을 프로덕션으로](../06-productionizing-models/)
