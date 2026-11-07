@@ -251,21 +251,25 @@ class MLPlatformPublicationTest(unittest.TestCase):
                         PageLinks(page.read_text(encoding="utf-8")).ids,
                     )
 
-    def test_book_explanations_keep_execution_references_collapsed(self):
-        for slug in (
-            "04-experiments-features-pipelines",
-            "06-productionizing-models", "07-data-preparation",
+    def test_book_explanations_keep_visible_practice_after_concepts(self):
+        for slug, anchor in (
+            ("04-experiments-features-pipelines", "book-lab-sop"),
         ):
             with self.subTest(chapter=slug):
                 document = self.page_path(
                     f"{SERIES_URL}{slug}/"
                 ).read_text(encoding="utf-8")
                 parsed = PageLinks(document)
-                self.assertEqual(len(parsed.details), 1)
-                self.assertNotIn("open", parsed.details[0])
-                before, reference = document.split("<details", 1)
-                self.assertRegex(before, r"<h2\b")
-                self.assertRegex(reference, r"<pre\b")
+                self.assertEqual(parsed.details, [])
+                self.assertIn(anchor, parsed.ids)
+                before, practice = re.split(
+                    rf'id="?{anchor}"?[\s>]', document, maxsplit=1
+                )
+                self.assertGreaterEqual(len(re.findall(r"<h2\b", before)), 3)
+                self.assertRegex(practice, r"<pre\b")
+                self.assertRegex(
+                    practice, r'<img[^>]+src="?/images/ml-platform-engineering/sop/'
+                )
 
     def test_lab_lessons_publish_complete_bodies_beneath_the_overview(self):
         tech_source = ROOT / "content" / "docs" / "tech"
