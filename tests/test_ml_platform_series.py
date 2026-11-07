@@ -132,7 +132,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             indexed.update(url for url in data if url.startswith(SERIES_URL))
         self.assertEqual(
             indexed,
-            {SERIES_URL} | {
+            {SERIES_URL, f"{SERIES_URL}lab-guide/"} | {
                 f"{SERIES_URL}{slug}/" for slug in self.visible
             },
         )
@@ -213,7 +213,12 @@ class MLPlatformPublicationTest(unittest.TestCase):
         ))
 
     def test_book_guide_is_sequential_and_reachable_with_working_links(self):
-        url = "/docs/tech/ops/mlops/labs/book-01-13-guide/"
+        url = f"{SERIES_URL}lab-guide/"
+        old_url = "/docs/tech/ops/mlops/labs/book-01-13-guide/"
+        self.assertIn(
+            f"https://johklo.github.io{url}",
+            self.page_path(old_url).read_text(encoding="utf-8"),
+        )
         document = self.page_path(url).read_text(encoding="utf-8")
         parsed = PageLinks(document)
         positions = []
@@ -226,7 +231,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertIn("verification-scope", parsed.ids)
         for entry in (
-            "/docs/tech/ops/mlops/labs/", f"{SERIES_URL}00-overview/",
+            "/docs/tech/ops/mlops/labs/", f"{SERIES_URL}00-overview/", SERIES_URL,
         ):
             links = PageLinks(
                 self.page_path(entry).read_text(encoding="utf-8")
