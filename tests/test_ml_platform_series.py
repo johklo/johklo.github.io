@@ -259,6 +259,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
     def test_book_explanations_keep_visible_practice_after_concepts(self):
         for slug, anchor in (
             ("04-experiments-features-pipelines", "book-lab-sop"),
+            ("06-productionizing-models", "book-ch06-sop"),
             ("07-data-preparation", "book-ch07-sop"),
         ):
             with self.subTest(chapter=slug):
