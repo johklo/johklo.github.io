@@ -15,6 +15,8 @@ sidebar:
 
 「MLflow와 Azure Machine Learning」과 「ML 플랫폼 엔지니어링 통합 실습」을 합쳤다. 기존 주소는 이 아래의 새 주소로 연결되며, 도구 설치부터 익히려면 [도구 기초 가이드](/docs/tech/ops/mlops/basics/)를 먼저 본다.
 
+책의 순서대로 준비부터 실행하려면 [책 1~13장 순차 실습 가이드](book-01-13-guide/)를 사용한다. 한 작업 폴더에 데이터, 후보, 평가와 출시를 이어 만들며, 실행으로 확인한 로컬 경로와 아직 검증이 남은 책의 원본 경로를 구분했다.
+
 ```mermaid
 flowchart LR
     accTitle: MLOps 실습의 두 부분

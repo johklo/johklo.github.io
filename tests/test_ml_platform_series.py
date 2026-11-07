@@ -27,6 +27,7 @@ class PageLinks(HTMLParser):
         self.scripts = []
         self.inputs = []
         self.mermaid_blocks = 0
+        self.details = []
         self.feed(html)
 
     def handle_starttag(self, tag, attrs):
@@ -35,6 +36,8 @@ class PageLinks(HTMLParser):
             self.mermaid_blocks += 1
         if tag == "input":
             self.inputs.append(attrs)
+        if tag == "details":
+            self.details.append(attrs)
         if tag == "a" and attrs.get("href"):
             self.links.append(attrs["href"])
         if attrs.get("id"):
@@ -208,6 +211,61 @@ class MLPlatformPublicationTest(unittest.TestCase):
         self.assertTrue(any(
             url in json.loads(path.read_text(encoding="utf-8")) for path in indexes
         ))
+
+    def test_book_guide_is_sequential_and_reachable_with_working_links(self):
+        url = "/docs/tech/ops/mlops/labs/book-01-13-guide/"
+        document = self.page_path(url).read_text(encoding="utf-8")
+        parsed = PageLinks(document)
+        positions = []
+        for chapter in range(1, 14):
+            anchor = f"chapter-{chapter:02}"
+            self.assertIn(anchor, parsed.ids)
+            heading = re.search(rf'<h2\b[^>]*\bid=["\']?{anchor}\b', document)
+            self.assertIsNotNone(heading)
+            positions.append(heading.start())
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("verification-scope", parsed.ids)
+        for entry in (
+            "/docs/tech/ops/mlops/labs/", f"{SERIES_URL}00-overview/",
+        ):
+            links = PageLinks(
+                self.page_path(entry).read_text(encoding="utf-8")
+            ).links
+            resolved = {
+                urlsplit(urljoin(f"https://johklo.github.io{entry}", href)).path
+                for href in links
+            }
+            self.assertIn(url, resolved)
+        for href in parsed.links:
+            target = urlsplit(urljoin(f"https://johklo.github.io{url}", href))
+            if target.netloc != "johklo.github.io":
+                continue
+            with self.subTest(link=href):
+                page = self.page_path(target.path)
+                if page.is_dir():
+                    page = page / "index.html"
+                self.assertTrue(page.is_file())
+                if target.fragment:
+                    self.assertIn(
+                        unquote(target.fragment),
+                        PageLinks(page.read_text(encoding="utf-8")).ids,
+                    )
+
+    def test_book_explanations_keep_execution_references_collapsed(self):
+        for slug in (
+            "04-experiments-features-pipelines",
+            "06-productionizing-models", "07-data-preparation",
+        ):
+            with self.subTest(chapter=slug):
+                document = self.page_path(
+                    f"{SERIES_URL}{slug}/"
+                ).read_text(encoding="utf-8")
+                parsed = PageLinks(document)
+                self.assertEqual(len(parsed.details), 1)
+                self.assertNotIn("open", parsed.details[0])
+                before, reference = document.split("<details", 1)
+                self.assertRegex(before, r"<h2\b")
+                self.assertRegex(reference, r"<pre\b")
 
     def test_lab_lessons_publish_complete_bodies_beneath_the_overview(self):
         tech_source = ROOT / "content" / "docs" / "tech"
