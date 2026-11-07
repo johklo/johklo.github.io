@@ -46,7 +46,7 @@ ML 프로젝트를 한 번 끝내는 작업이 아니라 계속 돌아오는 생
 
 | 글 | 원문 챕터 | 핵심 쟁점 |
 | --- | --- | --- |
-| [04. 실험, 피처, 파이프라인](../04-experiments-features-pipelines/) | Designing reliable ML systems, Orchestrating ML pipelines | 모델 버전과 피처 정의를 배치 추론까지 잇는 저장소 구성 |
+| [04~05. 실험, 피처, 파이프라인](../04-experiments-features-pipelines/) | Designing reliable ML systems, Orchestrating ML pipelines | 모델 버전과 피처 정의를 배치 추론까지 잇는 저장소 구성 |
 | 06. 모델의 프로덕션화 | Productionizing ML models | 배포 후 입력 변화의 감지 |
 
 ### Part 3. 실제 프로젝트에 적용 (7~11장)

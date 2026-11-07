@@ -87,7 +87,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             for path in SOURCE.glob("[0-9][0-9]-*.md")
         }
         cls.visible = {
-            slug for slug, chapter in cls.articles.items() if chapter <= 5
+            slug for slug, chapter in cls.articles.items() if chapter <= 7
         }
         cls.hidden = cls.articles.keys() - cls.visible
 
@@ -96,7 +96,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
         path = self.output / url_path.lstrip("/")
         return path / "index.html" if url_path.endswith("/") else path
 
-    def test_only_overview_and_first_five_chapters_are_published(self):
+    def test_only_overview_and_first_seven_chapters_are_published(self):
         # Chapters 4 and 5 are covered together in the 04 article.
         self.assertEqual(set(self.articles.values()), set(range(14)) - {5})
         for slug in self.articles:
@@ -262,7 +262,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
 
     def test_book_diagrams_have_sources_and_are_copied_to_the_site(self):
         for slug in self.visible:
-            if self.articles[slug] == 0:
+            if self.articles[slug] not in {1, 2, 3, 4}:
                 continue
             document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
                 encoding="utf-8"
@@ -300,6 +300,69 @@ class MLPlatformPublicationTest(unittest.TestCase):
                     self.assertTrue(output.is_file(), f"Missing published image: {image['src']}")
                     self.assertTrue(original.is_file(), f"Missing source image: {image['src']}")
                     self.assertEqual(output.read_bytes(), original.read_bytes())
+
+    def test_chapters_six_and_seven_explain_concepts_before_the_workflows(self):
+        sections = {
+            6: (
+                "model-serving", "drift-concepts", "production-monitoring",
+                "book-ch06-sop",
+            ),
+            7: (
+                "notebook-concepts", "pipeline-data-concepts",
+                "dataset-concepts", "training-serving-contract", "book-ch07-sop",
+            ),
+        }
+        for chapter, anchors in sections.items():
+            slug = next(
+                slug for slug, number in self.articles.items() if number == chapter
+            )
+            document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
+                encoding="utf-8"
+            )
+            with self.subTest(chapter=chapter):
+                parsed = PageLinks(document)
+                positions = []
+                for anchor in anchors:
+                    self.assertIn(anchor, parsed.ids)
+                    heading = re.search(
+                        rf'<h[1-6]\b[^>]*\bid=["\']?{re.escape(anchor)}\b',
+                        document,
+                    )
+                    self.assertIsNotNone(heading, f"No heading for {anchor}")
+                    positions.append(heading.start())
+                self.assertEqual(positions, sorted(positions))
+                self.assertGreaterEqual(parsed.mermaid_blocks, 1)
+                self.assertIn("accTitle:", document)
+                self.assertIn("accDescr:", document)
+
+    def test_chapter_illustrations_have_descriptions_and_source_captions(self):
+        for chapter in (6, 7):
+            slug = next(
+                slug for slug, number in self.articles.items() if number == chapter
+            )
+            source = (SOURCE / f"{slug}.md").read_text(encoding="utf-8")
+            document = self.page_path(f"{SERIES_URL}{slug}/").read_text(
+                encoding="utf-8"
+            )
+            parsed = PageLinks(document)
+            images = [
+                image for image in parsed.images
+                if image.get("src", "").startswith(
+                    "https://raw.githubusercontent.com/"
+                )
+            ]
+            with self.subTest(chapter=chapter):
+                self.assertNotIn("\u00b7", source)
+                self.assertGreaterEqual(len(images), 2)
+                self.assertTrue(all(
+                    image.get("alt", "").strip() for image in images
+                ))
+                captions = [
+                    paragraph for paragraph in parsed.paragraphs
+                    if paragraph.startswith(f"그림 {chapter}-")
+                ]
+                self.assertGreaterEqual(len(captions), len(images))
+                self.assertTrue(all("출처:" in caption for caption in captions))
 
     def test_chapters_publish_application_ui_without_rendered_log_images(self):
         expected = {
@@ -348,6 +411,10 @@ class MLPlatformPublicationTest(unittest.TestCase):
     def test_chapters_four_and_five_merge_into_one_architecture_article(self):
         merged = f"{SERIES_URL}04-experiments-features-pipelines/"
         document = self.page_path(merged).read_text(encoding="utf-8")
+        self.assertRegex(
+            document,
+            r"<h1\b[^>]*>\s*04~05\. 실험, 피처, 파이프라인 연결하기",
+        )
         self.assertGreaterEqual(PageLinks(document).mermaid_blocks, 5)
         for term in (
             "minio-service", "mlflow-artifacts", "inference-datasets",
