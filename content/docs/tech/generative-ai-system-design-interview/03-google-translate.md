@@ -1,113 +1,432 @@
 ---
 title: "03. Google Translate"
-description: "A translation service built on encoder-decoder Transformers: BPE across languages, denoising pretraining, bilingual versus multilingual finetuning, and why BLEU is not enough."
+description: "A translation service built on encoder-decoder Transformers: requirements, cross-lingual BPE, denoising pretraining, bilingual versus multilingual finetuning, beam search, BLEU and its successors, serving estimates and interview questions."
 date: 2026-11-08T18:00:00+09:00
+lastmod: 2026-11-08T20:30:00+09:00
 weight: 30
 draft: false
 tags: ["book-club", "genai-system-design", "machine-translation", "encoder-decoder", "evaluation-metrics"]
 ---
 
-A translation service takes text in one language and returns the same meaning in another, across several language pairs, and figures out on its own what language the user typed. Meaning, names and tone must survive even when word order and grammar differ completely. Unlike autocomplete, the whole source sentence is available before any output is written, which pushes the design toward an architecture that reads first and writes second. The main tension is accuracy per language pair versus the cost of running and maintaining many models.
+A translation service takes text in one language and returns the same meaning in another. Names, numbers and register have to survive while the two languages disagree on word order, morphology, gender and politeness. Korean puts the verb last and drops subjects; French inflects adjectives for gender. Word substitution fails on both.
+
+Unlike autocomplete or chat, the whole source is available before any output is written. That favors a reader with two-sided context, a separate left-to-right writer, and a link letting each output word consult the source words it depends on.
+
+The core tension is per-pair quality against the cost of owning many models. Every direction wants the best accuracy, but each extra model is another thing to train, evaluate, deploy and monitor. How many languages you support and how much parallel data each pair has decide where you land.
 
 ## Requirements that change the design
 
-- How many languages? A handful of pairs makes per-pair models affordable; hundreds push you to one multilingual model.
-- How much parallel data, and is there monolingual text? Plenty of sentence pairs supports supervised finetuning. Large monolingual corpora make pretraining worthwhile and help low-resource pairs.
-- Does the user name the source language? If not, a language detector sits in front, and its mistakes become translation mistakes.
-- Maximum input length? About a thousand words fits standard attention. Whole documents need chunking or efficient attention.
-- Cloud or on-device? On-device means a small quantized model.
-- Real time? Live speech needs streaming decoding; a text box does not.
+Language count is the biggest lever: four languages give 12 directed pairs, fifty give 2,450. Whether the source is detected matters because detector mistakes become translation mistakes, and streaming would change the encoder entirely. Assumed setup for the rest of this note: English, Spanish, French and Korean; about 300 million aligned pairs; plenty of monolingual text; automatic detection; inputs up to about 1,000 words; cloud serving; no streaming in v1.
 
-The chapter settles on four languages (English, Spanish, Korean, French), about 300 million sentence pairs, plenty of monolingual text, automatic detection, inputs up to 1,000 words, and cloud serving without real-time needs.
+| Requirement | Assumed value | Design decision |
+|---|---|---|
+| Languages | 4, may grow | Bilingual models now, keep a path to multilingual |
+| Parallel data | ~300M pairs | Supervised finetuning is the main quality lever |
+| Monolingual data | Abundant | Public pretrained checkpoint; back-translation |
+| Source language | Detected | Language-ID classifier with confidence and fallback |
+| Max input | ~1,000 words | Full attention; sentence splitting for batching efficiency |
+| Deployment | Cloud GPU | Beam search affordable; fp16 or int8 inference |
+| Real time | No | Fully bidirectional encoder, no wait-k policy |
 
-## Framing as sequence-to-sequence
+## Framing as an ML task
 
-Input: source tokens plus the requested target language. Output: target tokens of any length. This is seq2seq, the same shape as summarization or speech recognition.
+Input: source tokens plus a target-language identifier. Output: target tokens whose length is not tied to the input length. This is sequence-to-sequence generation, trained to maximize
 
-An encoder-decoder Transformer fits. The encoder reads the full source with bidirectional attention, so each token sees context on both sides. The decoder writes left to right and uses cross-attention to look back at whichever source tokens matter for the current word. Attention was first proposed for this exact problem ([Bahdanau et al., 2014](https://arxiv.org/abs/1409.0473)), and Transformers displaced LSTM and GRU encoders by handling long-range reordering better and training in parallel.
+$$
+P(y \mid x) = \prod_{t=1}^{T} P(y_t \mid y_{<t}, x)
+$$
 
-A prompted decoder-only LLM can translate too, but encoder-decoder splits understanding from generation, handles differing lengths naturally and reaches strong quality at a far smaller size. Encoder-only models do not generate; they return later as the language detector.
+where \(x\) is the full source sequence, \(y_t\) the target token at step \(t\), \(y_{<t}\) the tokens already produced, and \(T\) the output length, ended when the model emits an end-of-sequence token. That asks for an encoder summarizing \(x\) and a decoder predicting from that summary plus its own history.
 
-## Data preparation and BPE across languages
+| Option | Strengths | Why it loses here |
+|---|---|---|
+| Phrase-based statistical MT | Interpretable, cheap | Brittle with long-distance reordering such as English to Korean |
+| RNN encoder-decoder with attention | First neural approach that worked well | Sequential training, weaker on long sentences |
+| Encoder-decoder Transformer | Parallel training, strong reordering, cheap to serve | Chosen |
+| Decoder-only LLM with a prompt | Broad coverage, zero-shot pairs, follows instructions | Needs far more parameters for the same quality; higher cost; may answer instead of translate |
+| Encoder-only (BERT style) | Strong classifier | Cannot generate; reused as the language detector |
 
-Monolingual web text such as C4 and Wikipedia is filtered to keep only the supported languages and used for pretraining. Parallel pairs are used for finetuning and need their own cleaning: drop pairs with an empty side, markup or the wrong language, deduplicate, and swap named entities for numbered placeholders that get restored after translation, so rare names are not mangled.
+Attention was invented for translation ([Bahdanau et al., 2014](https://arxiv.org/abs/1409.0473)) so a recurrent decoder would not have to squeeze the source into one vector. The Transformer ([Vaswani et al., 2017](https://arxiv.org/abs/1706.03762)) kept attention, dropped recurrence and made training parallel.
 
-Skip classic NLP normalization. Lowercasing, stop-word or punctuation removal, stemming and lemmatizing all strip information the model has to reproduce in its output.
+## Data
 
-Tokenization matters more than in a single-language system, since a word-level vocabulary across four languages and two scripts would be huge and still miss inflected forms. Byte-Pair Encoding starts from characters plus an end-of-word marker, counts adjacent symbol pairs across the corpus, merges the most frequent pair into a new symbol, and repeats until it hits a target vocabulary size. Common words become single tokens, rare ones split into known pieces, and the end-of-word marker distinguishes a whole word from the same letters inside a longer one. The result is one table per language pair, each row a pair of token-ID sequences.
+### Sources
 
-## Model and two-stage training
+- **Monolingual text** per language: filtered web crawl, Wikipedia, news. Used for pretraining and back-translation.
+- **Parallel corpora**: public proceedings and subtitle collections, mined web pairs (ParaCrawl, CCMatrix style), licensed human translations, and later vetted user corrections.
 
-Both halves use token embeddings, sine-cosine positional encodings, and stacked attention and feed-forward blocks. They differ in three places: encoder self-attention is unmasked while the decoder's is causal; each decoder block adds cross-attention with queries from the decoder and keys and values from the encoder; only the decoder has a prediction head. At 1,000 words, standard attention suffices.
+Parallel data is uneven: English-Spanish is rich, Korean-French scarce, and that gap reappears as a quality gap.
 
-Pretraining cannot use plain next-token prediction: if the encoder sees the whole sentence, the decoder can simply copy it. Instead some encoder input tokens are masked and the decoder must reconstruct the original, with cross-entropy computed on the masked positions. This is the denoising idea behind [T5](https://arxiv.org/abs/1910.10683) and [BART](https://arxiv.org/abs/1910.13461). Pretraining is expensive, so in practice you start from a public checkpoint such as T5, BART, mT5 or mBART.
+### Cleaning parallel pairs
 
-Finetuning is supervised on parallel pairs. The encoder reads the source; the decoder receives the target shifted right behind a start token and predicts each next target token, with cross-entropy over all positions at once.
+Models learn to copy misalignments, so noise hurts. Watch also for benchmark sentences leaking in through crawls, and for over-filtering that leaves only literal translations.
 
-The decision worth discussing is how many models to finetune. Per-pair (bilingual) models give the best accuracy per pair and can be fixed in isolation, but their count grows quadratically with languages. One multilingual model is a single deployment, helps low-resource languages and enables zero-shot pairs, at some cost on top pairs. The chapter picks bilingual since accuracy is the priority and there are only four languages; with dozens, the economics flip.
+1. Drop pairs with an empty side or an extreme length ratio.
+2. Run language ID on both sides; drop wrong-language pairs and identical source-target copies, which teach the model to echo input.
+3. Strip markup and encoding garbage; apply Unicode NFC so composed and decomposed Hangul match.
+4. Deduplicate, and remove anything that appears in evaluation sets.
+5. Score alignment with a cross-lingual sentence embedding (LASER or LaBSE style) and drop low-similarity pairs.
+6. Mask personal data and filter toxic content.
 
-## Decoding
+Skip classic normalization. Lowercasing, removing punctuation or stop words, and stemming all erase information the model must reproduce, such as capitalized names and gender or tense endings.
 
-Translation wants the most faithful output, every time. Beam search keeps several candidate translations alive, returns the highest-scoring one and is deterministic. Sampling methods add diversity translation does not need. Length normalization in the beam score is worth mentioning, since raw log-probability favors short outputs.
+**Entities and numbers.** One option is to replace names, numbers and URLs with numbered placeholders before translation and restore them afterward. It protects rare strings but can break grammar: Korean particles change depending on whether a name ends in a consonant, so a restored raw name may get the wrong particle. A practical split is placeholders for numbers, URLs and code, inline translation for names, and a post-check that every entity survived.
 
-## Evaluation: overlap metrics and their blind spots
+### Tokenization with BPE
 
-Offline metrics compare output with human reference translations. BLEU is n-gram precision (usually up to 4-grams) combined with a geometric mean and a brevity penalty so terse outputs cannot score well. It is cheap and standard but punishes correct translations that use other words. ROUGE is the recall counterpart, the share of reference n-grams found in the output, with the same synonym blind spot. METEOR aligns words by exact form, stem and synonym (for example via WordNet), blends precision and recall, and penalizes scrambled order; it tracks human judgment better but is slower and needs linguistic resources some languages lack. Learned metrics such as COMET and human ratings cover the rest, reported per pair and domain.
+A word vocabulary across four languages and two scripts would be enormous and still miss inflected forms. Characters avoid that but make sequences four to five times longer. Byte-pair encoding ([Sennrich et al., 2016](https://arxiv.org/abs/1508.07909)) sits in between:
 
-Online, collect ratings and suggested edits, and track translation volume, return rate and copy rate.
+1. Split words into characters plus an end-of-word marker, so a trailing piece differs from the same letters mid-word.
+2. Count adjacent symbol pairs, weighted by word frequency.
+3. Merge the most frequent pair into a new symbol and record the merge.
+4. Repeat until the vocabulary reaches its target (32k to 64k per pair is common).
 
-## The serving path
+My own toy example: "run" appears 6 times, "runs" 3 times, "running" 4 times. The pair (r, u) occurs 13 times and merges first, then (ru, n) also 13 times, giving `run`. Later merges build `ning</w>`. An unseen word like "rerunning" still splits into known pieces, `re` + `run` + `ning</w>`. Nothing becomes unknown; rare words just cost more tokens.
+
+A joint vocabulary helps same-script pairs (shared names, tied embeddings) but gains little for English-Korean. Byte fallback covers emoji and rare Hanja. Check token fertility: if Korean needs twice the tokens, it pays twice the attention cost.
+
+Store tokenized shards per direction with metadata (corpus, alignment score, domain), plus raw text for re-tokenization.
 
 ```mermaid
 flowchart LR
-  accTitle: Translation service request flow
-  accDescr: User text has named entities masked, then goes to an encoder-only language detector. The detected source and requested target select a pair-specific encoder-decoder model, which runs beam search. Tokens are converted back to text, entities restored, and the translation returned. Ratings and edits are logged for later finetuning.
-  U[Text + target language] --> NE[Mask entities]
-  NE --> LD[Language detector]
-  LD --> R{Route by source and target}
-  R --> M1[EN-FR model]
-  R --> M2[EN-KO model]
-  R --> M3[Other pair models]
-  M1 --> B[Beam search]
-  M2 --> B
-  M3 --> B
-  B --> D[Detokenize, restore entities]
-  D --> O[Translation]
-  O -. ratings and edits .-> FB[(Feedback store)]
+  accTitle: Translation data pipeline
+  accDescr: Monolingual crawl and parallel corpora pass through language ID, cleaning, alignment scoring, deduplication and PII filtering. The cleaned text trains a BPE tokenizer and is stored as tokenized shards for pretraining, per-pair finetuning and held-out evaluation.
+  A["Monolingual crawl"] --> LID["Language ID filter"]
+  B["Parallel corpora"] --> LID
+  LID --> CL["Clean: markup, length ratio, Unicode"]
+  CL --> AL["Alignment score filter"]
+  AL --> DD["Dedup and eval decontamination"]
+  DD --> PII["PII and toxicity filter"]
+  PII --> TOK["Train BPE tokenizer"]
+  TOK --> SH["Tokenized shards with metadata"]
+  SH --> PT[("Pretraining set")]
+  SH --> FT[("Per-pair finetuning sets")]
+  SH --> EV[("Held-out eval sets")]
 ```
 
-The language detector is a sequence classifier: an encoder-only Transformer whose outputs are average-pooled (or read from one designated token) and fed to a softmax over languages. Very short inputs are its hardest case.
+## Model architecture
 
-The translation service routes to the pair model, runs beam search, detokenizes and restores entities. Without a direct pair model, pivoting through English is a fallback. Caching frequent phrases and batching per model cut cost.
+```mermaid
+flowchart TB
+  accTitle: Encoder-decoder Transformer internals
+  accDescr: Source tokens get embeddings and positions, then pass through N encoder blocks of unmasked self-attention and feed-forward layers. Target tokens shifted right pass through N decoder blocks of causal self-attention, cross-attention over the encoder output, and feed-forward layers, then a linear layer and softmax give next-token probabilities.
+  S["Source tokens"] --> SE["Embedding + positional encoding"]
+  SE --> ESA["Encoder self-attention, unmasked"]
+  ESA --> EFF["Encoder feed-forward"]
+  EFF --> EO["Encoder output H, N blocks"]
+  T["Target tokens shifted right"] --> TE["Embedding + positional encoding"]
+  TE --> DSA["Decoder self-attention, causal mask"]
+  DSA --> CA["Cross-attention: Q from decoder, K and V from H"]
+  EO --> CA
+  CA --> DFF["Decoder feed-forward, N blocks"]
+  DFF --> LIN["Linear to vocabulary"]
+  LIN --> SM["Softmax: next-token distribution"]
+```
+
+Every attention layer computes
+
+$$
+\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)V
+$$
+
+where \(Q\), \(K\), \(V\) are linear projections of the inputs, \(d_k\) is the key dimension that keeps dot products in a stable range, and \(M\) adds \(-\infty\) at forbidden positions.
+
+The three uses differ in where \(Q\), \(K\), \(V\) come from and what \(M\) blocks:
+
+- **Encoder self-attention**: all from the source, no mask. "bank" can see "river" three words later.
+- **Decoder self-attention**: all from the target prefix, future positions masked so training matches left-to-right generation.
+- **Cross-attention**: \(Q\) from the decoder, \(K\) and \(V\) from encoder output \(H\). This is where alignment happens; when the decoder writes a Korean sentence-final verb, its weights concentrate on the English verb near the start.
+
+Blocks add residuals, layer norm and a feed-forward layer; only the decoder has a prediction head.
+
+**Design knobs.**
+
+- **Depth split.** Quality leans on the encoder; latency on the decoder, which runs once per output token. A 12-layer encoder with a 2-layer decoder keeps most of the quality and decodes much faster ([Kasai et al., 2020](https://arxiv.org/abs/2006.10369)).
+- **Size.** Transformer-base (~65M params) is a solid bilingual baseline; with 300M pairs, a "big" model or a 400-600M pretrained checkpoint is justified.
+- **Length.** 1,000 words is roughly 1,300 to 2,000 subwords, fine for full attention. You still split by sentence to batch efficiently, carrying one or two previous sentences as context.
+
+## Training
+
+```mermaid
+flowchart LR
+  accTitle: Two-stage training flow
+  accDescr: Monolingual text feeds denoising pretraining, or a public checkpoint replaces it. Pretrained weights are finetuned on parallel pairs plus back-translated pairs, producing bilingual models or one multilingual model. Candidates are evaluated per pair and distilled into a smaller serving model.
+  MONO[("Monolingual text")] --> DN["Denoising pretraining"]
+  CK["Public checkpoint: mT5 or mBART"] --> PW["Pretrained weights"]
+  DN --> PW
+  PAR[("Parallel pairs")] --> SFT["Supervised finetuning"]
+  BT["Back-translated pairs"] --> SFT
+  PW --> SFT
+  SFT --> BI["Bilingual model per direction"]
+  SFT --> MU["Or one multilingual model"]
+  BI --> EVAL["Offline eval per pair"]
+  MU --> EVAL
+  EVAL --> KD["Distill to serving model"]
+```
+
+### Stage 1: denoising pretraining
+
+Next-token prediction on monolingual text fails for an encoder-decoder: if the encoder sees the sentence the decoder must produce, cross-attention just copies it. So the encoder input is corrupted and the decoder must recover the original. T5 masks spans and predicts only them ([Raffel et al., 2019](https://arxiv.org/abs/1910.10683)); BART and mBART mask spans, shuffle sentences and reconstruct everything ([Lewis et al., 2019](https://arxiv.org/abs/1910.13461); [Liu et al., 2020](https://arxiv.org/abs/2001.08210)).
+
+$$
+\mathcal{L}_{\text{denoise}} = -\sum_{t \in \mathcal{S}} \log P_\theta\!\left(x_t \mid \tilde{x}, x_{<t}\right)
+$$
+
+\(\tilde{x}\) is the corrupted encoder input, \(x_t\) an original token, and \(\mathcal{S}\) the positions the loss counts (masked spans for T5, the whole sequence for BART). Pretraining from scratch costs thousands of GPU-days, so for four languages start from mT5 or mBART-50.
+
+### Stage 2: supervised finetuning
+
+The encoder reads the source; the decoder gets the reference shifted right behind a start token (teacher forcing) and predicts every next token in parallel, usually with label smoothing:
+
+$$
+\mathcal{L}_{\text{MT}} = -\sum_{t=1}^{T} \sum_{v \in V} q_t(v) \log P_\theta(v \mid y_{<t}, x), \quad q_t(v) = (1-\epsilon)\,\mathbb{1}[v = y_t] + \frac{\epsilon}{|V|}
+$$
+
+\(V\) is the vocabulary, \(y_t\) the reference token and \(\epsilon\) (typically 0.1) the probability mass spread evenly. Smoothing slightly raises perplexity but improves BLEU, because an overconfident model makes beam search worse. The target language is signaled with a tag such as `<2ko>` on the source or as the decoder start token.
+
+### Bilingual or multilingual
+
+| Criterion | Bilingual per direction | One multilingual model | English pivot |
+|---|---|---|---|
+| Models for 4 languages | 12 | 1 | 6 |
+| High-resource quality | Best | Slightly lower | Lower, errors compound |
+| Low-resource quality | Weak without transfer | Better via sharing | Depends on both legs |
+| Zero-shot directions | None | Possible, often mediocre | Always |
+| Fixing one pair | Isolated retrain | Touches all pairs | Two models to inspect |
+| Scales to 50+ languages | No | Yes | Yes, English-centric |
+
+Four languages, plenty of data and an accuracy priority justify bilingual models with contained regressions. As languages grow, owning \(n(n-1)\) models dominates cost and low-resource pairs gain more from sharing than top pairs lose, which is why large systems went multilingual ([Johnson et al., 2017](https://arxiv.org/abs/1611.04558); [NLLB, 2022](https://arxiv.org/abs/2207.04672)). A multilingual model samples pair \(i\) with probability proportional to \(D_i^{1/\tau}\), where \(D_i\) is the pair's data size; \(\tau = 5\) up-samples small pairs compared with \(\tau = 1\).
+
+**Back-translation** ([Sennrich et al., 2016b](https://arxiv.org/abs/1511.06709)) turns monolingual target text into training pairs: a reverse Korean-to-English model translates real Korean, and the (synthetic English, real Korean) pairs train English-to-Korean. The decoder always sees fluent real text; the noise sits on the encoder side. Tag synthetic pairs and start around a 1:1 ratio with real data.
+
+**Efficiency.** bf16 mixed precision, token-budget batching by length, sharded data parallelism (enough below a billion parameters), gradient checkpointing for long documents, checkpoint averaging.
+
+### Worked example: finetuning compute
+
+A 400M-parameter model, 300M pairs over 12 directions, so 25M pairs per direction at about 65 tokens per pair (30 source, 35 target): \(1.6 \times 10^9\) tokens per epoch.
+
+Using \(6ND\): \(6 \times 4 \times 10^8 \times 1.6 \times 10^9 \approx 3.9 \times 10^{18}\) FLOPs. This overestimates an encoder-decoder, since a source token only passes through the encoder, but serves as an upper bound. An A100 at 40% of 312 TFLOP/s gives \(1.25 \times 10^{14}\) FLOP/s, so one epoch takes about 31,000 s, or 9 GPU-hours. Three epochs for 12 directions is \(9 \times 3 \times 12 \approx 320\) GPU-hours, under two days on one 8-GPU node. Finetuning is cheap; pretraining is what the checkpoint saves you.
+
+### Failure modes
+
+- **Hallucination** (fluent text unrelated to the source) from noisy pairs or out-of-domain input: stricter alignment filtering, copy-style training examples for numbers and code.
+- **Echoing the source** from untranslated pairs: filter identical pairs.
+- **Off-target language** in multilingual models: stronger language tags, more direct non-English data, output language check.
+- **Overfitting small pairs**: early stopping, dropout, more back-translation.
+
+## Decoding
+
+The encoder runs once; the decoder generates step by step until end-of-sequence or a length cap such as 1.5 times the source length. Translation usually has one right meaning, so the goal is the most probable faithful output.
+
+Greedy decoding can commit early to a dead end, such as an article whose gender clashes with a later noun. Beam search keeps the \(k\) best partial hypotheses each step. Since log-probabilities are negative and add up, short hypotheses win unless scores are length-normalized, for example with the GNMT penalty ([Wu et al., 2016](https://arxiv.org/abs/1609.08144)):
+
+$$
+s(y \mid x) = \frac{\log P(y \mid x)}{lp(y)}, \qquad lp(y) = \frac{(5 + |y|)^{\alpha}}{6^{\alpha}}
+$$
+
+\(|y|\) is hypothesis length and \(\alpha\) sets how strongly length is rewarded; 0 means no normalization and 0.6 to 1.0 works well in practice.
+
+| Strategy | Deterministic | Relative latency | MT quality | Use |
+|---|---|---|---|---|
+| Greedy | Yes | 1x | Good, occasional dead ends | On-device, distilled students |
+| Beam k=4 to 6, normalized | Yes | ~1.3x to 2x batched | Best default | Production |
+| Wide beam k=20+ | Yes | Much higher | Often worse, short and generic | Rarely |
+| Top-p or temperature sampling | No | ~1x | Lower adequacy | Diverse back-translation data |
+| Beam then rerank with QE or reverse model | Yes | 2x to 3x | Higher | Premium or offline documents |
+
+Constrained decoding forces glossary terms into the beam; a `<formal>` tag controls register.
+
+## Evaluation
+
+### Offline metrics
+
+**BLEU** ([Papineni et al., 2002](https://aclanthology.org/P02-1040/)):
+
+$$
+\mathrm{BLEU} = \mathrm{BP} \cdot \exp\!\left(\sum_{n=1}^{4} w_n \log p_n\right), \qquad \mathrm{BP} = \min\!\left(1,\; e^{\,1 - r/c}\right)
+$$
+
+\(p_n\) is clipped n-gram precision (a candidate n-gram counts at most as often as it appears in the reference), \(w_n = 1/4\), \(c\) is candidate length and \(r\) reference length; the brevity penalty stops a system from scoring by emitting only safe words.
+
+Worked example with my own sentences. Reference "the cat sat on the mat", candidate "the cat is on the mat". Unigrams match 5 of 6, bigrams 3 of 5 ("the cat", "on the", "the mat"), trigrams 1 of 4 ("on the mat"), 4-grams 0 of 3. The zero makes the geometric mean zero, so this decent translation scores 0. That is why BLEU is computed at corpus level, summing n-gram counts over thousands of sentences, and why sentence-level BLEU needs smoothing. Use SacreBLEU so tokenization is standardized, which matters a lot for Korean.
+
+**chrF** is an F-score over character n-grams up to length 6:
+
+$$
+\mathrm{chrF}_\beta = (1 + \beta^2)\,\frac{\mathrm{chrP} \cdot \mathrm{chrR}}{\beta^2\,\mathrm{chrP} + \mathrm{chrR}}
+$$
+
+with character precision \(\mathrm{chrP}\), recall \(\mathrm{chrR}\) and \(\beta = 2\) weighting recall double. It gives partial credit for a right stem with a wrong ending, which suits inflected languages and Korean.
+
+**ROUGE** is the recall counterpart of BLEU. **METEOR** aligns words by exact form, then stem, then synonym, combines precision and recall, and penalizes scattered matches; it tracks humans better than BLEU but needs stemmers and synonym lists many languages lack. **COMET** ([Rei et al., 2020](https://arxiv.org/abs/2009.09025)) and BLEURT encode source, output and reference with a multilingual model trained to predict human scores, and reward correct paraphrase.
+
+| Metric | Catches | Misses | Cost |
+|---|---|---|---|
+| BLEU | Wrong words, omissions, length errors | Paraphrase, synonyms; noisy per sentence | Trivial |
+| chrF | Partially right morphology | Meaning-preserving rewording | Trivial |
+| ROUGE | Omitted content | Hallucinated additions, paraphrase | Trivial |
+| METEOR | Synonyms, word-order fragmentation | Languages without lexical resources | Low |
+| COMET / BLEURT | Meaning errors, fluent paraphrase | Out-of-domain behavior; can be gamed | GPU |
+| Human MQM | Everything, including tone and terminology | Slow, expensive, rater variance | High |
+
+### Human and online evaluation
+
+Launch decisions rest on human judgment: adequacy and fluency scores or MQM-style error-span annotation, sampled per pair and domain. Cheap targeted suites cover numbers, gender agreement, entities, idioms, formality and code-mixed input.
+
+Online, track ratings, suggested edits, copy rate, re-translation rate, retention and per-pair latency. Implicit signals are noisy (people copy bad output they cannot judge), so use them for A/B trends, not ground truth.
+
+## Serving system
+
+```mermaid
+flowchart TB
+  accTitle: End-to-end translation architecture
+  accDescr: Offline, data and training pipelines produce a language detector and pair models in a model registry. Online, the gateway checks a cache, then preprocesses, detects language, routes to the right pair model on a GPU pool for beam search, and postprocesses with entity restoration and checks. Feedback flows back to the offline store.
+  subgraph Offline
+    DATA[("Corpora and feedback store")] --> TRAIN["Training and eval pipeline"]
+    TRAIN --> REG[("Model registry")]
+  end
+  subgraph Online
+    API["API gateway"] --> CACHE{"Cache hit?"}
+    CACHE -- yes --> OUT["Response"]
+    CACHE -- no --> PRE["Normalize, split sentences, mask numbers"]
+    PRE --> LID["Language detector"]
+    LID --> ROUTE["Router by source and target"]
+    ROUTE --> POOL["GPU pool: pair models, beam search"]
+    POOL --> POST["Detokenize, restore, checks"]
+    POST --> OUT
+  end
+  REG --> LID
+  REG --> POOL
+  OUT -.-> DATA
+```
+
+```mermaid
+sequenceDiagram
+  accTitle: Translation request sequence
+  accDescr: The client sends text and target language. The gateway checks the cache, the preprocessor splits and masks, the detector returns language and confidence, the pair model batches and runs beam search, and the postprocessor restores entities before the gateway responds and writes the cache.
+  participant C as Client
+  participant G as Gateway
+  participant P as Preprocessor
+  participant L as Detector
+  participant M as Pair model
+  participant Q as Postprocessor
+  C->>G: text, target language
+  G->>G: cache lookup
+  G->>P: cache miss
+  P->>L: normalized text
+  L-->>P: language, confidence
+  P->>M: sentences with placeholders
+  M->>M: batch, encode once, beam search
+  M-->>Q: token IDs
+  Q->>Q: detokenize, restore, number check
+  Q-->>G: translation
+  G-->>C: translation, detected language
+  G->>G: write cache
+```
+
+### Language detection
+
+A small encoder-only Transformer with mean-pooled outputs and a softmax over languages, or a fastText/CLD3-style character n-gram model that runs in microseconds on CPU. Short inputs are the hard case ("No" is English and Spanish); see the operations questions below.
+
+### Latency and cost levers
+
+- **Sentence splitting plus dynamic batching** across users, grouped by pair and length.
+- **Encode once**: encoder output and cross-attention keys and values are shared by all beams and steps; a **KV cache** covers decoder self-attention.
+- **int8 quantization** for 2x to 4x CPU speedups and less GPU memory, checked per pair because low-resource pairs degrade first.
+- **Sequence-level distillation** ([Kim and Rush, 2016](https://arxiv.org/abs/1606.07947)): train a small student on the teacher's beam outputs; the student often does well with greedy decoding.
+- **Vocabulary shortlisting** shrinks the output softmax.
+- **Caching** keyed on normalized source, languages and model version.
+- **Placement**: dedicated GPUs for busy pairs, a shared pool for the rest.
+
+### Worked example: fleet sizing
+
+50 million requests per day, 40 source and 45 target tokens on average, 3x peak.
+
+- Average QPS \(= 50 \times 10^6 / 86{,}400 \approx 580\); peak about 1,750.
+- One GPU serving a 400M model at batch 64 with beam 4 takes about 15 ms per step, so 45 steps plus encoding is about 0.7 s per batch, or \(64 / 0.7 \approx 90\) requests/s.
+- Peak needs \(1{,}750 / 90 \approx 20\) GPUs; add 50% for batch fragmentation across 12 models and failover, about 30.
+- A distilled greedy student roughly halves that.
+
+### Worked example: memory for a long input
+
+A 12-layer decoder, width 1,024, fp16: keys plus values per token per layer are \(2 \times 1{,}024 \times 2 = 4{,}096\) bytes, about 49 KB across layers. A 1,500-token source costs \(1{,}500 \times 49\) KB \(\approx 74\) MB of cross-attention cache, shared by beams. A 1,500-token output with beam 4 costs \(4 \times 1{,}500 \times 49\) KB \(\approx 295\) MB. About 370 MB per long document, so thirty concurrent long documents take around 11 GB. Long inputs belong in their own queue so they do not inflate p99 for short ones.
+
+### Safety and monitoring
+
+Verify numbers and placeholders survive, run the detector on the output, fall back when length ratio or a reference-free quality score suggests hallucination, flag outputs more toxic than their source, and show both forms when a neutral source forces a gendered target. Monitor per-pair latency, batch fill, cache hits, detector confidence and QE scores; domain shifts appear there first.
+
+## Follow-ups and extensions
+
+- **Forty more languages**: one multilingual model, temperature sampling, a ~250k shared vocabulary, back-translation for low-resource pairs, chrF and human raters where references are scarce.
+- **Document-level**: previous sentences as context or document-chunk training for pronoun and terminology consistency.
+- **Speech, real time**: cascaded ASR, MT, TTS or end-to-end speech translation; a wait-k policy trades quality for lag.
+- **Enterprise glossaries, on-device, LLMs**: constrained decoding or adapters per customer; a 20-50M int8 distilled student for phones; a large LLM offline for data generation and judging, or in a cascade for hard requests.
 
 ## Interview questions
 
-**Why encoder-decoder rather than a decoder-only LLM?**
-Bidirectional encoding plus cross-attention suits a task that maps one sequence to another, and it reaches strong quality at a much smaller size for a fixed language set. A decoder-only LLM makes sense if you already serve one and want broad coverage through prompting.
+### Clarifying
+
+**Which requirement would most change the architecture if it flipped?**
+The language count. With four languages I can own one model per direction, tune each independently and roll back a single pair. With fifty there are 2,450 directions, so only a shared multilingual model works, which changes the tokenizer, model size, evaluation budget and serving layout. Streaming is the runner-up.
+
+**Why ask whether users supply the source language?**
+Detection adds a component whose errors produce confident nonsense that clean benchmarks never reveal. It needs calibration, a fallback for short or mixed inputs and monitoring. If users always choose the source, the piece disappears and so do misroutes. I would still log the language users pick to measure how often a detector would have disagreed.
+
+### Design and trade-offs
+
+**Encoder-decoder or decoder-only LLM?**
+For a fixed set of four languages, encoder-decoder. Bidirectional encoding plus cross-attention matches the task, and a few hundred million parameters trained on clean pairs reach strong quality cheaply. An LLM needs to be much larger for the same pairs, costs more per request and can drift into answering the text. I would switch if an LLM is already served, long-tail language coverage matters, or users want instruction-style control.
 
 **Bilingual models or one multilingual model?**
-Bilingual wins on per-pair accuracy and isolated debugging when pairs are few. Multilingual wins on operating cost, low-resource transfer and zero-shot pairs as languages grow. Four languages with an accuracy priority justify bilingual; fifty do not.
+Bilingual gives the best per-pair accuracy and isolated fixes, at quadratic growth in models and no transfer. Multilingual is one artifact and helps low-resource pairs, at a small cost on top pairs and harder debugging. For four languages with accuracy first I start bilingual, but keep tokenizer and data formats compatible so switching is a training change.
+
+**Pivot through English or train Korean to French directly?**
+Pivoting doubles latency, compounds errors and loses what English does not mark, such as Korean honorifics. Direct data is scarce, so I would create it offline by translating the English side of English-French pairs into Korean, then train a direct model so the online path is one hop. Pivoting stays as a fallback for pairs without a model. Quality on the synthetic data gets checked by bilingual Korean-French raters.
+
+**Beam search or sampling?**
+Beam search with width 4 to 6 and length normalization. Users expect fidelity and the same output for the same input; sampling adds variety that here means drift. Very wide beams favor short, bland outputs. Sampling still helps offline for diverse back-translations.
+
+**The p99 budget is halved. What do you give up?**
+Free wins first: latency-tuned batching, int8, vocabulary shortlisting, caching. Then a distilled deep-encoder, shallow-decoder student that decodes greedily. If still short, beam 2 and a separate queue for long documents. Measure each step per pair, since low-resource pairs degrade first.
+
+### Deep dives
 
 **Why not pretrain with next-token prediction?**
-The decoder could copy the sentence the encoder already saw. Masking encoder input forces reconstruction from context, which trains both halves.
+If the encoder sees the full sentence the decoder must produce, cross-attention copies it and nothing useful is learned. Corrupting the encoder input forces the decoder to infer missing content from context, training understanding and generation together. T5 predicts only masked spans, which is cheaper; BART reconstructs the whole sequence, closer to how translation generates.
 
-**How does BPE handle a word it never saw?**
-It applies its learned merges, falling back to smaller known pieces and at worst single characters. There is no unknown token, only a longer sequence; byte-level BPE extends this to any script.
+**Why is BLEU insufficient, and what do you report?**
+It counts exact n-gram overlap, so correct paraphrases score low and fluent mistranslations sharing words score high; one missing 4-gram can zero a sentence. It is also tokenization-sensitive, which hurts Korean. I report corpus SacreBLEU for continuity, chrF, COMET as the main automatic signal, targeted suites, and MQM human evaluation before launch.
 
-**What are BLEU's limits and what would you add?**
-It rewards surface overlap, penalizes valid paraphrase and correlates weakly with human judgment per sentence. Add METEOR or a learned metric like COMET, plus regular human evaluation per pair.
+**How does back-translation help, and what can go wrong?**
+It turns monolingual target text into pairs whose target side is real and fluent, helping low-resource pairs and domain adaptation most. Too much synthetic data drowns real signal and imports the reverse model's errors and translationese. Tagging synthetic pairs, capping the ratio and sampling rather than beam-decoding the back-translations mitigate it.
 
-**How do you handle names and numbers?**
-Detect entities with NER, swap in placeholders before translation and restore them afterward, which keeps numbers exact. In languages where names inflect, restoring the raw form can break grammar, so test those cases.
+**Estimate the GPU fleet for 50 million requests a day.**
+About 580 QPS average, 1,750 at a 3x peak. A GPU running a 400M model at batch 64, beam 4, finishes a batch in about 0.7 s, roughly 90 requests/s, so about 20 GPUs at peak. With 50% headroom for fragmentation across 12 models and failover, about 30. Distillation with greedy decoding roughly halves it.
 
-**The detector fails on short inputs. What now?**
-Return a confidence score and, when it is low, fall back to user locale or ask the user. Train on many short examples and report accuracy by input length.
+**Estimate memory for a 1,000-word document with beam 4.**
+At about 1,500 tokens each way and 49 KB of keys and values per token (12 layers, width 1,024, fp16), the source cache is about 74 MB, shared by beams, and four beams of output take about 295 MB. Around 370 MB per document caps a 24 GB GPU at a few dozen concurrent long documents after weights. Hence sentence splitting or a dedicated long-input queue.
 
-**How would you support a low-resource language?**
-Use a multilingual model to borrow from related languages, and create extra parallel data by back-translating monolingual text. Rely on human raters, since references are scarce.
+### Operations and failure modes
 
-**How do you turn user feedback into improvements?**
-Filter ratings and edits for spam and low agreement, then add trusted edits as new pairs for periodic finetuning, watching for deliberate poisoning.
+**The detector fails on short inputs. What do you do?**
+Return calibrated confidence and, below a threshold, combine it with locale, session history and the target language (people rarely translate into the language they typed). Show the detected language with a one-tap correction and log corrections as labels. Train on short and code-mixed examples and report accuracy by input length.
 
-**What changes for full-document input?**
-Sentence-level translation loses pronoun and terminology consistency. Chunk with overlapping context, use a document-level model, or adopt efficient attention, and consider streaming partial output to hide latency.
+**How do you turn user edits into training data safely?**
+Treat them as candidates. Require agreement across users, weight by editor reputation, and keep only pairs a QE model scores above the original. Guard against coordinated poisoning with rate limits, anomaly detection and human review, and tag accepted edits so they can be rolled back.
+
+**A new model improves BLEU but users rate it worse. Why?**
+The model may have become more literal, the test set may not match live domains, or one category such as formality or long inputs regressed while the average rose. Slice human ratings and online metrics by pair, domain and length, compare COMET and chrF, and read side-by-side samples. The launch gate should require human and online evidence, not BLEU alone.
+
+## A 45-minute walkthrough
+
+| Minutes | Cover | Draw |
+|---|---|---|
+| 0-5 | Languages, data, detection, length, cloud vs device, real time; state assumptions | Requirements list |
+| 5-9 | Seq2seq framing, \(P(y \mid x)\), encoder-decoder vs LLM vs RNN | Input/output box |
+| 9-15 | Data sources, cleaning filters, no lowercasing, entities, BPE | Data pipeline |
+| 15-21 | Encoder, causal decoder, cross-attention, depth split | Block diagram |
+| 21-27 | Checkpoint or denoising pretraining, finetuning loss, bilingual vs multilingual, back-translation | Training flow |
+| 27-30 | Beam search with length normalization, why not sampling | Small beam tree |
+| 30-35 | BLEU and its limits, chrF, COMET, human MQM, online metrics | Metric table |
+| 35-42 | Detector, router, batching, caching, distillation, quantization, fleet estimate | Serving architecture |
+| 42-45 | Hallucination, short-input detection, scaling to 50 languages | None |
