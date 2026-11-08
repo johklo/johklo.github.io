@@ -2,7 +2,7 @@
 title: "03. Google Translate"
 description: "A translation service built on encoder-decoder Transformers: requirements, cross-lingual BPE, denoising pretraining, bilingual versus multilingual finetuning, beam search, BLEU and its successors, serving estimates and interview questions."
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 30
 draft: false
 tags: ["book-club", "genai-system-design", "machine-translation", "encoder-decoder", "evaluation-metrics"]
@@ -430,3 +430,154 @@ The model may have become more literal, the test set may not match live domains,
 | 30-35 | BLEU and its limits, chrF, COMET, human MQM, online metrics | Metric table |
 | 35-42 | Detector, router, batching, caching, distillation, quantization, fleet estimate | Serving architecture |
 | 42-45 | Hallucination, short-input detection, scaling to 50 languages | None |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. What property of translation, compared with autocomplete, favors an encoder-decoder design?**
+
+{{< details title="Answer" closed="true" >}}
+The full source text is available before any output is produced. An encoder can therefore read it with context from both sides, while a separate decoder writes the target left to right. Cross-attention then lets each output step look back at whichever source words it needs.
+{{< /details >}}
+
+**2. In cross-attention, where do the queries, keys and values come from?**
+
+{{< details title="Answer" closed="true" >}}
+Queries come from the decoder's current target-side states. Keys and values come from the encoder output \( H \), which summarizes the source. Each target position thus asks which source positions are relevant to it, and this is where the model learns alignment between the two languages.
+{{< /details >}}
+
+**3. What is token fertility, and why should you check it per language?**
+
+{{< details title="Answer" closed="true" >}}
+Fertility is how many subword tokens a language needs for the same content. If Korean text splits into twice as many tokens as English, every Korean request runs longer sequences, so attention, cache memory and decode steps all cost more. A tokenizer that serves one language poorly creates a hidden cost and quality gap for that language.
+{{< /details >}}
+
+**4. In back-translation, which side of each training pair is synthetic, and why does that matter?**
+
+{{< details title="Answer" closed="true" >}}
+A reverse model translates real target-language text into the source language, so the source side is synthetic and the target side is real. The decoder therefore always learns to produce fluent human text, and the noise from the reverse model only affects what the encoder reads. That is why back-translated pairs help even though they are machine-made.
+{{< /details >}}
+
+**5. What does "clipped" mean in BLEU's n-gram precision?**
+
+{{< details title="Answer" closed="true" >}}
+A candidate n-gram is credited at most as many times as it appears in the reference. Without clipping, a candidate that repeated "the the the the" could score perfect unigram precision against a reference with one "the". Clipping stops a system from gaining score by repeating safe words.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. What does BLEU's brevity penalty prevent, and what is its value for an 8-token candidate against a 10-token reference?**
+
+{{< details title="Answer" closed="true" >}}
+Precision alone rewards short outputs that contain only words the system is sure of. The penalty lowers the score when the candidate is shorter than the reference, and is 1 otherwise:
+
+$$
+\mathrm{BP} = \min\!\left(1,\; e^{\,1 - r/c}\right) = e^{\,1 - 10/8} = e^{-0.25} \approx 0.78
+$$
+
+So this candidate keeps only about 78% of its precision-based score.
+{{< /details >}}
+
+**7. How does label smoothing change the training target, and why can it raise BLEU while raising perplexity?**
+
+{{< details title="Answer" closed="true" >}}
+Instead of a one-hot target, the true token gets \( 1-\epsilon \) of the probability plus a share of \( \epsilon \) spread evenly over the vocabulary, with \( \epsilon \) around 0.1. The model can no longer be fully confident in the reference token, so its likelihood on held-out text gets a little worse. Its probabilities are less overconfident, though, and beam search makes better choices with them, which shows up as higher BLEU.
+{{< /details >}}
+
+**8. Why does beam search for translation need a length penalty?**
+
+{{< details title="Answer" closed="true" >}}
+A hypothesis score is the sum of log-probabilities, each of which is negative, so every extra token lowers the score. Without correction, beam search prefers short hypotheses and drops content. The GNMT-style penalty divides the log-probability by a term that grows with length, and \( \alpha \) between 0.6 and 1.0 sets how strongly length is rewarded.
+{{< /details >}}
+
+**9. In multilingual training, what does raising the sampling temperature \( \tau \) do to the mix of language pairs?**
+
+{{< details title="Answer" closed="true" >}}
+Pair \( i \) is drawn with probability proportional to \( D_i^{1/\tau} \). At \( \tau = 1 \) pairs are sampled in proportion to their data size, so large pairs dominate. A higher \( \tau \) flattens the distribution, so small pairs are seen more often than their raw share and benefit more from shared training.
+{{< /details >}}
+
+**10. Why does a deep encoder with a shallow decoder decode faster without losing much quality?**
+
+{{< details title="Answer" closed="true" >}}
+The encoder runs once per request over the whole source, in parallel. The decoder runs once per output token, so its depth is paid again at every step. Moving layers from the decoder to the encoder keeps most of the model's capacity for understanding the source while cutting the per-step cost that drives latency.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. Pair A has 100M sentence pairs and pair B has 1M. What is the sampling ratio of A to B at \( \tau = 1 \) and at \( \tau = 5 \)?**
+
+{{< details title="Answer" closed="true" >}}
+- At \( \tau = 1 \): ratio \( = 100\text{M} / 1\text{M} = 100 \), so B gets about \( 1/101 \approx 1\% \) of samples.
+- At \( \tau = 5 \): ratio \( = 100^{1/5} = e^{\ln 100 / 5} = e^{0.92} \approx 2.5 \).
+- B's share becomes \( 1 / (1 + 2.5) \approx 28\% \).
+
+The small pair goes from almost invisible to more than a quarter of the training mix.
+{{< /details >}}
+
+**12. Using the note's per-GPU throughput of about 90 requests per second, how many GPUs does a service with 20 million requests per day and a 3x peak need?**
+
+{{< details title="Answer" closed="true" >}}
+- Average QPS: \( 2 \times 10^7 / 86{,}400 \approx 231 \).
+- Peak QPS: \( 3 \times 231 \approx 694 \).
+- GPUs at peak: \( 694 / 90 \approx 7.7 \), so 8.
+- With 50% headroom for batch fragmentation across models and failover: about 12 GPUs.
+{{< /details >}}
+
+**13. How many models are needed for 6 languages with bilingual models per direction, with an English pivot, and with one multilingual model?**
+
+{{< details title="Answer" closed="true" >}}
+- Bilingual: one model per directed pair, \( n(n-1) = 6 \times 5 = 30 \).
+- English pivot: each of the 5 other languages needs a model into English and one out of it, \( 2 \times 5 = 10 \).
+- Multilingual: 1.
+
+For the note's four languages the same formulas give 12, 6 and 1.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why does the cleaning pipeline skip lowercasing, stop-word removal and stemming?**
+
+{{< details title="Answer" closed="true" >}}
+Translation output must reproduce exactly what those steps would erase. Capital letters mark names, and endings carry tense, number and gender that the target sentence has to express. Classic normalization helps tasks such as retrieval but here it deletes information the model needs to learn and copy.
+{{< /details >}}
+
+**15. Why does the note use placeholders for numbers, URLs and code but translate names inline?**
+
+{{< details title="Answer" closed="true" >}}
+Numbers, URLs and code must pass through unchanged, and placeholders guarantee that. Names interact with grammar in the target language. In Korean, the correct particle depends on whether the name ends in a consonant, so restoring a raw name into a slot can produce the wrong particle. A check afterward confirms every entity survived either way.
+{{< /details >}}
+
+**16. Why is BLEU computed over a whole test corpus rather than averaged per sentence?**
+
+{{< details title="Answer" closed="true" >}}
+BLEU takes a geometric mean of n-gram precisions, so a single sentence with no matching 4-gram scores zero even when the translation is good. Summing n-gram counts across thousands of sentences before computing precision avoids these zeros and gives a stable number. Sentence-level BLEU is only usable with smoothing.
+{{< /details >}}
+
+**17. Why does chrF suit Korean and other inflected languages better than BLEU?**
+
+{{< details title="Answer" closed="true" >}}
+chrF compares character n-grams up to length 6, so a word with the right stem but a wrong ending still earns partial credit. BLEU works on whole tokens and gives nothing for a near miss, and it is sensitive to how text is tokenized. chrF with \( \beta = 2 \) also weights recall twice as much as precision, so dropped content is penalized more.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if pairs where the source and target are identical stay in the training data?**
+
+{{< details title="Answer" closed="true" >}}
+The model learns that copying the input is sometimes the correct answer. At serving time it then echoes untranslated text back, especially for inputs that look unusual. The cleaning step that drops identical source-target pairs exists for this failure.
+{{< /details >}}
+
+**19. What goes wrong if the beam width is raised to 20 or more?**
+
+{{< details title="Answer" closed="true" >}}
+Latency and memory grow with every extra hypothesis, but quality often drops instead of rising. Very wide beams find high-probability outputs that are short and generic, because the search becomes good at exploiting the model's bias toward safe text. Widths of 4 to 6 with length normalization are the practical default.
+{{< /details >}}
+
+**20. What goes wrong in a multilingual model if the target-language signal is weak?**
+
+{{< details title="Answer" closed="true" >}}
+The model can produce fluent text in the wrong language, often English or the source language, which is called off-target translation. It is most common in directions with little direct training data. Stronger language tags, more direct non-English pairs and an output language check before returning the result reduce it.
+{{< /details >}}

@@ -2,7 +2,7 @@
 title: "08. High-Resolution Image Synthesis with Visual Tokens"
 description: "A deep-dive on generating 1024px and 2048px scenery with a VQGAN tokenizer and a decoder-only Transformer: token budgets, tokenizer losses, sampling knobs, metrics, and a three-stage serving path with super-resolution"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 80
 draft: false
 tags: ["book-club", "genai-system-design", "autoregressive-models", "vqgan", "image-generation"]
@@ -490,3 +490,163 @@ Every cached code sequence is now meaningless because code IDs map to different 
 | 32 to 37 | Evaluation: FID, precision and recall, rFID, perplexity, human study, online metrics | Metric table with blind spots |
 | 37 to 43 | Serving: three services, sequence, KV cache, batching, upscaler, pre-generated pool, fleet estimate, safety | Serving sequence |
 | 43 to 45 | Extensions: text prefix and guidance, parallel decoding, inpainting | None |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. What is the downsampling factor \( f \), and how does it set the number of tokens per image?**
+
+{{< details title="Answer" closed="true" >}}
+\( f \) is how many pixels along each side the tokenizer encoder folds into one grid cell. The token count is \( L = (H/f) \times (W/f) \), so at 1024px, \( f = 16 \) gives 4,096 tokens, \( f = 32 \) gives 1,024 and \( f = 64 \) gives 256. Doubling \( f \) divides the token count by four, and doubling the image side multiplies it by four.
+{{< /details >}}
+
+**2. What does the quantizer do, and what are its trainable parameters?**
+
+{{< details title="Answer" closed="true" >}}
+For each position in the encoder's output grid, the quantizer finds the nearest of \( K \) codebook vectors by squared Euclidean distance and replaces the encoder vector with it. The index of that entry is the integer token stored for the position. Its only parameters are the codebook vectors themselves; the lookup is a fixed nearest-neighbor rule.
+{{< /details >}}
+
+**3. What is code perplexity, and what does a value far below \( K \) mean?**
+
+{{< details title="Answer" closed="true" >}}
+Take the share \( \bar{p}_k \) of validation positions assigned to each code and compute
+
+$$
+\text{PPL}_{\text{code}} = \exp\Big(-\sum_k \bar{p}_k \log \bar{p}_k\Big)
+$$
+
+It reads as the effective number of codes in use: it equals \( K \) when usage is uniform. A value far below \( K \) means most entries are dead and the tokenizer is working with a much smaller vocabulary than it was given, which is codebook collapse.
+{{< /details >}}
+
+**4. What is rFID, and why does it set a ceiling for the whole system?**
+
+{{< details title="Answer" closed="true" >}}
+rFID is FID computed between held-out real images and their tokenizer reconstructions (encode, quantize, decode), with no generator involved. Every generated image also passes through the same decoder, so generation FID cannot be better than what the decoder can produce from perfect codes. That is why the rule of thumb picks the largest \( f \) whose rFID stays well below the target generation FID.
+{{< /details >}}
+
+**5. How do top-k and top-p differ, and why does top-p suit images with both sky and foliage?**
+
+{{< details title="Answer" closed="true" >}}
+Top-k always keeps a fixed number \( k \) of the most likely codes. Top-p keeps the smallest set of codes whose probabilities add up to \( p \), so its size changes with the shape of the distribution. In a patch of clear sky a few codes carry most of the mass and the set is small; in foliage many codes are plausible and the set is large. A fixed \( k \) would be too loose for the sky or too tight for the leaves.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. Explain the two terms of \( \mathcal{L}_{\text{vq}} \) and the role of the stop-gradient.**
+
+{{< details title="Answer" closed="true" >}}
+
+$$
+\mathcal{L}_{\text{vq}} = \lVert \text{sg}[z_e(x)] - z_q(x) \rVert_2^2 + \beta \, \lVert z_e(x) - \text{sg}[z_q(x)] \rVert_2^2
+$$
+
+The first term pulls the chosen codebook entries toward the encoder outputs; the stop-gradient on \( z_e \) means only the codebook moves. The second term, weighted by \( \beta \approx 0.25 \), pulls the encoder outputs toward their chosen codes while the codebook is frozen, so the encoder commits to codes instead of drifting. An EMA update can replace the first term for stability.
+{{< /details >}}
+
+**7. Why does VQGAN switch on the discriminator late and set its weight adaptively?**
+
+{{< details title="Answer" closed="true" >}}
+Early reconstructions are poor, so a patch critic would separate them from real images with no effort and its gradients would overwhelm the other losses, causing artifacts or loss spikes. Waiting tens of thousands of steps lets the reconstruction, codebook and perceptual terms establish a reasonable image first. The adaptive weight compares the gradient norms of the reconstruction and adversarial losses at the decoder's last layer, keeping the adversarial push at a comparable size instead of a hand-tuned constant.
+{{< /details >}}
+
+**8. Why can the generator score every position in one forward pass during training but needs \( L \) passes at sampling time?**
+
+{{< details title="Answer" closed="true" >}}
+During training the whole real code sequence is known, so with teacher forcing each position can be fed the true earlier codes. The causal mask (\( -\infty \) above the diagonal) stops any position from seeing later ones, so all \( L \) next-code predictions are valid in one pass. At sampling time the earlier codes do not exist until they are sampled, so each code depends on the previous step's output and the loop must run \( L \) times.
+{{< /details >}}
+
+**9. How does temperature reshape the next-code distribution, and what happens in the limit of very low temperature?**
+
+{{< details title="Answer" closed="true" >}}
+Logits are divided by \( \tau \) before the softmax:
+
+$$
+p_\tau(k) = \frac{\exp(z_k / \tau)}{\sum_j \exp(z_j / \tau)}
+$$
+
+\( \tau < 1 \) widens gaps between logits and concentrates mass on likely codes, \( \tau > 1 \) narrows them and spreads mass out. As \( \tau \) approaches 0 the distribution puts all mass on the top code, which is greedy decoding. For images that gives flat, repetitive regions and identical outputs for every press.
+{{< /details >}}
+
+**10. What does the KV cache store, and why does it change the cost of each decoding step?**
+
+{{< details title="Answer" closed="true" >}}
+For every token already generated, each layer stores that token's key and value vectors. When a new token arrives, only its own query, key and value are computed; attention reads the stored keys and values for the prefix instead of recomputing them. Each step therefore processes one token rather than the whole prefix, at the price of memory that grows linearly with sequence length.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. How big is the token cache for 5 million images at 256 codes, and at 1,024 codes?**
+
+{{< details title="Answer" closed="true" >}}
+A codebook of 8,192 entries fits in 16 bits, so 2 bytes per code.
+At 256 codes: \( 5{,}000{,}000 \times 256 \times 2 = 2.56 \times 10^9 \) bytes, about 2.56 GB.
+At 1,024 codes (\( f = 32 \)): four times more, about 10 GB.
+The raw JPEGs at about 500 KB each are about 2.5 TB, so the cache is roughly a thousand times smaller and fits in one node's RAM.
+{{< /details >}}
+
+**12. Use \( C \approx 6ND \) to estimate generator training compute for 1B parameters, 256 tokens per image, 5M images and 20 epochs.**
+
+{{< details title="Answer" closed="true" >}}
+Tokens per epoch: \( 5 \times 10^6 \times 256 = 1.28 \times 10^9 \).
+Total tokens: \( D = 20 \times 1.28 \times 10^9 = 2.56 \times 10^{10} \).
+Compute: \( 6 \times 10^9 \times 2.56 \times 10^{10} \approx 1.5 \times 10^{20} \) FLOPs.
+An H100 at 40 percent of about 990 TFLOP/s gives about \( 4 \times 10^{14} \) FLOP/s, so \( 1.5 \times 10^{20} / 4 \times 10^{14} \approx 3.8 \times 10^5 \) GPU-seconds, about 105 GPU-hours, under a day on 8 GPUs.
+{{< /details >}}
+
+**13. How much KV cache does one image take for a model with 24 layers and width 2048 in 16-bit precision?**
+
+{{< details title="Answer" closed="true" >}}
+Per token: key and value (2) times layers (24) times width (2048) times 2 bytes \( = 2 \times 24 \times 2048 \times 2 = 196{,}608 \) bytes, about 0.19 MB.
+For 256 tokens: \( 256 \times 0.19 \approx 50 \) MB.
+For 1,024 tokens: about 200 MB.
+With 2 GB of weights on an 80 GB GPU, hundreds of 1,024-token sequences fit, so memory is not what limits the batch size.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why run generation, decoding and super-resolution as three separate services?**
+
+{{< details title="Answer" closed="true" >}}
+They have different hardware profiles. The Transformer is sequential and limited by memory bandwidth, the decoder is a single compute-heavy convolutional pass, and the upscaler runs only for 2048 requests. Separate services can each pick a GPU type, scale on their own queue depth and be deployed independently. The cost of the split is tiny, since what crosses from generator to decoder is a 512-byte code grid.
+{{< /details >}}
+
+**15. Why can this product serve most traffic from a pre-generated pool, and what rule keeps that safe?**
+
+{{< details title="Answer" closed="true" >}}
+There is no prompt, so any good image is a valid answer to any request. Spare GPU capacity at off-peak hours can fill a pool, and peak requests become near-instant lookups. Each pooled image must be handed out only once, otherwise two users would get the same "fresh" picture, and the pool trades some freshness (it reflects the model version and settings at fill time) for cost and latency.
+{{< /details >}}
+
+**16. Why are horizontal flips allowed in preprocessing but vertical flips and strong color jitter are not?**
+
+{{< details title="Answer" closed="true" >}}
+A mirrored mountain valley is still a realistic scene, so horizontal flips add variety without teaching anything false. An upside-down landscape or a green sky is not a plausible photo, and whatever the model sees in training it will learn to generate. Augmentations must stay inside the distribution of outputs you want. EXIF orientation should be fixed first so the remaining images are actually upright.
+{{< /details >}}
+
+**17. Why compute FID on the delivered 2048px outputs as well as at 1024px?**
+
+{{< details title="Answer" closed="true" >}}
+The Inception network resizes inputs to 299px, so fine-detail problems such as repeated textures invented by the upscaler are mostly invisible to it at any input size. The upscaler is a separate model that can still shift color or overall statistics, and only measuring what users receive catches that. FID at 1024px tells you about the generator and decoder; FID on 2048 outputs tells you whether the last stage made things worse.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if the codebook distance computation runs in bf16?**
+
+{{< details title="Answer" closed="true" >}}
+Small differences between squared distances can underflow or round to the same value in bf16. The nearest-neighbor choice then flips between entries, so the same input can map to different codes from step to step and training becomes noisy. Running the distance computation in fp32 while the rest of the model uses bf16 avoids this at negligible cost.
+{{< /details >}}
+
+**19. What goes wrong if training used center crops but the FID reference set uses full frames?**
+
+{{< details title="Answer" closed="true" >}}
+The generator learns to produce center-cropped compositions, while the reference statistics describe full, wider frames. FID then reports a gap that comes from framing, not from model quality, and changes in preprocessing can move the score more than changes in the model. The reference set should be prepared with the same crop and resize policy as training data.
+{{< /details >}}
+
+**20. What goes wrong if images below the resolution floor are upsampled and kept in training?**
+
+{{< details title="Answer" closed="true" >}}
+An upsampled small image has the pixel count of a 1024px photo but the detail of a thumbnail. The tokenizer and generator learn that blur is normal at full resolution and reproduce it. Dropping images whose short side is below the native size costs some data but keeps the model's idea of sharpness honest.
+{{< /details >}}

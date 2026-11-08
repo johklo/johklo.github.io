@@ -2,7 +2,7 @@
 title: "04. A ChatGPT-Style Personal Assistant"
 description: "Deep-dive notes on designing a general-purpose chatbot: web data cleaning, decoder-only Transformers with RoPE, pretraining, SFT, reward modeling, PPO and DPO, sampling, layered evaluation, and a guarded, cost-aware serving stack"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 40
 draft: false
 tags: ["book-club", "genai-system-design", "llm", "rlhf", "chatbot"]
@@ -445,3 +445,145 @@ Add the pattern to the guard classifiers and redeploy within days, since that is
 7. **31-36, evaluation.** Layer table and gating order.
 8. **36-43, serving.** Guarded pipeline, KV cache and fleet estimates, batching, quantization, speculative decoding, routing.
 9. **43-45, extensions.** RAG, tools, memory, multilingual, day-one dashboards.
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. Asked a factual question, how does a base model's behavior differ from an SFT model's, and why?**
+
+{{< details title="Answer" closed="true" >}}
+A base model has only learned to continue text, so it treats the question as the start of a document and may carry on with more questions or unrelated prose. The SFT model has been trained on prompt and response pairs inside a chat template, so it has learned that a user turn should be followed by an assistant answer in a certain format and tone.
+{{< /details >}}
+
+**2. Name the three datasets used in training and the property that matters most for each.**
+
+{{< details title="Answer" closed="true" >}}
+The pretraining corpus has trillions of tokens, and volume and diversity matter most. Demonstration data has tens of thousands to a few hundred thousand written prompt and response pairs, and quality matters most. Preference data holds several model responses per prompt ranked by annotators, and consistency of the judgments matters most.
+{{< /details >}}
+
+**3. What is grouped-query attention, and what does it change at serving time?**
+
+{{< details title="Answer" closed="true" >}}
+In GQA several query heads share a single key and value head instead of each query head having its own. The number of query heads, and so the model's expressiveness, stays about the same, but the KV cache shrinks by the group size. A smaller cache means more concurrent conversations or longer contexts per GPU, which is why the note calls it the architecture choice with the largest serving impact.
+{{< /details >}}
+
+**4. What does perplexity measure, and why is it a poor tool for choosing between two chat models?**
+
+{{< details title="Answer" closed="true" >}}
+Perplexity is the exponential of the average next-token loss on held-out text, so it measures how well the model predicts that text. It is useful for tracking pretraining. It does not measure whether replies are helpful, safe or well formatted, and alignment often makes perplexity worse because the model moves away from the raw text distribution toward what people prefer. A model can win on perplexity and lose with users.
+{{< /details >}}
+
+**5. What is reward hacking, and what does it look like in training curves?**
+
+{{< details title="Answer" closed="true" >}}
+Reward hacking is the policy learning to exploit flaws in the reward model rather than getting better at what people want. The reward score keeps rising while periodic human ratings stay flat or drop. Typical symptoms are longer and longer answers, flattering agreement with the user, and odd phrasings the reward model happens to like. Comparing reward against fresh human judgments is the way to catch it.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. Why is the SFT loss summed only over response positions?**
+
+{{< details title="Answer" closed="true" >}}
+The training sequence contains the system prompt, the user turn and the assistant reply. If every position contributed to the loss, the model would also be trained to produce user-style text and to predict the template itself. Restricting the sum to the set \(\mathcal{R}\) of response positions keeps the gradient focused on how the assistant should answer, given everything before it. The loss function itself is the same cross-entropy as in pretraining.
+{{< /details >}}
+
+**7. In the Bradley-Terry reward loss, why does only the difference between two scores matter?**
+
+{{< details title="Answer" closed="true" >}}
+The loss is \(-\log \sigma(r_w - r_l)\), so adding the same constant to both scores leaves it unchanged. The reward model therefore learns a ranking scale with no fixed zero, which fits human data because people judge "A is better than B" far more reliably than absolute quality. The loss falls as the preferred response's score pulls ahead of the rejected one and saturates once the gap is large. A ranking of \(k\) responses supplies \(\binom{k}{2}\) such pairs.
+{{< /details >}}
+
+**8. How does rotating queries and keys make attention depend on relative position?**
+
+{{< details title="Answer" closed="true" >}}
+RoPE rotates each 2D slice of the query at position \(m\) by angle \(m\omega_i\) and of the key at position \(n\) by \(n\omega_i\). The dot product of two rotated vectors depends only on the angle between them, which is \((m-n)\omega_i\), so the score sees the offset rather than the absolute positions. Because the rotation is applied to Q and K before an ordinary dot product, standard attention kernels and the KV cache need no changes.
+{{< /details >}}
+
+**9. What does \(\beta\) control in the KL-regularized objective and in DPO, and what happens at either extreme?**
+
+{{< details title="Answer" closed="true" >}}
+\(\beta\) sets how strongly the policy is pulled back toward the reference SFT model. With \(\beta\) near zero the policy chases the reward freely, drifts far from fluent text and is prone to reward hacking. With a very large \(\beta\) the policy barely moves, so alignment adds little over SFT. In DPO the same \(\beta\) scales the log-ratio that acts as the implicit reward, so it plays the same role of limiting how far training moves the model.
+{{< /details >}}
+
+### Numbers and estimates
+
+**10. Estimate the FP16 KV cache per token and for a 4,096-token chat for a model with 32 layers, 8 KV heads and head dimension 128.**
+
+{{< details title="Answer" closed="true" >}}
+Each layer stores one key and one value vector per KV head, at 2 bytes per number:
+
+$$
+2 \times 32 \times 8 \times 128 \times 2 = 131{,}072 \text{ bytes} = 128 \text{ KiB per token}
+$$
+
+For 4,096 tokens: \(4{,}096 \times 128 \text{ KiB} = 524{,}288 \text{ KiB} = 512 \text{ MiB}\). With 32 KV heads (no grouping) it would be four times larger, about 2 GiB per chat.
+{{< /details >}}
+
+**11. Using \(6ND\), how long does it take to train a 1B-parameter model on 100B tokens on 64 A100s at the note's effective rate? How does that compare with Chinchilla's suggestion?**
+
+{{< details title="Answer" closed="true" >}}
+Compute is \(6 \times 10^{9} \times 10^{11} = 6 \times 10^{20}\) FLOPs. At about \(1.25 \times 10^{14}\) FLOP/s per GPU (312 TFLOP/s at 40% utilization), that is \(6 \times 10^{20} / 1.25 \times 10^{14} = 4.8 \times 10^{6}\) GPU-seconds, or about 1,333 GPU-hours. Split over 64 GPUs it is about 20.8 hours. Chinchilla's rule of about 20 tokens per parameter would suggest only 20B tokens, so this run trains five times longer than compute-optimal, which is normal when a small model is meant to be cheap to serve.
+{{< /details >}}
+
+**12. Logits for three tokens are \([2, 1, 0]\). Compute the probabilities at \(\tau = 1\) and \(\tau = 0.5\), and the size of the top-p pool for \(p = 0.85\).**
+
+{{< details title="Answer" closed="true" >}}
+At \(\tau = 1\): \(e^2 = 7.39\), \(e^1 = 2.72\), \(e^0 = 1\), sum 11.11, giving about 0.665, 0.245 and 0.090. The top token alone (0.665) is below 0.85, and the top two reach 0.91, so the pool has two tokens.
+
+At \(\tau = 0.5\) the logits become \([4, 2, 0]\): \(e^4 = 54.6\), \(e^2 = 7.39\), \(e^0 = 1\), sum 62.99, giving about 0.867, 0.117 and 0.016. The top token alone passes 0.85, so the pool has one token and decoding becomes greedy for this step.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**13. Why does PPO need four models in memory while DPO needs two?**
+
+{{< details title="Answer" closed="true" >}}
+PPO trains the policy, keeps a frozen reference copy for the KL term, runs the reward model to score each sampled reply, and trains a value model that estimates expected reward to reduce gradient variance. DPO works from fixed preference pairs, so there is no online sampling to score and no value estimate; it only needs the policy and the frozen reference for the log-ratios.
+{{< /details >}}
+
+**14. Why does the output guard check every 30 to 50 tokens rather than every token or only at the end?**
+
+{{< details title="Answer" closed="true" >}}
+Checking only at the end would mean harmful text has already streamed to the user. Checking every token would add a classifier call per token and slow streaming, while single tokens carry too little context to judge. A chunk of a few dozen tokens is long enough to classify and short enough that little reaches the user before a hit cuts the stream and hands off to the refusal generator.
+{{< /details >}}
+
+**15. Why does the context builder keep recent turns verbatim but fold older ones into a summary?**
+
+{{< details title="Answer" closed="true" >}}
+Recent turns hold the references the next reply most likely needs, such as what "it" points to, so exact wording matters there. Every token kept costs KV cache memory linearly and prefill attention quadratically, and the window has a hard limit. A rolling summary keeps the gist of older turns at a fraction of the tokens.
+{{< /details >}}
+
+**16. Why are evaluation layers run as a gated funnel, and why can an online win not override a safety gate?**
+
+{{< details title="Answer" closed="true" >}}
+The layers differ in cost by orders of magnitude: benchmarks run on every checkpoint, human side-by-side studies only on a few candidates, and online tests only on what is already believed safe. Ordering them cheapest first spends expensive judgment where it matters. Online signals such as thumbs and retention reward flattery and length and are blind to rare harmful outputs, so a candidate that users like more can still be one that fails the safety suite.
+{{< /details >}}
+
+**17. Speculative decoding and INT4 quantization both speed up decoding. Why does only one carry quality risk?**
+
+{{< details title="Answer" closed="true" >}}
+In speculative decoding the large model verifies every token the draft proposes and rejects the ones it would not have produced with the right probability, so the output distribution is the large model's own. The draft model only affects speed. Quantization changes the weights themselves, so the model being served is slightly different from the one evaluated, and the damage tends to show first on reasoning and code.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if pretraining data is not deduplicated?**
+
+{{< details title="Answer" closed="true" >}}
+Pages that appear many times get the weight of many examples, so the effective mixture is skewed toward whatever was copied most. The model memorizes those passages, which raises the chance of reproducing private or copyrighted text verbatim. Copies of benchmark questions inflate evaluation scores, so the team believes the model is better than it is.
+{{< /details >}}
+
+**19. What goes wrong if demonstrations are long and full of hedges?**
+
+{{< details title="Answer" closed="true" >}}
+SFT copies the style it sees, so the model learns to pad answers with caveats. Annotators then often rate the longer replies higher, the reward model learns that length pays, and policy optimization pushes length further. The result is verbose answers that cost more tokens to serve and frustrate users.
+{{< /details >}}
+
+**20. What goes wrong if toxicity filters on the pretraining corpus are tuned too aggressively?**
+
+{{< details title="Answer" closed="true" >}}
+The classifiers remove more than toxic pages: they disproportionately drop dialects and discussions about minority groups, because those texts share vocabulary with abusive content. The model then sees less of that language and those topics, understands them worse and may treat them as sensitive. The harm appears later as bias in evaluation, far from its cause.
+{{< /details >}}

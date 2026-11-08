@@ -2,7 +2,7 @@
 title: "11. Text-to-Video Generation"
 description: "Extending a text-to-image diffusion model to five-second 720p clips: video VAE compression, spacetime DiT, joint image-video training, cascades, FVD and CLIP metrics, and a queue-based serving stack with sizing math"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 110
 draft: false
 tags: ["book-club", "genai-system-design", "diffusion", "video-generation", "transformers"]
@@ -455,3 +455,159 @@ Human eval, after confirming a fair comparison: same prompts, same seeds, enough
 | 30 to 34 | Steps, guidance, cascade, latency estimate | Knob table |
 | 34 to 39 | FID, FVD, CLIP score, human side-by-side, online metrics | Metric table |
 | 39 to 45 | Async queue, safety gates, distillation, fleet sizing, extensions | Serving architecture |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. What makes text-to-video harder than generating 120 good images?**
+
+{{< details title="Answer" closed="true" >}}
+The frames must agree with each other: the same objects must persist, keep their appearance, stay lit from the same direction and move along plausible paths. Each frame can be individually excellent while the clip still fails through flicker, color changes or objects that appear and vanish. Time also multiplies the number of values to generate, so cost becomes a design constraint at every stage.
+{{< /details >}}
+
+**2. Why does latent diffusion beat video GANs, autoregressive token models and pixel-space diffusion here?**
+
+{{< details title="Answer" closed="true" >}}
+GANs sample fast but train unstably and scale poorly to open-domain text. Autoregressive token models need tens of thousands of sequential steps and inherit tokenizer artifacts. Pixel-space diffusion would denoise hundreds of millions of values per clip. Latent diffusion keeps diffusion's quality and per-step parallelism while working in a space roughly two orders of magnitude smaller.
+{{< /details >}}
+
+**3. What is adaLN, and what does it feed into each DiT block?**
+
+{{< details title="Answer" closed="true" >}}
+Adaptive layer norm turns the timestep embedding into per-channel scale, shift and gate values that modulate the normalized activations and residual branches in each block. It is how the network learns which noise level it is denoising at, so the same weights can act differently on nearly clean and nearly pure-noise inputs.
+{{< /details >}}
+
+**4. How does 3D RoPE encode position, and why is it preferred over learned absolute embeddings?**
+
+{{< details title="Answer" closed="true" >}}
+Each attention head's dimensions are split into three groups that are rotated by the token's time, row and column coordinates. After rotation, the dot product between a query and a key depends on their relative offsets along each axis. Learned absolute embeddings only cover sizes seen in training, while relative rotations extrapolate better to new durations and aspect ratios.
+{{< /details >}}
+
+**5. What is the prompt enhancer, and why does it need its own evaluation?**
+
+{{< details title="Answer" closed="true" >}}
+It is an LLM that rewrites a short user prompt into the long, dense style of the VLM-written training captions, so the model sees inputs that match what it learned from. Because it adds detail, it can also invent things the user did not ask for, such as a specific color or camera move. Its faithfulness to the original intent has to be measured separately from video quality.
+{{< /details >}}
+
+**6. Why does the video VAE encode the first frame on its own?**
+
+{{< details title="Answer" closed="true" >}}
+Treating the first frame separately makes a single image a valid one-frame video in latent space. Images and clips then share one latent format and one denoiser, which keeps joint image-video training clean and lets the large image corpus flow through the same pipeline.
+{{< /details >}}
+
+### Mechanisms and math
+
+**7. Why are the inserted temporal layers in the U-Net option zero-initialized?**
+
+{{< details title="Answer" closed="true" >}}
+Their residual outputs start at zero, so at the first step the network computes exactly what the pretrained image U-Net computes, applied to each frame independently. Nothing learned from images is disrupted, and training gradually grows the temporal layers' contribution as they learn motion. A random start would corrupt the image features and waste the warm start.
+{{< /details >}}
+
+**8. In flow matching, what does the network regress, and how does that differ from noise prediction?**
+
+{{< details title="Answer" closed="true" >}}
+The noisy input is a straight-line mix \( z_t=(1-t)z_0+t\epsilon \), and the target is its time derivative, the velocity
+
+$$
+\frac{dz_t}{dt}=\epsilon-z_0
+$$
+
+Noise prediction instead regresses \( \epsilon \) under a curved schedule set by \( \bar\alpha_t \). Straighter paths are easier for an ODE solver to follow, which tends to allow fewer sampling steps.
+{{< /details >}}
+
+**9. Why is the text condition dropped for about 10 percent of training samples?**
+
+{{< details title="Answer" closed="true" >}}
+Classifier-free guidance needs an unconditional prediction \( \epsilon_\theta(z_t,t,\varnothing) \) at sampling time. Training the same network with an empty prompt some of the time teaches it that distribution without a second model. Without this, the unconditional branch would be undefined and guidance would extrapolate from garbage.
+{{< /details >}}
+
+**10. How is the per-frame CLIP score aggregated, and what can it not detect?**
+
+{{< details title="Answer" closed="true" >}}
+Each frame gets a cosine similarity with the prompt embedding, and the clip score is usually the mean over frames; taking the max instead rewards a clip if any single frame matches. Either way the frames are scored independently, so the metric cannot tell the order of actions, whether something actually moved, or how many objects appeared. A VLM judge answering yes/no questions about the prompt covers more of that.
+{{< /details >}}
+
+**11. What does optical-flow warping error measure, and when does it penalize a good clip?**
+
+{{< details title="Answer" closed="true" >}}
+It estimates motion between consecutive frames, warps one frame onto the next using that flow, and measures the remaining difference. Flicker and texture boiling leave large residuals, so a lower error means steadier frames. Fast but legitimate motion, occlusions and lighting changes also produce residuals, so the metric can punish a lively clip and reward a nearly static one.
+{{< /details >}}
+
+### Numbers and estimates
+
+**12. Why does an 8x8x8 VAE with 16 channels cut positions by 512x but raw values by only about 96x?**
+
+{{< details title="Answer" closed="true" >}}
+Pixels: \( 120\times720\times1280\times3=331{,}776{,}000 \) values.
+
+Positions: \( 120\times720\times1280\approx110.6 \)M become \( 15\times90\times160=216{,}000 \), a factor of \( 8^3=512 \).
+
+Values: \( 216{,}000\times16=3{,}456{,}000 \). Ratio \( 331.8\text{M}/3.46\text{M}\approx96 \).
+
+The gap comes from channels rising from 3 to 16, a factor of about 5.3, and \( 512/5.33\approx96 \).
+{{< /details >}}
+
+**13. How many tokens does the latent produce with 1x2x2 patches, and what happens with 2x2x2 patches?**
+
+{{< details title="Answer" closed="true" >}}
+With 1x2x2: \( 15\times(90/2)\times(160/2)=15\times45\times80=54{,}000 \) tokens.
+
+With 2x2x2 the time axis is also halved, giving roughly 27,000 tokens.
+
+Attention scales with \( N^2 \), so halving \( N \) cuts attention cost to about a quarter, paid for with some loss of motion detail.
+{{< /details >}}
+
+**14. Size the serving fleet for 1M clips per day at 120 GPU-seconds per clip, and redo it without distillation.**
+
+{{< details title="Answer" closed="true" >}}
+Arrival rate: \( 10^6/86{,}400\approx11.6 \) clips/s.
+
+Average busy GPUs: \( 11.6\times120\approx1{,}390 \).
+
+Provisioned with 2x peak and 80% target utilization: \( 1{,}390\times2/0.8\approx3{,}500 \).
+
+At 700 GPU-seconds: \( 11.6\times700\approx8{,}100 \) average, and \( 8{,}100\times2/0.8\approx20{,}000 \) provisioned.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**15. Why resample clips to 24 fps but never upsample low-frame-rate sources?**
+
+{{< details title="Answer" closed="true" >}}
+A fixed frame rate gives every training clip the same time axis, so motion speed per latent frame means the same thing everywhere. Upsampling a low-fps source just repeats frames, which teaches the model stuttering, frozen motion that it will then reproduce. Such sources are better dropped or kept at their native rate in a separate bucket.
+{{< /details >}}
+
+**16. Why keep 5 to 10 percent of the original short captions after re-captioning?**
+
+{{< details title="Answer" closed="true" >}}
+If the model only ever sees long, dense VLM captions, it learns to depend on that level of detail and handles terse prompts poorly. Keeping some short originals keeps brief inputs in distribution, which matters because real users type a handful of words.
+{{< /details >}}
+
+**17. What does the cheap preview pattern buy, and what is its risk?**
+
+{{< details title="Answer" closed="true" >}}
+The user gets a low-resolution draft in 15 to 30 seconds and can reject it early, and the expensive super-resolution runs only on clips the user keeps. That cuts both perceived latency and wasted GPU time. The risk is that the upsampled final can differ from the draft in detail, so the user may feel the result changed after they approved it.
+{{< /details >}}
+
+**18. Why run safety classifiers both before generation and on output frames?**
+
+{{< details title="Answer" closed="true" >}}
+The prompt check runs before any GPU time is spent and gives the user an immediate refusal, which is cheaper for everyone. It cannot catch everything, because an innocent prompt can still produce unsafe frames. The output check on sampled frames closes that gap, at the cost of a failed job after minutes of waiting when it fires.
+{{< /details >}}
+
+### Common mistakes
+
+**19. What goes wrong if training clips are not split at scene cuts?**
+
+{{< details title="Answer" closed="true" >}}
+The model sees an object in one place and then, from one frame to the next, a completely different scene. It learns that sudden jumps and teleporting objects are normal, which shows up as abrupt changes mid-clip at sampling time. Shot-boundary detection and keeping single-shot windows prevent it.
+{{< /details >}}
+
+**20. What goes wrong if subtitles and watermarks are left in the training videos?**
+
+{{< details title="Answer" closed="true" >}}
+Overlays appear in so many clips that the model treats them as part of what video looks like and paints fake text and logos into its outputs. They also leak provenance marks from the source sites. OCR-based detection lets the pipeline drop or crop those clips before encoding.
+{{< /details >}}

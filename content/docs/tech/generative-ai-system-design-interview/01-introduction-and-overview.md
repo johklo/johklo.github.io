@@ -2,7 +2,7 @@
 title: "01. GenAI Fundamentals and the Interview Framework"
 description: "A deep study companion for the GenAI basics behind every design interview: model families, capacity and compute, scaling laws, data, distributed training, sampling, evaluation, and a seven-step answer framework with a 45-minute plan."
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 10
 draft: false
 tags: ["book-club", "genai-system-design", "interview-framework", "scaling-laws", "distributed-training"]
@@ -491,3 +491,159 @@ This is how I would spend a 45-minute session on an open-ended prompt such as "d
 | 40-45 | Deploy and wrap up | Rollout, monitoring, next extensions, open risks | Monitoring arrows back to data |
 
 Write numbers down as soon as you assume them, since sizing reuses them. If pulled into a deep dive early, follow it and compress later steps rather than dropping evaluation or the system diagram.
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. What does a generative model learn that a discriminative model does not, and why does that allow it to create new outputs?**
+
+{{< details title="Answer" closed="true" >}}
+A discriminative model only learns \( p(y \mid x) \), a mapping from inputs to labels or scores, so it can judge an input but has no description of what inputs look like. A generative model learns \( p(x) \) or \( p(x \mid c) \), the distribution of the data itself. Once you have a distribution over data, you can draw from it, and each draw is a new artifact such as a sentence or an image.
+{{< /details >}}
+
+**2. What job does each of the two terms in the VAE objective do?**
+
+{{< details title="Answer" closed="true" >}}
+The expected log-likelihood term rewards the decoder for rebuilding the input from the latent \( z \). The KL term pulls the encoder's distribution \( q_\phi(z \mid x) \) toward the simple prior \( p(z) \). Without the KL term the latent space could become irregular, and a random draw from the prior would decode into garbage instead of plausible data.
+{{< /details >}}
+
+**3. What is mode collapse in a GAN?**
+
+{{< details title="Answer" closed="true" >}}
+The generator finds a small set of outputs that the discriminator accepts as real and keeps producing only those. Each sample can look sharp, yet the variety of the data is lost. It is one of the main reasons GANs are harder to train than VAEs, autoregressive models or diffusion models.
+{{< /details >}}
+
+**4. In a diffusion model, what does the network see as input during training and what does it try to output?**
+
+{{< details title="Answer" closed="true" >}}
+A clean sample \( x_0 \) is mixed with Gaussian noise \( \epsilon \) at a random timestep \( t \) in closed form, \( x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon \). The network receives \( x_t \), \( t \) and the conditioning \( c \), and predicts the noise \( \epsilon \) that was added. The loss is the squared error between the true and predicted noise.
+{{< /details >}}
+
+**5. What does MFU mean in a training estimate, and why does the note assume about 40%?**
+
+{{< details title="Answer" closed="true" >}}
+Model FLOPs utilization is the share of a GPU's peak arithmetic throughput that is actually spent on the model's math. Real runs lose time to communication, memory traffic, data loading and pipeline idling, so they never reach peak. Assuming around 40% turns a datasheet number into a realistic sustained rate, such as \( 4 \times 10^{14} \) FLOP/s for an H100.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. Where does the \( C \approx 6ND \) rule for training compute come from?**
+
+{{< details title="Answer" closed="true" >}}
+Each weight takes part in one multiply and one add per token in the forward pass, which is about 2 FLOPs per parameter per token. The backward pass computes gradients for both activations and weights, costing roughly twice the forward pass, so about 4 more. That makes about 6 FLOPs per parameter per token, multiplied by \( N \) parameters and \( D \) tokens. Inference has only the forward pass, so it costs about \( 2N \) per token.
+{{< /details >}}
+
+**7. How does the temperature \( \tau \) change the next-token distribution?**
+
+{{< details title="Answer" closed="true" >}}
+Logits are divided by \( \tau \) before the softmax. With \( \tau < 1 \) the gaps between logits grow, so probability concentrates on the top tokens; with \( \tau > 1 \) the gaps shrink and the distribution flattens, giving more varied and riskier text. As \( \tau \) approaches 0 the top token takes all the mass, which is the same as greedy decoding.
+{{< /details >}}
+
+**8. In classifier-free guidance, what does the scale \( w \) control, and why does guidance raise the cost of each step?**
+
+{{< details title="Answer" closed="true" >}}
+The denoiser is run twice per step, once with the prompt and once with an empty condition, and the result moves away from the unconditional prediction along the difference:
+
+$$
+\hat\epsilon = \epsilon_\theta(x_t, \varnothing) + w\,\big(\epsilon_\theta(x_t, c) - \epsilon_\theta(x_t, \varnothing)\big)
+$$
+
+A larger \( w \) follows the prompt more strictly but lowers diversity and can oversaturate images. Because two network evaluations are needed per step, guidance roughly doubles sampling compute.
+{{< /details >}}
+
+**9. What is the pipeline bubble, and which knob shrinks it?**
+
+{{< details title="Answer" closed="true" >}}
+With \( p \) stages, early stages wait while the first micro-batch travels forward and later stages wait while the pipeline drains, so part of each step is idle. The idle fraction is about \( (p-1)/(m+p-1) \). Raising the number of micro-batches \( m \) per step makes the fill and drain time a smaller share of the total, which shrinks the bubble.
+{{< /details >}}
+
+**10. What does each ZeRO stage shard, and what is the price?**
+
+{{< details title="Answer" closed="true" >}}
+Stage 1 splits the optimizer state across data-parallel workers, stage 2 also splits the gradients, and stage 3 also splits the weights themselves, which are gathered layer by layer when needed (PyTorch FSDP corresponds to stage 3). Per-GPU memory then falls almost in proportion to the number of workers. The price is extra all-gather and reduce-scatter traffic on the network.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. Estimate the parameters, forward FLOPs per token and BF16 weight size for a Transformer with \( d = 2048 \), \( L = 24 \) and a 32K vocabulary.**
+
+{{< details title="Answer" closed="true" >}}
+Use about \( 12d^2 \) per block (\( 4d^2 \) for attention, \( 8d^2 \) for the feed-forward layer).
+
+- Per block: \( 12 \times 2048^2 = 12 \times 4{,}194{,}304 \approx 50.3\text{M} \).
+- All blocks: \( 24 \times 50.3\text{M} \approx 1.21\text{B} \).
+- Embeddings: \( 32{,}000 \times 2048 \approx 65.5\text{M} \), so the total is about 1.27B.
+- Forward cost: \( 2 \times 1.27\text{B} \approx 2.5 \) GFLOPs per token.
+- BF16 weights: \( 1.27\text{B} \times 2 \) bytes \( \approx 2.5 \) GB.
+{{< /details >}}
+
+**12. Under the Chinchilla rule of about 20 tokens per parameter, what model size and token count fit a budget of \( 6 \times 10^{23} \) FLOPs?**
+
+{{< details title="Answer" closed="true" >}}
+Substitute \( D = 20N \) into \( C = 6ND \) to get \( C = 120N^2 \).
+
+- \( N = \sqrt{6 \times 10^{23} / 120} = \sqrt{5 \times 10^{21}} \approx 7.1 \times 10^{10} \), about 71B parameters.
+- \( D = 20 \times 71\text{B} \approx 1.4\text{T} \) tokens.
+
+That lands close to Chinchilla's own 70B parameters on 1.4T tokens.
+{{< /details >}}
+
+**13. How much memory do mixed-precision Adam training states need for a 13B model, and what is the share per GPU when fully sharded over 8 GPUs?**
+
+{{< details title="Answer" closed="true" >}}
+Count 16 bytes per parameter: 2 for BF16 weights, 2 for gradients, 4 for FP32 master weights and 8 for the two Adam moments.
+
+- Total: \( 13 \times 10^9 \times 16 = 208 \) GB, before activations.
+- Sharded over 8 GPUs: \( 208 / 8 = 26 \) GB each.
+
+The unsharded total is far above one 80 GB GPU, while the sharded share fits with room left for activations.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why is a mixture-of-experts model sized one way for memory and another way for throughput?**
+
+{{< details title="Answer" closed="true" >}}
+Every expert must be stored, so memory follows the total parameter count. A router sends each token through only a few experts, so the compute per token follows the active parameter count. Mixtral 8x7B is the note's example: about 47B parameters held but roughly 13B used per token, giving the memory needs of a large model and the per-token compute of a much smaller one.
+{{< /details >}}
+
+**15. Why did Chinchilla reach a different compute-optimal split than Kaplan et al.?**
+
+{{< details title="Answer" closed="true" >}}
+Chinchilla trained hundreds of models with each learning-rate schedule matched to that run's length, which the earlier setup had not done, and fitted loss jointly in \( N \) and \( D \). The result was that parameters and tokens should grow at about the same rate, near \( C^{0.5} \) each. Kaplan's fit grew model size much faster than data, so models built on it, such as GPT-3, were undertrained for their compute.
+{{< /details >}}
+
+**16. Why do image and video pipelines often precompute latents before training?**
+
+{{< details title="Answer" closed="true" >}}
+Raw media is huge: 2B image-text pairs at about 500 KB each is around a petabyte, while 15T text tokens are only about 60 TB. Encoding each image once into a compact latent, for example with a VAE that turns 512x512x3 pixels into 64x64x4, removes repeated encoding work and cuts storage and read bandwidth on every epoch.
+{{< /details >}}
+
+**17. Why does the note recommend one primary online metric plus guardrails rather than treating several metrics as equal goals?**
+
+{{< details title="Answer" closed="true" >}}
+A single primary metric tied to the product goal gives an A/B test a clear win condition. Guardrails such as latency, cost or safety rate set limits a launch must not break. When several metrics are weighted equally, a test can show mixed movements that nobody can resolve, and a change that helps one number while hurting users can slip through.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if you train in FP16 without loss scaling?**
+
+{{< details title="Answer" closed="true" >}}
+FP16 has a narrow exponent range, so small gradient values underflow to zero and updates silently disappear, and large values can overflow into NaNs. Loss scaling multiplies the loss before the backward pass to keep gradients in range. BF16 shares FP32's exponent range, which is why switching to it usually removes the problem without scaling.
+{{< /details >}}
+
+**19. What goes wrong if benchmark test documents remain in the pretraining data?**
+
+{{< details title="Answer" closed="true" >}}
+The model may have memorized the test items, so benchmark scores rise without any real gain in capability. Teams then pick checkpoints or ship models based on inflated numbers that do not hold on real user traffic. Decontamination, which drops documents that overlap test sets, is a filtering step for this reason.
+{{< /details >}}
+
+**20. What goes wrong if a candidate spends most of the interview on the model architecture?**
+
+{{< details title="Answer" closed="true" >}}
+Data, evaluation and serving get squeezed or skipped, and those are where requirements become concrete decisions and cost numbers. Candidates rarely fail for picking the wrong architecture; they fail when they cannot link a requirement to a choice or estimate cost.
+{{< /details >}}

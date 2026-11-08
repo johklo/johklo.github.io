@@ -2,7 +2,7 @@
 title: "06. Retrieval-Augmented Generation over Company Documents"
 description: "Deep-dive notes on designing a ChatPDF-style assistant for internal documents: why RAG, layout-aware parsing and chunking, dense and hybrid retrieval, ANN indexes, rerankers, prompt design, RAFT, the RAG evaluation triad, serving, sizing and interview practice"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 60
 draft: false
 tags: ["book-club", "genai-system-design", "rag", "vector-search", "llm"]
@@ -412,3 +412,149 @@ Walk the stages in order. Ingestion first: a failed nightly job or parser regres
 | 29-36 | Triad metrics, eval set, judge calibration, online signals | Query-context-answer triangle |
 | 36-42 | Latency budget, streaming, caching, cascade, injection defense, monitoring | End-to-end architecture |
 | 42-45 | Multi-turn, uploads, dynamic retrieval, text-to-SQL; recap trade-offs | Point back at diagrams |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. Into which two sub-problems does the RAG task split, and what kind of ML problem is each?**
+
+{{< details title="Answer" closed="true" >}}
+Retrieval ranks stored chunks by relevance to the question, which is a representation-learning and search problem. Generation writes the answer token by token conditioned on the question and the retrieved chunks, which is ordinary next-token prediction with a longer prompt.
+{{< /details >}}
+
+**2. What is hierarchical (small-to-big) indexing?**
+
+{{< details title="Answer" closed="true" >}}
+Small chunks are embedded and searched, because a short focused passage gives a sharp vector and a precise citation. Each small chunk keeps a link to the larger section it came from, and the larger section is what goes into the prompt. Search precision comes from the small unit and answer context from the big one.
+{{< /details >}}
+
+**3. How does a cross-encoder reranker differ from the bi-encoder, and why does it only see 20 to 100 candidates?**
+
+{{< details title="Answer" closed="true" >}}
+The bi-encoder embeds query and chunk separately, so chunk vectors can be computed once and searched quickly, but the two texts never attend to each other. The cross-encoder reads query and chunk together in one Transformer and outputs a relevance score, so it can notice negation or which entity a number belongs to. Nothing can be precomputed, so it needs one forward pass per pair, which is only affordable on a short candidate list.
+{{< /details >}}
+
+**4. What does HyDE do, and why can it help?**
+
+{{< details title="Answer" closed="true" >}}
+HyDE asks an LLM to write a hypothetical answer to the question and embeds that instead of the question. A short question and a long policy passage look different even when they match, while a made-up answer is written in the same register as the chunks, so its vector tends to land closer to the right ones.
+{{< /details >}}
+
+**5. How do faithfulness, answer relevance and correctness differ?**
+
+{{< details title="Answer" closed="true" >}}
+Faithfulness checks whether the answer's claims are supported by the retrieved context, scored as supported claims over total claims. Answer relevance checks whether the answer addresses the question without padding or drifting. Correctness compares the answer with a reference answer. An answer can be faithful but wrong because the context is outdated, or correct but unfaithful because the model used its own memory.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. In BM25, what do \(k_1\) and \(b\) control, and why does an error code score so well?**
+
+{{< details title="Answer" closed="true" >}}
+\(k_1\) controls saturation: the first occurrences of a term add a lot, later ones add less and less. \(b\) controls length normalization, so a long document does not win just by containing more words. An error code appears in very few documents, so its IDF is high and a match on it dominates the score. A dense encoder may map it near similar-looking codes and lose that exactness.
+{{< /details >}}
+
+**7. Why does reciprocal rank fusion combine ranks instead of raw scores, and what does \(k\) do?**
+
+{{< details title="Answer" closed="true" >}}
+Cosine similarities and BM25 scores live on unrelated scales, so adding them would let one retriever dominate arbitrarily. RRF uses only each chunk's position in each list, which is comparable across retrievers. The constant \(k\) flattens the difference between top ranks: with \(k = 60\), rank 1 contributes \(1/61\) and rank 5 contributes \(1/65\), so a chunk that several lists rank fairly high can beat one that a single list ranks first.
+{{< /details >}}
+
+**8. In the contrastive loss for the embedding model, why use a small temperature, and why do larger batches help?**
+
+{{< details title="Answer" closed="true" >}}
+Dividing similarities by a small \(\tau\) such as 0.01 to 0.05 stretches small differences, so the softmax concentrates on the negatives that score close to the positive. Those near misses then receive most of the gradient, which is where the encoder needs to learn distinctions. Other chunks in the batch serve as negatives for free, so a larger batch supplies more negatives per step and a harder comparison.
+{{< /details >}}
+
+**9. Which knobs trade recall against speed in HNSW and in IVF?**
+
+{{< details title="Answer" closed="true" >}}
+In HNSW, \(M\) sets links per node and so memory and graph quality, efConstruction sets build-time effort, and efSearch sets how many candidates the query-time walk keeps, which is the main recall-latency dial. In IVF, \(n_\text{list}\) sets how many k-means cells the vectors are split into and \(n_\text{probe}\) how many of the nearest cells are scanned. More probes or a larger efSearch raise recall and latency together.
+{{< /details >}}
+
+**10. In RAFT, why do some training examples omit the golden document, and how do you tell \(P\) is wrong?**
+
+{{< details title="Answer" closed="true" >}}
+In production the retriever sometimes misses the right chunk. Examples with only distractors teach the model to notice when the evidence is absent and to say so rather than invent an answer, and distractors in every example teach it to ignore passages that merely share keywords. If the tuned model refuses too often, \(P\) was set too low, so it rarely saw the golden document. If it copies distractors, they were too easy to tell apart during training.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. With \(k = 60\), chunk A is rank 1 in the dense list and rank 10 in BM25; chunk B is rank 3 in both. Which ranks higher after RRF?**
+
+{{< details title="Answer" closed="true" >}}
+Chunk A: \(1/61 + 1/70 \approx 0.01639 + 0.01429 = 0.03068\).
+
+Chunk B: \(1/63 + 1/63 = 2/63 \approx 0.03175\).
+
+B wins despite never being first, because both retrievers agree it is good. That is the intended behavior: agreement between two different signals is better evidence than one strong vote.
+{{< /details >}}
+
+**12. Ranks 1 to 3 hold chunks with relevance grades 0, 2 and 1. Compute NDCG@3.**
+
+{{< details title="Answer" closed="true" >}}
+Gains are \(2^{rel} - 1\), so 0, 3 and 1. Discounts are \(\log_2 2 = 1\), \(\log_2 3 \approx 1.585\), \(\log_2 4 = 2\).
+
+$$
+\text{DCG@3} = 0 + \frac{3}{1.585} + \frac{1}{2} \approx 1.893 + 0.5 = 2.393
+$$
+
+The ideal order is 2, 1, 0: \(\text{IDCG@3} = 3/1 + 1/1.585 + 0 \approx 3.631\). So \(\text{NDCG@3} \approx 2.393 / 3.631 \approx 0.66\). The best chunk sitting at rank 2 instead of rank 1 costs about a third of the score.
+{{< /details >}}
+
+**13. At 60M vectors with \(n_\text{list} = 16{,}384\) and \(n_\text{probe} = 64\), how many vectors does a query scan, and how much memory do 64-byte PQ codes need compared with float32 at 768 dimensions?**
+
+{{< details title="Answer" closed="true" >}}
+Scanned: \(60\text{M} \times 64 / 16{,}384 \approx 234{,}000\) vectors, or \(1/256\) of the index.
+
+PQ codes: \(60\text{M} \times 64 \text{ B} = 3.84 \text{ GB}\). Full vectors: \(60\text{M} \times 768 \times 4 \text{ B} \approx 184 \text{ GB}\), so PQ is 48 times smaller. The recall lost to compression is bought back by re-scoring the top few hundred candidates against full vectors kept on SSD.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why prepend the heading path to a chunk before embedding it?**
+
+{{< details title="Answer" closed="true" >}}
+A chunk cut from the middle of a section often lacks its subject; "the limit is 80 EUR" says nothing about meals or travel. With "Travel policy > Meals > International" in front, the vector carries the topic, and a query about meal limits abroad can find it. The same header also tells the LLM where the passage came from.
+{{< /details >}}
+
+**15. Why measure recall@50 after ANN search and NDCG@5 after reranking, rather than one end-to-end retrieval number?**
+
+{{< details title="Answer" closed="true" >}}
+The two stages fail differently. Low recall@50 means the right chunk never reaches the reranker, so the fix lies in chunking, the encoder, hybrid search or ANN settings. High recall@50 with low NDCG@5 means the chunk was found but ranked out of the prompt, which points at the reranker. One overall number would show that something is wrong without saying which stage to work on.
+{{< /details >}}
+
+**16. Why must a semantic answer cache be scoped by permission set and invalidated when chunks change?**
+
+{{< details title="Answer" closed="true" >}}
+A cached answer was built from chunks the original asker was allowed to see. Serving it to a user with fewer permissions would leak restricted content without any search call. When a source page is edited, answers built on the old text become wrong while still looking authoritative. Keying by permission set and tracking which chunks each answer used keeps the savings for repeated HR and IT questions without those failures.
+{{< /details >}}
+
+**17. Why does captioning plus OCR tend to beat CLIP embeddings for screenshots and text-heavy figures?**
+
+{{< details title="Answer" closed="true" >}}
+CLIP learned from natural photos and their captions, so it represents what a scene looks like better than the words written in it. Screenshots carry their meaning mostly in visible text and layout, which OCR extracts directly and a captioner can summarize. The result is readable text that the normal text encoder can embed and the LLM can quote. The price is an extra generation pass per image and some lost visual detail.
+{{< /details >}}
+
+**18. Why do daily token estimates point at prompt size, not answer length, as the main cost lever?**
+
+{{< details title="Answer" closed="true" >}}
+Each question sends about 3,000 input tokens and gets about 200 back, so input is roughly 15 times the output volume. Cutting from 8 chunks to 5 removes about a third of input spend, while trimming the answer saves little money even though it helps latency.
+{{< /details >}}
+
+### Common mistakes
+
+**19. What goes wrong if mined hard negatives are used without filtering them with a cross-encoder?**
+
+{{< details title="Answer" closed="true" >}}
+Top BM25 or index hits that are not the labeled positive are often relevant chunks nobody labeled. Training the encoder to push them away teaches it that correct passages are wrong, which flattens similarity among relevant chunks and lowers recall. Scoring candidates with a cross-encoder and dropping those that look relevant removes most of these false negatives.
+{{< /details >}}
+
+**20. What goes wrong if forum threads and pages with boilerplate footers are indexed as they are?**
+
+{{< details title="Answer" closed="true" >}}
+A long thread contains wrong guesses and outdated replies next to the accepted answer, and the LLM may cite a wrong reply as easily as the right one. Near-identical copies of one passage can fill the whole top-k, leaving no room for other evidence. Footers and navigation text repeated on every page match many queries weakly and push real content down. Keeping question plus accepted answer, removing near duplicates and stripping boilerplate before chunking prevent all three.
+{{< /details >}}

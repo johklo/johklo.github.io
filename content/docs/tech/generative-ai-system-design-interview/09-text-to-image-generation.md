@@ -2,7 +2,7 @@
 title: "09. Text-to-Image Generation with Diffusion"
 description: "A detailed study of a text-conditioned diffusion system: caption repair, latent U-Net and DiT denoisers, noise-prediction training, guidance and fast samplers, alignment metrics, GPU sizing, and a safety-wrapped serving pipeline"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 90
 draft: false
 tags: ["book-club", "genai-system-design", "diffusion-models", "text-to-image", "ai-safety"]
@@ -435,3 +435,161 @@ Low utilization with high latency points away from the denoiser, toward queueing
 | 33 to 37 | FID, CLIPScore and its blind spots, VQA metrics, human side-by-side, fairness audit, reroll rate | Metric list with gaps |
 | 37 to 43 | Request path with both safety checks and enhancer, latency budget, fleet size, optimizations | End-to-end architecture |
 | 43 to 45 | Personalization, editing, ControlNet, RLHF; the biggest risk | Point at the diagram |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. Name the four model parts in the chosen design and say which ones are trained during the main training run.**
+
+{{< details title="Answer" closed="true" >}}
+A text encoder (T5-class, CLIP, or both) turns the prompt into token embeddings. A convolutional autoencoder maps 1024px images to a small latent and back. A denoiser (U-Net or DiT) predicts noise in that latent, conditioned on time and text. An optional upscaler finishes the image. Only the denoiser is trained in the main run; the autoencoder is trained once beforehand and then frozen, and the text encoder stays frozen so cached embeddings remain valid.
+{{< /details >}}
+
+**2. What is \( \mathrm{SNR}(t) \) in the forward process, and how does it change from \( t = 0 \) to \( t = T \)?**
+
+{{< details title="Answer" closed="true" >}}
+It is the ratio of signal variance to noise variance in \( x_t \):
+
+$$
+\mathrm{SNR}(t) = \frac{\bar\alpha_t}{1 - \bar\alpha_t}
+$$
+
+where \( \bar\alpha_t \) is the cumulative product of \( (1 - \beta_s) \). Near \( t = 0 \), \( \bar\alpha_t \) is close to 1 and SNR is very large; near \( t = T \) it approaches 0 and the latent is almost pure noise. Thinking in SNR rather than step index makes schedules comparable across resolutions.
+{{< /details >}}
+
+**3. What is caption repair, and why are some original captions kept?**
+
+{{< details title="Answer" closed="true" >}}
+Many user captions are missing, filenames, tag lists or in another language, and the model can only learn concepts that captions mention. A vision-language model writes a dense description of every image, and CLIP similarity scores the original caption. Relevant originals are kept because they carry proper nouns and the vocabulary real users type; weak ones are replaced and hopeless pairs are dropped. Training on a mix keeps the model able to handle both long and short prompts.
+{{< /details >}}
+
+**4. What is aspect-ratio bucketing, and which problem does it fix?**
+
+{{< details title="Answer" closed="true" >}}
+Images are grouped into a few fixed resolutions with different shapes (for example 1024x1024, 1152x896, 896x1152), and each batch draws from one bucket. Forcing everything into square center crops cuts off heads and the edges of scenes and teaches the model to center every subject. Bucketing keeps more of each image and also lets the model generate non-square outputs.
+{{< /details >}}
+
+**5. In cross-attention, what do the queries, keys and values come from, and what does one row of the attention matrix mean?**
+
+{{< details title="Answer" closed="true" >}}
+Queries are projections of the flattened image feature map, one per spatial position. Keys and values are projections of the text token embeddings. One softmax row is a single position's distribution over prompt tokens, telling how much that location draws on each word. Averaging those weights for one token over positions gives a map of where, for example, "cat" is being painted, which prompt-to-prompt style editing uses.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. Why can \( x_t \) be produced from \( x_0 \) in one step during training?**
+
+{{< details title="Answer" closed="true" >}}
+Each forward step scales the previous latent and adds independent Gaussian noise, and a sum of independent Gaussians is Gaussian. Chaining the steps multiplies the signal scales and accumulates the noise variances, giving
+
+$$
+x_t = \sqrt{\bar\alpha_t}\, x_0 + \sqrt{1 - \bar\alpha_t}\, \epsilon
+$$
+
+So a training example needs just one sampled \( t \) and one noise draw, not \( t \) sequential steps, which is what makes training on random timesteps cheap.
+{{< /details >}}
+
+**7. How does dropping the caption 10 percent of the time make classifier-free guidance possible, and what does the guidance scale \( w \) do?**
+
+{{< details title="Answer" closed="true" >}}
+With the empty caption in some examples, one network learns both a conditional prediction \( \epsilon_\theta(x_t, t, c) \) and an unconditional one \( \epsilon_\theta(x_t, t, \varnothing) \). At sampling time their difference points toward images that fit the text better. Guidance starts from the unconditional prediction and adds \( w \) times that difference: \( w = 1 \) reproduces plain conditional sampling and larger \( w \) pushes harder toward the prompt. No separate classifier is needed.
+{{< /details >}}
+
+**8. How does DDIM jump from step \( t \) to an earlier step \( s \) without visiting every step in between?**
+
+{{< details title="Answer" closed="true" >}}
+It first uses the predicted noise to estimate the clean latent:
+
+$$
+\hat x_0 = \frac{x_t - \sqrt{1 - \bar\alpha_t}\,\hat\epsilon}{\sqrt{\bar\alpha_t}}
+$$
+
+Then it rebuilds a latent at step \( s \) by mixing \( \hat x_0 \) and \( \hat\epsilon \) with the coefficients for \( s \): \( x_s = \sqrt{\bar\alpha_s}\,\hat x_0 + \sqrt{1 - \bar\alpha_s}\,\hat\epsilon \). No fresh noise is injected, so the path is deterministic and a fixed seed reproduces the same image, and 20 to 50 such jumps come close to full quality.
+{{< /details >}}
+
+**9. Why do higher resolutions need noise schedules shifted toward more noise, and what goes wrong when the schedule never reaches zero SNR?**
+
+{{< details title="Answer" closed="true" >}}
+Neighboring pixels in a large image are strongly correlated, so at a given noise level more of the image's structure survives than at low resolution; the same schedule therefore looks "too easy" and the model under-trains at the hard, global-layout end. If SNR at \( t = T \) stays above zero, training never sees pure noise, but sampling starts from pure noise. That mismatch shows up as difficulty generating very dark or very bright images, since some average brightness always leaks through in training.
+{{< /details >}}
+
+**10. Why does CLIPScore miss errors like "dog left of cat" versus "cat left of dog"?**
+
+{{< details title="Answer" closed="true" >}}
+CLIP is trained contrastively: each image must match its own caption better than the other captions in a random batch. Random batches almost never contain two captions that differ only in word order or attribute binding, so CLIP gets no pressure to encode those differences. It ends up behaving close to a bag-of-words matcher, and CLIPScore rewards having the right objects regardless of their arrangement. VQA-based metrics such as TIFA or DSG check those relations directly.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. How much smaller is the latent than the image, and how much storage do 500M cached latents need?**
+
+{{< details title="Answer" closed="true" >}}
+Image values: \( 1024 \times 1024 \times 3 = 3{,}145{,}728 \).
+Latent values (8x downsampling, 4 channels): \( 128 \times 128 \times 4 = 65{,}536 \).
+Ratio: \( 3{,}145{,}728 / 65{,}536 = 48 \).
+In fp16 a latent is \( 65{,}536 \times 2 = 131{,}072 \) bytes, 128 KB, so \( 500 \times 10^6 \times 128 \text{ KB} \approx 64 \) TB.
+{{< /details >}}
+
+**12. Why does a 3B-parameter denoiser trained with AdamW need about 48 GB before activations?**
+
+{{< details title="Answer" closed="true" >}}
+Mixed-precision AdamW keeps about 16 bytes per parameter: bf16 weights (2) and gradients (2), plus fp32 master weights (4) and two fp32 Adam moments (4 + 4).
+Total: \( 3 \times 10^9 \times 16 = 48 \times 10^9 \) bytes, about 48 GB.
+That alone fills most of an 80 GB GPU, which is why FSDP or ZeRO-3 shards these states across GPUs.
+{{< /details >}}
+
+**13. How do patch size and training resolution change the DiT token count and attention cost?**
+
+{{< details title="Answer" closed="true" >}}
+At 1024px the latent is \( 128 \times 128 \). Patch 2: \( (128/2)^2 = 4{,}096 \) tokens. Patch 1: \( 128^2 = 16{,}384 \) tokens, four times more, and attention grows with the square of tokens, so about \( 4^2 = 16 \) times the attention cost.
+At 256px the latent is \( 32 \times 32 \), so patch 2 gives \( 16^2 = 256 \) tokens, 16 times fewer than at 1024px. Per-token cost being roughly constant, each low-resolution sample is about 16 times cheaper, which is why most samples are seen at 256px.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why have a prompt enhancer at serving time when the training captions were already improved?**
+
+{{< details title="Answer" closed="true" >}}
+Recaptioning makes the model expect dense, detailed descriptions, and a model trained mostly on those handles short user prompts worse. The enhancer closes that gap by expanding terse prompts into the style the model learned, while keeping every constraint the user wrote. It is also a place to vary unspecified demographic attributes across the four samples. Showing the rewritten prompt keeps the behavior transparent.
+{{< /details >}}
+
+**15. Why check safety both before and after generation?**
+
+{{< details title="Answer" closed="true" >}}
+The prompt check is cheap and runs before any GPU work, so clearly disallowed requests cost almost nothing to refuse. It can be evaded with misspellings and euphemisms, and a harmless prompt can still produce unsafe pixels. The image check looks at what was actually generated, independent of wording. Each layer covers the other's blind spot, and blocks from both feed retraining.
+{{< /details >}}
+
+**16. Why cap the share of the product's own generated images in pretraining data?**
+
+{{< details title="Answer" closed="true" >}}
+Generated images come from the model's own distribution, which is already narrower and more stylized than real data. Training on them repeatedly reinforces the model's preferences, so variety shrinks with each round. Logged prompts, outputs and feedback are still valuable for preference tuning and evaluation sets, where they reflect what users actually ask for.
+{{< /details >}}
+
+**17. Why rebalance demographic skew with sampling weights instead of deleting images?**
+
+{{< details title="Answer" closed="true" >}}
+Weights change how often each image is seen without losing any data, so the change is cheap and can be undone or retuned in the next run. Deleting images discards information permanently and can remove useful variety along other dimensions. Weighting depends on attribute classifiers, so those must be checked against hand labels, because their own errors are skewed.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if the captioner hallucinates objects that are not in the image?**
+
+{{< details title="Answer" closed="true" >}}
+The model sees captions that name things it cannot find in the pixels. It learns that some words do not need to appear in the output, which is the opposite of prompt adherence. Because the captioner runs on every image, its errors spread across the whole dataset rather than staying in a small corner, so caption quality has to be audited before large-scale use.
+{{< /details >}}
+
+**19. What goes wrong if you judge diffusion training progress by the loss curve alone?**
+
+{{< details title="Answer" closed="true" >}}
+The loss is an average over random noise levels and is dominated by how hard each level is, so it can stay almost flat while samples keep getting better, or move for reasons unrelated to quality. Stopping or tuning by it misleads you. Track FID and alignment metrics on a fixed prompt set, with fixed seeds, across checkpoints instead.
+{{< /details >}}
+
+**20. What goes wrong if the guidance scale is set very high?**
+
+{{< details title="Answer" closed="true" >}}
+Prompt adherence and contrast keep rising at first, but samples from different seeds start to look alike, and eventually colors oversaturate and surfaces look plastic. Undistilled guidance also costs two denoiser evaluations per step at any scale. A sweep that plots FID against an alignment score and picks the knee avoids both extremes.
+{{< /details >}}

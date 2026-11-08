@@ -2,7 +2,7 @@
 title: "05. Image Captioning for Asset Names"
 description: "Deep-dive notes on an image captioner that suggests short asset file names: ViT encoder plus pretrained text decoder, CLIP-based data filtering, staged training, beam search with a confidence gate, CIDEr and CLIPScore, and a sized serving path"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 50
 draft: false
 tags: ["book-club", "genai-system-design", "multimodal", "image-captioning", "vision-transformer"]
@@ -453,3 +453,149 @@ The encoder sees a shifted input distribution: squashed instead of cropped image
 | 32 to 37 | CIDEr-D, CLIPScore, CHAIR, precision at coverage, human and online | Metric table |
 | 37 to 43 | Async serving, batching, cache, safety filter, latency and fleet math, monitoring | Architecture and sequence |
 | 43 to 45 | Personalization, multilingual, OCR, cost cuts | Bullets |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. Why is captioning described as conditional text generation shaped like machine translation?**
+
+{{< details title="Answer" closed="true" >}}
+The output is a token sequence generated left to right, each token conditioned on the earlier ones and on an input. In translation the input is a sentence in another language; here it is an image, so the encoder plays the role of reading the source and the decoder writes the target.
+{{< /details >}}
+
+**2. What does the CLIP agreement score measure, and how is its cutoff chosen?**
+
+{{< details title="Answer" closed="true" >}}
+It is the cosine similarity between CLIP's embedding of the image and CLIP's embedding of the caption, so it estimates whether the text describes the picture. Pairs below a threshold, such as a photo captioned with a camera file name, are dropped. The note suggests starting in the mid-0.2s for ViT-B CLIP and then setting the line by looking at samples just above and below it, because the right value depends on the model and the data.
+{{< /details >}}
+
+**3. What do teacher forcing and exposure bias mean for this model?**
+
+{{< details title="Answer" closed="true" >}}
+During training the decoder receives the reference prefix at each step, which is teacher forcing, so it never sees its own mistakes. At inference it consumes its own previous tokens, and an early error puts it in states it was never trained on. That mismatch is exposure bias, and the note links it to symptoms like repetition. Beam search, n-gram blocking and sequence-level training such as SCST all reduce its effect.
+{{< /details >}}
+
+**4. What does CHAIR count, and why is it treated as a guardrail rather than the main metric?**
+
+{{< details title="Answer" closed="true" >}}
+CHAIR counts objects that a caption mentions but that are absent from the image's annotations, so it directly measures object hallucination. For a file-name tool, naming something that is not in the picture is the worst error. It does not reward good names and does not catch wrong attributes such as color, so it serves as a limit a candidate must not cross while CIDEr-D and CLIPScore rank candidates.
+{{< /details >}}
+
+**5. What is precision at coverage, and why does this product need it?**
+
+{{< details title="Answer" closed="true" >}}
+Coverage is the share of images for which the system shows a name; precision is the share of shown names that are acceptable. Raising the confidence threshold lowers coverage and usually raises precision, so the curve shows every operating point. Because the system is allowed to stay silent, ordinary caption metrics computed on all images miss the real trade-off, which is how many suggestions you give up to keep the shown ones right.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. Why do raw beam scores favor short captions, and what does the exponent \(\alpha\) in length normalization do?**
+
+{{< details title="Answer" closed="true" >}}
+A beam's raw score is a sum of log-probabilities, each of which is negative, so every extra token lowers the total and short captions win by default. Dividing by \(|y|^{\alpha}\) removes some or all of that penalty. With \(\alpha = 0\) there is no correction, with \(\alpha = 1\) the score is the average log-probability per token, and values in between partially correct. The normalized score is also what the serving gate compares against its threshold.
+{{< /details >}}
+
+**7. How does the SCST gradient decide which sampled captions to reinforce?**
+
+{{< details title="Answer" closed="true" >}}
+For each image it samples a caption \(y^{s}\) and also decodes the greedy caption \(\hat{y}\). The weight on \(\nabla \log p(y^{s} \mid x)\) is \(r(y^{s}) - r(\hat{y})\), the CIDEr reward of the sample minus that of the greedy output. Samples that beat what the model would say by default become more likely, and samples that do worse become less likely.
+{{< /details >}}
+
+**8. How does a ViT turn a patch into a token, and why does position encoding matter when input resolution changes?**
+
+{{< details title="Answer" closed="true" >}}
+Each \(16 \times 16 \times 3\) patch is flattened to 768 numbers, multiplied by a learned projection to model width, and given a position embedding. At a fixed resolution the type of position embedding makes little difference. If inference uses a different resolution, the number of patches changes, and a learned 1D table has no entries for the new grid, so it must be interpolated. 2D or sinusoidal schemes extend more naturally.
+{{< /details >}}
+
+**9. Why do label smoothing and temperature scaling matter more here than in a typical captioner?**
+
+{{< details title="Answer" closed="true" >}}
+The serving gate reads the model's token probabilities to decide whether to show a name. A model trained with hard targets tends to be overconfident, so wrong names can score above the threshold. Label smoothing of 0.1 softens the targets during training, and temperature scaling on validation data corrects the remaining miscalibration after training.
+{{< /details >}}
+
+### Numbers and estimates
+
+**10. How many patches does a ViT with 16-pixel patches see at 448 pixels, and at 448 pixels with 32-pixel patches?**
+
+{{< details title="Answer" closed="true" >}}
+At 448 with \(P = 16\): \(448 / 16 = 28\) per side, so \(28^2 = 784\) patches, four times the 196 at 224. Attention cost grows with the square of the token count, so the encoder's attention work rises by about 16x. At 448 with \(P = 32\): \(448 / 32 = 14\) per side, so 196 patches again, but each covers \(32 \times 32\) pixels and holds \(32 \times 32 \times 3 = 3{,}072\) values, which keeps cost down while losing fine detail.
+{{< /details >}}
+
+**11. A candidate caption has 4 tokens and the reference length is 6. What is BLEU's brevity penalty, and what if the candidate had 7 tokens?**
+
+{{< details title="Answer" closed="true" >}}
+With \(c = 4\) and \(r = 6\):
+
+$$
+\mathrm{BP} = e^{1 - 6/4} = e^{-0.5} \approx 0.61
+$$
+
+so the whole score is cut by about 39% for being short. With \(c = 7 > r\), the exponent \(1 - 6/7\) is positive and the \(\min\) caps BP at 1, so no penalty applies. On captions this short, one token of difference moves the score a lot, which is part of why BLEU-4 is unstable here.
+{{< /details >}}
+
+**12. If the CLIP filter kept 40% of pairs instead of 50%, how large would the clean set be and how much storage would it need?**
+
+{{< details title="Answer" closed="true" >}}
+Apply the survival rates in order:
+
+$$
+400\text{M} \times 0.8 \times 0.6 \times 0.85 \times 0.4 \times 0.97
+$$
+
+\(400 \times 0.8 = 320\), \(\times 0.6 = 192\), \(\times 0.85 = 163.2\), \(\times 0.4 = 65.3\), \(\times 0.97 \approx 63.3\text{M}\) pairs. At about 20 KB per image that is \(63.3\text{M} \times 20 \text{ KB} \approx 1.27 \text{ TB}\), down from about 79M pairs and 1.6 TB.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**13. Why is the captioning path asynchronous rather than part of the upload request?**
+
+{{< details title="Answer" closed="true" >}}
+The upload is the user's real task, and a name suggestion is a convenience. Running the model inside the request would tie upload latency and availability to GPU queues and model failures. With an event queue the upload returns immediately with an asset id, and the suggestion arrives by push when ready. If the model is slow or down, the only effect is that no suggestion appears.
+{{< /details >}}
+
+**14. When the blocklist or toxicity classifier fires, why drop the whole suggestion instead of masking the bad word?**
+
+{{< details title="Answer" closed="true" >}}
+A caption with a word removed can read strangely or still carry the offensive meaning through what remains. A hit also signals that the model's view of the image is suspect, so the rest of the name is less trustworthy. Since the product already treats silence as acceptable, discarding the suggestion costs little, while a damaged or still offensive name in someone's library costs a lot.
+{{< /details >}}
+
+**15. Why can padding to a square beat center-cropping for icons and banners?**
+
+{{< details title="Answer" closed="true" >}}
+Center-cropping a wide or tall image cuts off its edges. In photos the subject is usually near the middle, but icons and banners often place content right up to the border, so cropping can remove the very thing the name should describe. Padding keeps the whole image at the price of some empty area.
+{{< /details >}}
+
+**16. If a large instruction-tuned VLM gives the best captions, why is it used offline rather than served?**
+
+{{< details title="Answer" closed="true" >}}
+Serving it for tens of millions of uploads a day would cost far more than a file-name hint is worth, and its output length and tone are harder to control. Offline it is valuable: it rewrites long web captions into short names and acts as a teacher whose outputs train or distill the small served model.
+{{< /details >}}
+
+**17. Why must the perceptual-hash cache key include the model version?**
+
+{{< details title="Answer" closed="true" >}}
+The cache maps an image hash to a previously generated name. After a model update, cached entries still hold the old model's names, so popular images would keep getting old suggestions and any fix made by the update would not reach them. Including the model version in the key makes a new model start with its own entries, and rollback finds the previous ones intact.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if alt text describing people by appearance or gender is left in training data, relying on the output filter?**
+
+{{< details title="Answer" closed="true" >}}
+The model learns to describe people that way and produces such terms often. The output filter then has to catch every variant, and anything it misses reaches users as a presumptuous or biased name. Filtering after generation also drops suggestions that could have been fine with neutral wording, lowering coverage. Neutralizing the captions before training removes the habit at its source, with the filter as a second line.
+{{< /details >}}
+
+**19. What goes wrong if the model is quantized and the old confidence threshold is kept?**
+
+{{< details title="Answer" closed="true" >}}
+Quantization shifts the token probabilities slightly, so the distribution of normalized scores moves. The same threshold now corresponds to a different point on the precision-coverage curve: either more wrong names are shown or more good names are suppressed. The threshold must be re-tuned on the labeled set after quantizing.
+{{< /details >}}
+
+**20. What goes wrong if deduplication is run within the training set but not across training and evaluation splits?**
+
+{{< details title="Answer" closed="true" >}}
+Resized or recompressed copies of evaluation images stay in training data, so the model may have seen the exact images it is tested on, along with similar captions. Offline metrics then overstate quality, and model comparisons favor whichever one memorized more. Running perceptual-hash and embedding dedup across all splits prevents the leak.
+{{< /details >}}

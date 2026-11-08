@@ -2,7 +2,7 @@
 title: "07. Realistic Face Generation with GANs"
 description: "A deep dive on designing an unconditional 1024px face generator: why a StyleGAN-style GAN fits a sub-second budget, data curation and fairness, adversarial training math and stabilizers, truncation and latent editing, FID and its blind spots, and a serving stack with cost estimates"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 70
 draft: false
 tags: ["book-club", "genai-system-design", "gan", "image-generation", "computer-vision"]
@@ -424,3 +424,159 @@ Inspect discriminator accuracy on held-out reals, R1 magnitude and the ADA proba
 | 33-38 | FID and its gaps, precision and recall, memorization, per-group audit, human tests | Metric table |
 | 38-43 | Batching, FP16, pool, watermark, CDN, latency and fleet math | Serving diagram and sequence |
 | 43-45 | Conditioning, real-photo edits, video, one-step diffusion | Short list |
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. What is W space, which component produces it, and how is it different from Z space?**
+
+{{< details title="Answer" closed="true" >}}
+Z space is the 512-dimensional input, sampled from a standard Gaussian. W space is the output of the 8-layer mapping MLP that sits between \( z \) and the synthesis network. Because nothing forces \( w \) to be Gaussian, its distribution can bend to match the data, and attribute directions in it end up much closer to linear. Edits, truncation and style mixing all operate on \( w \), not \( z \).
+{{< /details >}}
+
+**2. What does the per-pixel noise input add to the generator, and what would happen without it?**
+
+{{< details title="Answer" closed="true" >}}
+Scaled noise is added after each convolution to provide random fine detail such as hair strands, freckles and pores. Without it, the latent would have to encode every one of those small, essentially random details, wasting capacity that should describe identity, pose and style. With it, the same \( w \) can render slightly different microtexture on each run while the face stays the same.
+{{< /details >}}
+
+**3. What is adaptive discriminator augmentation (ADA), and what controls its strength?**
+
+{{< details title="Answer" closed="true" >}}
+ADA applies color, geometric and cutout transforms to every image the discriminator sees, real and generated alike, so the discriminator cannot simply memorize a small training set. The probability of applying the transforms is not fixed: it is raised or lowered during training based on a signal that measures how much the discriminator is overfitting. The effect is small at 70k images and large at a few thousand.
+{{< /details >}}
+
+**4. In generative-model precision and recall, what does each number describe, and how does truncation move them?**
+
+{{< details title="Answer" closed="true" >}}
+Precision is the fraction of generated samples that land inside the region of feature space occupied by real images, a proxy for fidelity. Recall is the fraction of real images whose region is covered by generated samples, a proxy for coverage. Both are estimated with k-nearest-neighbor balls around feature vectors. Truncation pulls samples toward the average latent, so precision rises and recall falls.
+{{< /details >}}
+
+**5. What does the minibatch standard deviation layer give the discriminator?**
+
+{{< details title="Answer" closed="true" >}}
+It computes how much features vary across the current batch and appends that average spread as an extra input channel near the end of the discriminator. A batch of fakes that all look alike has unusually low spread, so the discriminator can flag it easily. That pushes the generator away from mode collapse, because producing near-identical samples now costs it.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. Why do VAE samples look soft at 1024px?**
+
+{{< details title="Answer" closed="true" >}}
+With a Gaussian decoder, the reconstruction term of the ELBO becomes a pixel-wise L2 loss. When several sharp outputs are plausible for one latent, the L2-optimal prediction is their average, and averaging sharp textures yields blur. The KL term also keeps latents close to the prior, which limits how much detail each latent can pin down. A GAN avoids this because it has no pixel-wise loss at all.
+{{< /details >}}
+
+**7. What does plugging the optimal discriminator into the original minimax game reveal, and why is that a problem early in training?**
+
+{{< details title="Answer" closed="true" >}}
+With the best possible discriminator \( D^*(x) = p_{data}(x) / (p_{data}(x) + p_g(x)) \), the generator's objective becomes
+
+$$
+2\,\text{JSD}(p_{data} \| p_g) - \log 4
+$$
+
+so it is minimizing Jensen-Shannon divergence. When the real and generated distributions barely overlap, as at the start of training, JSD sits near its maximum and barely changes as the generator improves, so the generator gets almost no useful signal. The non-saturating loss and the Wasserstein critic are two answers to this.
+{{< /details >}}
+
+**8. How does StyleGAN2's weight modulation and demodulation replace AdaIN?**
+
+{{< details title="Answer" closed="true" >}}
+Instead of normalizing feature maps, StyleGAN2 multiplies each input-channel slice of the convolution kernel by its style scale \( s_i \). It then divides each output channel's weights by the square root of the sum of their squares (plus a small \( \epsilon \)), so that output channel has unit expected variance. The style still controls the features, but no per-sample normalization of activations happens, which removes the droplet artifacts that AdaIN caused.
+{{< /details >}}
+
+**9. What does the R1 penalty measure, and why is it applied only every 16 minibatches?**
+
+{{< details title="Answer" closed="true" >}}
+R1 is the squared gradient norm of the discriminator's output with respect to real input images, scaled by \( \gamma / 2 \):
+
+$$
+R_1 = \frac{\gamma}{2}\,\mathbb{E}_{x \sim p_{data}}\big[\|\nabla_x D(x)\|_2^2\big]
+$$
+
+Keeping it small makes the discriminator flat around real data, which damps the oscillation between the two players. The penalty changes slowly, so computing it every 16 minibatches (lazy regularization) keeps most of the benefit while skipping most of the extra backward passes.
+{{< /details >}}
+
+**10. In the truncation formula \( w' = \bar{w} + \psi(w - \bar{w}) \), what do \( \psi = 1 \), \( \psi = 0.7 \) and \( \psi = 0 \) produce, and why does truncation hurt fairness?**
+
+{{< details title="Answer" closed="true" >}}
+At \( \psi = 1 \) the latent is untouched; at \( \psi = 0 \) every latent collapses to \( \bar{w} \), so every output is the average face. Around 0.7 most artifacts from poorly trained low-density regions disappear. Rare skin tones, ages and accessories live far from \( \bar{w} \), so shrinking distances toward it removes them first, which is why per-group centers or no truncation plus a rejection classifier are preferred here.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. Estimate the storage for 70,000 training faces at 1024x1024, including mipmaps.**
+
+{{< details title="Answer" closed="true" >}}
+Raw RGB pixels: \( 1024 \times 1024 \times 3 \approx 3.15 \) MB per image.
+Raw total: \( 70{,}000 \times 3.15 \text{ MB} \approx 220 \) GB.
+PNG compression roughly halves it: about 100 GB.
+Lower-resolution copies add \( 1/4 + 1/16 + \dots \approx 1/3 \): \( 100 \times 1.33 \approx 133 \), call it about 150 GB with overhead.
+That fits on local NVMe, which matters because training rereads the data hundreds of times.
+{{< /details >}}
+
+**12. Why does WebP instead of PNG save more latency than GPU tuning? Show the transfer times on a 20 Mbit/s link.**
+
+{{< details title="Answer" closed="true" >}}
+PNG output is about 1.5 MB: \( 1.5 \times 8 = 12 \) Mbit, and \( 12 / 20 = 0.6 \) s.
+WebP at quality 90 is about 200 KB: \( 0.2 \times 8 = 1.6 \) Mbit, and \( 1.6 / 20 = 0.08 \) s, so 80 ms.
+WebP also encodes faster (about 10 ms against 30 to 60 ms for PNG).
+The generator itself needs only about 25 ms for a batch of 16, so the half second saved on the network dwarfs any kernel optimization.
+{{< /details >}}
+
+**13. At an average of 500 requests per second, how much new image storage accumulates per day?**
+
+{{< details title="Answer" closed="true" >}}
+Seconds per day: 86,400.
+Images per day: \( 500 \times 86{,}400 = 43.2 \) million.
+At 200 KB each: \( 43.2 \times 10^6 \times 200 \text{ KB} = 8.64 \times 10^9 \text{ KB} \approx 8.6 \) TB per day.
+Over a month that is more than 250 TB, which is why a retention policy matters more than shaving GPU time.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why align every face to fixed eye positions, and what does the model lose?**
+
+{{< details title="Answer" closed="true" >}}
+A similarity transform puts the eyes at the same pixels in every image, so the generator does not need to learn framing, scale or rotation and spends its capacity on appearance. Training converges faster and the latent becomes easier to edit. The price is a model that handles tilted, off-center or partially visible faces poorly, since it never saw them. For a portrait product that trade is acceptable.
+{{< /details >}}
+
+**15. Why serve an exponential moving average of the generator weights, and why pick the release checkpoint by FID rather than by recency?**
+
+{{< details title="Answer" closed="true" >}}
+GAN training oscillates, so the raw generator weights at any step reflect the latest move in the two-player game. Averaging them over many steps smooths that noise and gives visibly cleaner samples. The latest checkpoint is not necessarily the best one either: quality can stall or degrade late in training, for example when the discriminator starts to overfit. Scoring EMA checkpoints by FID and passing them through audits picks the best one actually produced.
+{{< /details >}}
+
+**16. Why is Inception Score almost useless for this product, and when is KID a better choice than FID?**
+
+{{< details title="Answer" closed="true" >}}
+IS only asks whether an ImageNet classifier is confident and whether its predictions spread across classes. Faces map to very few ImageNet classes, and IS never looks at real images, so it cannot tell whether the faces resemble the training data. KID compares real and generated features with an unbiased kernel MMD instead of a fitted Gaussian, so it gives sensible values with a few thousand samples, which suits per-group checks where each group has few samples.
+{{< /details >}}
+
+**17. Why must a pre-generated pool of random faces be managed, not just filled?**
+
+{{< details title="Answer" closed="true" >}}
+A pool turns a request into a lookup, but whatever is in it becomes what users receive. If it is refilled from a narrow batch, a different truncation setting or a bad checkpoint, the served distribution drifts even though the model is fine. Its attribute histogram has to stay on target, and each face should go to only one user, since two people getting the same "unique" face is a visible bug.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if you apply augmentations only to real images?**
+
+{{< details title="Answer" closed="true" >}}
+The discriminator learns that rotated, recolored or cut-out images are what "real" looks like. To fool it, the generator starts producing those transforms, so augmentation artifacts leak into the outputs. Horizontal flips are the exception, because a flipped face is still a valid face. ADA avoids the leak by transforming both real and generated images before the discriminator sees them.
+{{< /details >}}
+
+**19. What goes wrong if you turn on FP16 in every layer of the generator?**
+
+{{< details title="Answer" closed="true" >}}
+Activations in the low-resolution layers can exceed the FP16 range, which produces overflows and then NaNs that wreck training. The fix is to use FP16 only in the high-resolution layers, where most of the compute is anyway, and to clamp activations. Mixed precision then saves time without destabilizing the run.
+{{< /details >}}
+
+**20. What goes wrong if quality filters are tuned only by eye on overall sharpness?**
+
+{{< details title="Answer" closed="true" >}}
+Blur and exposure filters quietly remove more old photographs and more darker-exposed images, and those correlate with age and skin tone. The dataset then becomes less diverse without anyone deciding that, and a GAN, which drops rare modes first, amplifies the gap. Every filter should be checked for how much it removes from each demographic group, using tag classifiers that are themselves validated per group.
+{{< /details >}}

@@ -2,7 +2,7 @@
 title: "02. Gmail Smart Compose"
 description: "Designing inline email autocomplete in depth: requirements that shape the design, a small decoder-only Transformer, subword tokenization, two-stage training, beam search inside a 100 ms budget, evaluation, and the trigger, generate, filter and rewrite serving path."
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T20:30:00+09:00
+lastmod: 2026-11-08T21:00:00+09:00
 weight: 20
 draft: false
 tags: ["book-club", "genai-system-design", "language-models", "text-generation", "beam-search"]
@@ -466,3 +466,153 @@ Writing habits and topics shift, client changes alter how drafts are composed, a
 | 41 to 45 | Personalization, multilingual, on-device, privacy | Next-steps list |
 
 Keep the trigger service and the confidence threshold visible throughout. They are where this problem differs from generic text generation, and interviewers probe exactly there.
+
+## Review questions
+
+Answer each question in your own words first, then open the answer to check.
+
+### Concepts and definitions
+
+**1. What output contract does confidence gating give the phrase generator?**
+
+{{< details title="Answer" closed="true" >}}
+The service returns either one continuation or nothing at all. An empty answer is a normal, expected result whenever the calibrated score falls below the threshold or every candidate is filtered out. This makes the threshold the main dial between how often a suggestion appears and how often it is right.
+{{< /details >}}
+
+**2. Why does the pipeline replace personal data with typed placeholders such as `<NAME>` or `<PHONE>` instead of deleting it?**
+
+{{< details title="Answer" closed="true" >}}
+Deletion leaves broken sentences and hides the pattern that some kind of entity belongs at that spot. A typed placeholder keeps the structure, so the model still learns that a name tends to follow "Hi" or a number follows a request to call. At serving time the slot can be filled from safe context such as the recipient field, while the real identifiers never enter the weights.
+{{< /details >}}
+
+**3. What is weight tying in this decoder, and how many parameters does it save at the note's sizes?**
+
+{{< details title="Answer" closed="true" >}}
+The output projection that turns the final hidden state into vocabulary logits reuses the input embedding matrix instead of learning a separate one. It saves \( V \times d \) parameters. With a 32k vocabulary and width 512 that is about \( 32{,}000 \times 512 \approx 16\text{M} \), a large share of a model with only 40M to 120M parameters.
+{{< /details >}}
+
+**4. What is teacher forcing?**
+
+{{< details title="Answer" closed="true" >}}
+During training, the model receives the true previous tokens at every position, not its own earlier predictions. Combined with the causal mask, this means one forward pass over a sequence produces a next-token prediction at every position at the same time. It is what lets training run in parallel across the whole sequence.
+{{< /details >}}
+
+**5. What does ExactMatch@N measure that perplexity does not?**
+
+{{< details title="Answer" closed="true" >}}
+EM@N samples trigger points in held-out emails, runs the real decoding, and checks whether the first \( N \) suggested words equal what the author actually wrote next. Perplexity averages the loss over every token in the text, including positions where no suggestion would ever be shown. EM@N therefore tracks the product behavior, and when computed only on suggestions that pass the threshold it also gives offline precision and coverage.
+{{< /details >}}
+
+### Mechanisms and math
+
+**6. What values does the causal mask \( M \) hold, and what happens to masked positions after the softmax?**
+
+{{< details title="Answer" closed="true" >}}
+\( M \) is 0 where the key position is at or before the query position and \( -\infty \) where it lies in the future. Adding \( -\infty \) to a score makes its exponential zero, so future tokens get exactly zero attention weight. Each position can therefore use only the text to its left, matching how the model will generate.
+{{< /details >}}
+
+**7. Why are attention scores divided by \( \sqrt{d_k} \)?**
+
+{{< details title="Answer" closed="true" >}}
+Dot products of vectors with \( d_k \) dimensions grow in magnitude as \( d_k \) grows. Large scores push the softmax toward a one-hot output, where gradients become tiny and learning stalls. Dividing by \( \sqrt{d_k} \) keeps the scores in a range where the softmax stays smooth.
+{{< /details >}}
+
+**8. In the beam score, what does the exponent \( \alpha \) do, and what happens at \( \alpha = 0 \)?**
+
+{{< details title="Answer" closed="true" >}}
+The score sums log-probabilities and divides by \( L^{\alpha} \):
+
+$$
+s(y_{1:L}) = \frac{1}{L^{\alpha}} \sum_{t=1}^{L} \log P_\theta\left(y_t \mid x, y_{<t}\right)
+$$
+
+Every added token contributes a negative log-probability, so longer candidates score lower by default. With \( \alpha = 0 \) there is no correction and short candidates are favored; values around 0.6 to 1 offset that bias.
+{{< /details >}}
+
+**9. Why is the loss computed only on body tokens, and what does field dropout teach the model?**
+
+{{< details title="Answer" closed="true" >}}
+The subject and thread fields are context that the model reads but never writes, so training it to predict them would spend capacity on a task it will not perform. Field dropout randomly removes optional fields during training. The model then learns to cope with drafts that have no subject or no thread, which are common in real use.
+{{< /details >}}
+
+**10. How does decoding handle a cursor that sits in the middle of a word, such as after "Thank yo"?**
+
+{{< details title="Answer" closed="true" >}}
+The last token is a partial fragment, so conditioning on it directly gives odd results. The system backs off to the last complete word and restricts the first generated tokens to those whose text starts with the characters already typed. This prevents outputs like "Thank yoyou". A simpler first version can fire only at word boundaries.
+{{< /details >}}
+
+### Numbers and estimates
+
+**11. Compute the KV cache per token and per 256-token draft for a model with 8 layers, 8 key-value heads of size 64, in bf16.**
+
+{{< details title="Answer" closed="true" >}}
+Use \( 2 \cdot L \cdot h_{kv} \cdot d_h \cdot b \), where the leading 2 counts keys and values.
+
+- Per token: \( 2 \times 8 \times 8 \times 64 \times 2 = 16{,}384 \) bytes, about 16 KB.
+- Per 256-token draft: \( 256 \times 16{,}384 \approx 4.2 \) MB.
+- For 10,000 warm sessions: about 42 GB.
+{{< /details >}}
+
+**12. Estimate GPU-hours to train a 60M-parameter model on 50B tokens with the note's A100 assumptions.**
+
+{{< details title="Answer" closed="true" >}}
+- Compute: \( 6 \times 6 \times 10^{7} \times 5 \times 10^{10} = 1.8 \times 10^{19} \) FLOPs.
+- Sustained rate: 40% of \( 3.1 \times 10^{14} \) is about \( 1.25 \times 10^{14} \) FLOP/s.
+- Time: \( 1.8 \times 10^{19} / 1.25 \times 10^{14} = 1.44 \times 10^{5} \) GPU-seconds, which is 40 GPU-hours.
+{{< /details >}}
+
+**13. With \( N = 10^8 \), estimate the FLOPs of one request that prefills 30 new tokens and decodes 5 steps with a beam of 4.**
+
+{{< details title="Answer" closed="true" >}}
+Each processed token costs about \( 2N = 2 \times 10^8 \) FLOPs.
+
+- Prefill: \( 30 \times 2 \times 10^8 = 6 \times 10^9 \).
+- Decode: \( 5 \times 4 = 20 \) beam-tokens, so \( 20 \times 2 \times 10^8 = 4 \times 10^9 \).
+- Total: about \( 10^{10} \) FLOPs, slightly below the note's example because the prefill is shorter.
+{{< /details >}}
+
+### Design reasoning and trade-offs
+
+**14. Why are temperature, top-k and top-p sampling a poor fit for this product?**
+
+{{< details title="Answer" closed="true" >}}
+They add randomness on purpose, which helps creative writing but not autocomplete. A user who deletes and retypes a character should see the same ghost text, and every random draw is another chance to show something strange. The product wants the single most likely short phrase, which beam search or greedy decoding gives deterministically.
+{{< /details >}}
+
+**15. Why must acceptance rate be read together with coverage?**
+
+{{< details title="Answer" closed="true" >}}
+Acceptance is accepted suggestions over shown suggestions, so a system that only fires on near-certain phrases can post a very high rate while helping almost nobody. Coverage, the number of suggestions per email, shows how often the feature actually appears. Only the pair tells you whether a change made the feature more useful or just more timid.
+{{< /details >}}
+
+**16. Why is the trigger service such a large cost lever?**
+
+{{< details title="Answer" closed="true" >}}
+Every request it blocks costs nothing on the model fleet. In the note's estimate, firing at every word boundary gives about 60 requests per email, while gating down to about 10 removes over 80% of serving load. No change to the model itself, such as quantization or a narrower beam, cuts cost by that factor.
+{{< /details >}}
+
+**17. Why does the number of key-value heads matter so much in serving even though it changes quality only a little?**
+
+{{< details title="Answer" closed="true" >}}
+Decode steps are bound by memory traffic, and the KV cache for many warm sessions is the resource that runs out first on each server. Cache size scales directly with the number of key-value heads. Going from 12 to 4 KV heads with grouped-query attention cuts the cache threefold, so each server can hold many more drafts at a small quality cost.
+{{< /details >}}
+
+### Common mistakes
+
+**18. What goes wrong if near-duplicate removal misses bulk templates?**
+
+{{< details title="Answer" closed="true" >}}
+One marketing email sent to millions of people becomes some of the most repeated text in the corpus. The model then suggests phrases that sound like newsletters, and it is more likely to memorize and reproduce those exact strings. Tighter near-duplicate detection and a cap on how much any one sender contributes address both problems.
+{{< /details >}}
+
+**19. What goes wrong if the train and test split is done by message instead of by user or thread?**
+
+{{< details title="Answer" closed="true" >}}
+Messages from the same thread or person share quoted text, greetings and phrasing, so near-identical text lands on both sides of the split. Offline perplexity and EM@N then look better than the model really is. The gap only shows up later, when online acceptance fails to match the offline gains.
+{{< /details >}}
+
+**20. What goes wrong if finetuning on email uses only email data and a high learning rate?**
+
+{{< details title="Answer" closed="true" >}}
+The model forgets part of the broad vocabulary and grammar it learned in pretraining, a problem known as catastrophic forgetting. Suggestions become narrow and weaker on less common topics. Mixing some general text into the finetuning stream and using a lower learning rate keep the base knowledge while the model learns the email register.
+{{< /details >}}
