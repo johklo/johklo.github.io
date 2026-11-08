@@ -10,13 +10,13 @@ tags: ["mlops", "ml-platform-engineering", "hands-on", "llmops"]
 
 개념은 [챕터 해설](/docs/tech/machine-learning-platform-engineering/00-overview/)에서 다루고, 이 가이드에는 손으로 따라 하는 부분만 모았다. 『Machine Learning Platform Engineering』 1~13장 순서대로 환경을 만들고, 데이터와 모델을 준비하고, 서비스를 띄우고, 변경을 평가한다. 앞 단계가 남긴 파일을 다음 단계가 입력으로 쓰므로 순서를 건너뛰면 막힌다.
 
-기준은 독립 실습 저장소 [ml-platform-engineering-labs](https://github.com/johklo/ml-platform-engineering-labs)의 고정 커밋 `ff23b38f88d88268216e2985ff5b6ed0c3defb8c`이다. **책의 도구와 원본 실습을 모두 재현하지는 못했고, 로컬에서 돌릴 수 있는 범위까지 담은 판이다.** 본문의 출력과 화면은 Windows 11, Docker Desktop 4.67.0, kind `book-env` 클러스터에서 새 작업 폴더를 만들어 명령을 위에서부터 다시 실행한 결과다. 외부 유료 LLM, DeepEval과 Langfuse 연결은 돌리지 않았다. 실행한 것과 남은 것은 [구현과 검증 범위](#verification-scope)에 정리했다.
+기준은 독립 실습 저장소 [ml-platform-engineering-labs](https://github.com/johklo/ml-platform-engineering-labs)의 고정 커밋 `ff23b38f88d88268216e2985ff5b6ed0c3defb8c`이다. 책의 저자 코드를 kind 클러스터에서 그대로 돌린 기록은 [장별 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/)에 따로 있고, 이 가이드는 같은 개념을 작은 데이터로 1장부터 13장까지 끊김 없이 이어 붙인 판이다. 본문의 출력과 화면은 Windows 11, Docker Desktop 4.67.0, kind `book-env` 클러스터에서 새 작업 폴더를 만들어 명령을 위에서부터 다시 실행한 결과다. 외부 유료 LLM, DeepEval과 Langfuse 연결은 돌리지 않았다. 실행한 것과 남은 것은 [구현과 검증 범위](#verification-scope)에 정리했다.
 
 출력의 개인 경로는 `C:\Users\<사용자>\...` 또는 `...\`로 줄였다. 실행 ID, 해시, 점수는 실행마다 달라진다. 형식과 판정이 같으면 정상이다.
 
 ## 준비사항 {#prerequisites}
 
-표의 위에서부터 설치하고 확인 명령을 돌려 본다. 명령은 모두 Windows PowerShell 7 기준이다. 설치한 뒤에는 새 PowerShell 창을 열어야 PATH가 반영된다.
+표의 위에서부터 설치하고 확인 명령을 돌린다. 명령은 모두 Windows PowerShell 7 기준이다. 설치한 뒤에는 새 PowerShell 창을 열어야 PATH가 반영된다.
 
 | 항목 | 필요한 구간 | 설치 | 확인 |
 | --- | --- | --- | --- |
@@ -440,7 +440,7 @@ uv run --no-project --python 3.12 python bookenv.py forward
 
 ### 3-5. Pod 상태와 KFP 화면을 확인한다
 
-**터미널 A, `ml-platform-book-env`.** 클러스터가 생겼다고 플랫폼 Pod가 바로 요청을 받을 수 있는 것은 아니다. 상태를 직접 본다.
+**터미널 A, `ml-platform-book-env`.** 클러스터를 만든 직후에는 플랫폼 Pod가 아직 뜨는 중일 수 있어서 상태를 직접 본다.
 
 ```powershell
 uv run --no-project --python 3.12 python bookenv.py status
@@ -491,7 +491,7 @@ redis-deployment-master-68886f9c8f-mtjxh   1/1     Running   0          89m
 
 ## 4장. 실험, 평가와 등록을 연결한다 {#chapter-04}
 
-책은 이 장에서 소득 분류 모델을 다룬다. 여기서는 그 대신 작은 추천 데이터로 같은 일을 해 본다. 실험을 기록하고, 평가를 통과한 후보만 등록하고, 피처를 시점에 맞게 꺼내는 일이다. 소득 분류 원본은 [4~5장 실행 참조](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)에 따로 정리했다.
+책은 이 장에서 소득 분류 모델을 다룬다. 여기서는 작은 추천 데이터로 같은 일을 한다. 실험을 기록하고, 평가를 통과한 후보만 등록하고, 피처를 시점에 맞게 꺼내는 일이다. 소득 분류 원본은 [4~5장 실행 참조](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)에 따로 정리했다.
 
 ### 4-1. 평점 데이터를 준비한다
 
@@ -598,7 +598,7 @@ SQLite에는 메타데이터만 있고 모델 파일은 아티팩트 폴더(`$W\
 
 ### 4-5. 평가를 일부러 실패시킨다
 
-**터미널 A, 기본 환경.** RMSE 기준을 0.01로 낮춰 일부러 거절당해 본다. 거절 보고서는 다른 파일에 써서 정상 보고서를 덮지 않는다.
+**터미널 A, 기본 환경.** RMSE 기준을 0.01로 낮춰 일부러 거절되게 만든다. 거절 보고서는 다른 파일에 써서 정상 보고서를 덮지 않는다.
 
 ```powershell
 uv run --locked --extra dev ml-labs movies evaluate --candidate "$W\runs\movies\candidate.json" --data "$W\data\movies" --report "$W\reports\movies-rejected.json" --max-rmse 0.01
@@ -699,7 +699,7 @@ user_movie_stats:
 }
 ```
 
-적재한 뒤에는 학습 평점으로 계산한 최신 피처가 나온다. 여기서 쓴 Online store는 Feast의 SQLite 구현이라, 책의 Redis 온라인 저장소까지 검증한 것은 아니다.
+적재한 뒤에는 학습 평점으로 계산한 최신 피처가 나온다. 여기서 쓴 Online store는 Feast의 SQLite 구현이다. 책의 Redis 온라인 저장소는 [4~5장 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)에서 다룬다.
 
 **완료 확인**
 
@@ -929,7 +929,7 @@ Logs 탭의 마지막 줄들은 평가 결과와 MLflow 묶음을 MinIO에 올�
 kubectl --context kind-book-env -n kubeflow get pods | Select-String "ml-labs-movie-recommender"
 ```
 
-실패했다면 원인을 이미지 빌드 실패, `ErrImagePull`(노드에 이미지 없음), driver 실패(5-5의 표시 이름), 저장소 연결 오류로 나눠 본다. 컴파일이 성공했다고 클러스터 실행까지 된 것은 아니다.
+실패했다면 원인을 이미지 빌드 실패, `ErrImagePull`(노드에 이미지 없음), driver 실패(5-5의 표시 이름), 저장소 연결 오류로 나눠 본다. 컴파일 성공은 YAML이 만들어졌다는 뜻이고, 실행 결과는 KFP 화면에서 따로 확인한다.
 
 **완료 확인**
 
@@ -1187,7 +1187,7 @@ Get-Content "$W\data\movielens\manifest.json"
 
 압축 파일은 약 1MB이고 평점 100,836건이 변환된다. manifest에는 원천 지문, 평점 변환식, 사용자별 시간 분할 방식이 남는다. `random_state`를 고정해도 미래 정보나 인접 프레임 누수는 막지 못한다.
 
-이 경로는 작은 자료용이고, 책의 25M 전체 자료를 지금의 조밀 SVD에 바로 넣는 명령은 아니다. 이후 장은 재현성을 위해 합성 평점을 계속 쓴다.
+이 명령은 작은 자료용이라 책의 25M 전체 자료에는 쓰지 않는다. 이후 장은 재현성을 위해 합성 평점을 계속 쓴다.
 
 **완료 확인**
 
@@ -1364,7 +1364,7 @@ YOLO는 검증에서 카드 16개 중 2개를 놓쳤다(`box_recall_iou_0_5` 0.8
 
 ### 8-7. 작은 실제 학습과 재로딩을 테스트로 점검한다
 
-**터미널 A, vision 환경.** 이 테스트는 임시 폴더에서 YOLO를 짧게 학습하고 MLflow 모델로 저장한 뒤 다시 읽어 추론한다. `ML_LABS_RUN_VISION`을 지정하지 않으면 건너뛰는데, `skipped`는 통과가 아니다.
+**터미널 A, vision 환경.** 이 테스트는 임시 폴더에서 YOLO를 짧게 학습하고 MLflow 모델로 저장한 뒤 다시 읽어 추론한다. `ML_LABS_RUN_VISION`을 지정하지 않으면 테스트가 실행되지 않고 `skipped`로만 표시되므로 꼭 지정한다.
 
 ```powershell
 $env:ML_LABS_RUN_VISION = "1"
@@ -1722,7 +1722,7 @@ ml_labs_inference_requests_total{status="success",task="movies"} 3.0
 ml_labs_inference_seconds_count{task="movies"} 3.0
 ```
 
-요청 하나를 보내자 두 카운터가 2에서 3으로 올랐다. 전체 응답에는 `ml_labs_inference_seconds_bucket` 같은 지연 히스토그램도 있다. 형식만 Prometheus를 따를 뿐 Prometheus, Grafana, Alertmanager를 설치한 것은 아니다. 확인했으면 터미널 B의 추천 서버를 `Ctrl+C`로 끈다.
+요청 하나를 보내자 두 카운터가 2에서 3으로 올랐다. 전체 응답에는 `ml_labs_inference_seconds_bucket` 같은 지연 히스토그램도 있다. 이 지표를 실제로 수집해 대시보드와 경보로 잇는 Prometheus, Grafana, Alertmanager 구성은 [11장 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/ch11/)에서 다룬다. 확인했으면 터미널 B의 추천 서버를 `Ctrl+C`로 끈다.
 
 ### 11-2. 분포가 바뀐 비교 파일로 드리프트를 계산한다
 
@@ -1914,13 +1914,13 @@ uv run --locked --extra dev ml-labs rag release query --store "$W\rag\store" --q
 }
 ```
 
-근거가 없는 질문에는 답을 지어내지 않고 `no_grounding`으로 물러선다. 기본 provider인 `extractive_offline`은 TF-IDF로 찾은 문장을 그대로 인용할 뿐 LLM을 부르지 않는다(`llm_calls: 0`). 책의 Gemini, FAISS, LangChain, Chainlit 구성과는 거리가 있다.
+근거가 없는 질문에는 답을 지어내지 않고 `no_grounding`으로 물러선다. 기본 provider인 `extractive_offline`은 TF-IDF로 찾은 문장을 그대로 인용할 뿐 LLM을 부르지 않는다(`llm_calls: 0`). 책의 Gemini, FAISS, LangChain, Chainlit 구성은 [12장 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/ch12/)에서 로컬 모델로 실행했다.
 
 ### 12-4. 실제 생성 모델 연결은 선택 경로로 남긴다
 
 Azure OpenAI로 실제 답을 생성하는 독립 경로는 [RAG 출시 가이드의 생성 연결](/docs/tech/ops/mlops/labs/ml-platform-labs-10-rag-release/)에 있다. 기존 endpoint, 배포 이름, 인증과 예산이 필요하고, 책이 쓰는 Gemini와도 다른 도구다. 이 가이드를 검증할 때는 외부 생성 요청을 보내지 않았다.
 
-생성 모드를 켜면 두 가지를 본다. 고정한 검색 결과와 프롬프트가 실제 요청에 들어갔는지, 인용이 검색된 문서 안에 있는지다. 형식 검사를 통과해도 답변의 주장이 모두 사실이라는 보장은 없다. 키가 없다고 가짜 생성 결과로 통과시켜서도 안 된다.
+생성 모드를 켜면 두 가지를 본다. 고정한 검색 결과와 프롬프트가 실제 요청에 들어갔는지, 인용이 검색된 문서 안에 있는지다. 형식 검사는 답변의 주장이 사실인지까지 확인하지 않는다.
 
 **완료 확인**
 
@@ -2179,7 +2179,7 @@ DeepEval의 의미 평가와 Langfuse 외부 추적은 [별도 연결 절차](/d
 | 10~11장 | 출시 기록 기반 추천 서버, 배치 실패 주입과 멱등 재시도, 업무 키 충돌 거절, YOLO 탐지 HTTP, `/metrics`, Evidently 보고서, 통합 실험 증거 | KServe, Prometheus와 Grafana 운영 스택, Deepchecks, Eigen-CAM과 EMF |
 | 12~13장 | RAG 후보 생성, 평가, 활성화, 근거 없음 응답, 회귀 후보 거절, HTTP에서 재시작 없는 활성화와 복구, Promptfoo eval과 view | 외부 LLM 생성(Azure OpenAI, Gemini), DeepEval, Langfuse, FAISS, LangChain, Chainlit 원본 경로, 권한과 캐시, 비용 제한 |
 
-같은 날 기본 환경에서 돌린 실습 저장소 전체 테스트(`pytest -q`)는 54개 통과, 8개 건너뜀이었다. 건너뛴 선택 테스트는 검증된 것으로 세지 않는다. 합성 카드에서 10 epoch 학습이 IoU 게이트를 넘었다고 다른 데이터나 실제 촬영 환경에서도 잘 된다는 뜻은 아니다. 공개 합성 문서에서 RAG가 통과한 것도 실제 업무 문서의 답변 품질과는 별개다.
+같은 날 기본 환경에서 돌린 실습 저장소 전체 테스트(`pytest -q`)는 54개 통과, 8개 건너뜀이었다. 건너뛴 8개는 선택 도구가 필요한 테스트라 검증 결과에 넣지 않았다. 카드 탐지와 RAG 결과는 합성 카드와 공개 합성 문서에서 얻은 것이라, 실제 촬영 이미지나 업무 문서에서는 다시 평가해야 한다.
 
 다시 돌려 보며 막힌 다섯 곳은 본문에 해결책을 반영했다. KFP 2.4.1 백엔드에서는 평가 작업 driver가 표시 이름 때문에 실패해서 5-5의 YAML 정규화 단계를 넣었다. BentoML 기본 저장소는 다른 프로세스가 잠그고 있어서 `BENTOML_HOME`을 실습 폴더로 분리했다. `Invoke-RestMethod` 출력은 중첩 응답이 그대로 보이도록 `ConvertTo-Json`을 붙인다. 첫 테스트 이미지가 음성 표본이라 탐지 요청은 카드가 있는 이미지와 함께 보낸다. MovieLens는 저장소 최상위가 아니라 `$W\downloads`에 받는다.
 
