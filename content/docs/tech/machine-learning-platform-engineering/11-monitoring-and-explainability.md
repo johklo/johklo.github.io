@@ -2,9 +2,9 @@
 title: "11. 모니터링과 설명가능성"
 description: "10장에서 띄운 탐지 서비스와 추천 서비스에 지표, 로그, 경보, SLO를 붙이고, 이미지와 평점의 드리프트를 재고, Eigen-CAM과 EMF 설명이 무엇을 보여 주고 무엇을 보여 주지 않는지 실제 실행으로 확인하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-08T14:30:00+09:00
+lastmod: 2026-11-08T14:00:00+09:00
 weight: 110
-draft: true
+draft: false
 tags: ["book-club", "ml-platform-engineering", "monitoring", "prometheus", "grafana", "deepchecks", "explainability"]
 ---
 

@@ -4,7 +4,7 @@ description: "YOLO 학습과 검증을 KFP 컴포넌트로 옮기고, 실행 성
 date: 2026-10-18T21:30:00+09:00
 lastmod: 2026-11-07T21:00:00+09:00
 weight: 80
-draft: true
+draft: false
 tags: ["book-club", "ml-platform-engineering", "kubeflow", "model-training"]
 ---
 

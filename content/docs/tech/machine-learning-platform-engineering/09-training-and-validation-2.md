@@ -4,7 +4,7 @@ description: "PVC로 데이터를 한 번만 준비하고, TensorBoard와 MLflow
 date: 2026-10-18T21:30:00+09:00
 lastmod: 2026-11-07T21:30:00+09:00
 weight: 90
-draft: true
+draft: false
 tags: ["book-club", "ml-platform-engineering", "model-training", "mlflow", "tensorboard", "kubeflow"]
 ---
 

@@ -90,7 +90,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             for path in SOURCE.glob("[0-9][0-9]-*.md")
         }
         cls.visible = {
-            slug for slug, chapter in cls.articles.items() if chapter <= 7
+            slug for slug, chapter in cls.articles.items() if chapter <= 13
         }
         cls.hidden = cls.articles.keys() - cls.visible
 
@@ -99,7 +99,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
         path = self.output / url_path.lstrip("/")
         return path / "index.html" if url_path.endswith("/") else path
 
-    def test_only_overview_and_first_seven_chapters_are_published(self):
+    def test_overview_and_all_chapters_are_published(self):
         # Chapters 4 and 5 are covered together in the 04 article.
         self.assertEqual(set(self.articles.values()), set(range(14)) - {5})
         for slug in self.articles:
@@ -261,6 +261,12 @@ class MLPlatformPublicationTest(unittest.TestCase):
             ("04-experiments-features-pipelines", "book-lab-sop"),
             ("06-productionizing-models", "book-ch06-sop"),
             ("07-data-preparation", "book-ch07-sop"),
+            ("08-training-and-validation-1", "book-ch08-sop"),
+            ("09-training-and-validation-2", "book-ch09-sop"),
+            ("10-inference-and-serving", "book-ch10-sop"),
+            ("11-monitoring-and-explainability", "book-ch11-sop"),
+            ("12-llm-powered-systems", "book-ch12-sop"),
+            ("13-production-llm-systems", "book-ch13-sop"),
         ):
             with self.subTest(chapter=slug):
                 document = self.page_path(

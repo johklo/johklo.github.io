@@ -2,9 +2,9 @@
 title: "12. LLM 기반 시스템 설계"
 description: "DakkaBot을 로컬 모델로 실제로 만들고, 검색과 문맥 구성과 생성을 나눠 Langfuse trace로 어디서 틀렸는지 구분하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-08T21:30:00+09:00
+lastmod: 2026-11-08T14:00:00+09:00
 weight: 120
-draft: true
+draft: false
 tags: ["book-club", "ml-platform-engineering", "llmops", "rag", "langfuse", "chainlit"]
 ---
 

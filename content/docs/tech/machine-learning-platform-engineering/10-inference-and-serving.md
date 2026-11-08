@@ -4,7 +4,7 @@ description: "8장의 신분증 탐지 모델과 9장의 추천 모델을 BentoM
 date: 2026-10-18T21:30:00+09:00
 lastmod: 2026-11-08T12:00:00+09:00
 weight: 100
-draft: true
+draft: false
 tags: ["book-club", "ml-platform-engineering", "bentoml", "mlflow", "kserve", "model-serving"]
 ---
 

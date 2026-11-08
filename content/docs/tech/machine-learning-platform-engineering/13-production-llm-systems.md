@@ -2,9 +2,9 @@
 title: "13. 프로덕션 LLM 시스템"
 description: "12장의 DakkaBot에 프롬프트 버전 관리, 평가 집합과 회귀 게이트, 입출력 가드레일, 토큰 비용 측정과 캐시, 라우팅을 붙이고 로컬 모델로 실제로 돌려 보기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-08T21:30:00+09:00
+lastmod: 2026-11-08T14:00:00+09:00
 weight: 130
-draft: true
+draft: false
 tags: ["book-club", "ml-platform-engineering", "llmops", "evaluation", "guardrails", "langfuse", "deepeval"]
 ---
 
