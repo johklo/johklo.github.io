@@ -616,7 +616,7 @@ ml-labs: error: Registry promotion requires a passing movies evaluation report.
 2
 ```
 
-평가와 등록이 둘 다 종료 코드 2로 실패하면 맞게 된 것이다. 의외인 점은 이 거절 평가가 같은 run의 `validation_passed` 태그를 `false`로 바꾸고, `evaluation/validation.json`도 거절 보고서로 덮는다는 것이다. 이미 등록한 `book-movie` 버전 1은 그대로다. run 태그는 마지막 평가만 보여 주므로 출시 판단은 보고서 파일과 등록 버전을 기준으로 한다.
+평가와 등록이 둘 다 종료 코드 2로 실패하면 맞게 된 것이다. 다만 이 거절 평가는 같은 run의 `validation_passed` 태그를 `false`로 바꾸고, `evaluation/validation.json`도 거절 보고서로 덮는다. 이미 등록한 `book-movie` 버전 1은 그대로다. run 태그는 마지막 평가만 보여 주므로 출시 판단은 보고서 파일과 등록 버전을 기준으로 한다.
 
 ### 4-6. Feast로 정의를 등록하고 과거 시점을 조회한다
 

@@ -2,7 +2,7 @@
 title: "04~05. 실험, 피처, 파이프라인 연결하기"
 description: "책 4~5장의 환경 설치와 실습을 따라가며 MLflow, Feast, Kubeflow Pipelines의 역할과 연결 구조 이해하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-06T14:55:00+09:00
+lastmod: 2026-11-08T15:00:00+09:00
 weight: 40
 draft: false
 tags: ["book-club", "ml-platform-engineering", "mlflow", "feature-store", "kubeflow"]
@@ -13,41 +13,41 @@ aliases:
   - /docs/tech/ops/mlops/labs/book-ch04-05-sop/
 ---
 
-소득 분류 모델의 테스트 점수가 좋다는 것과 그 모델로 내일 같은 조건의 예측을 만들 수 있다는 것은 다르다. 어떤 데이터와 전처리로 학습했는지, 추론할 사용자의 피처를 어느 시점에서 가져올지, 다른 환경에서도 같은 작업을 실행할 수 있는지가 남는다. 4~5장은 이 간극을 MLflow, Feast, Kubeflow Pipelines로 연결하는 과정이다.
+소득 분류 모델의 테스트 점수가 좋다고 해서 내일 같은 조건으로 예측을 만들 수 있는 것은 아니다. 어떤 데이터와 전처리로 학습했는지 알아야 하고, 추론할 사용자의 피처를 어느 시점 기준으로 가져올지도 정해야 한다. 다른 환경에서 같은 작업을 다시 돌릴 수 있느냐는 문제도 남는다. 4~5장은 이 틈을 MLflow, Feast, Kubeflow Pipelines로 메우는 과정이다.
 
-4장은 **어떤 모델을 선택했고 어떤 입력으로 사용할 것인가**를 준비하고, 5장은 **그 모델과 입력을 반복 가능한 실행으로 어떻게 연결할 것인가**를 다룬다. 5장의 예제는 새 모델을 학습하는 파이프라인이 아니라 4장에서 등록한 모델을 사용하는 배치 추론이다. 도구를 설치하는 순서보다 각 도구가 다음 단계에 무엇을 넘기는지 보면 두 장의 관계가 분명해진다.
+4장은 모델을 고르고 입력을 준비한다. 5장은 그 둘을 반복해서 실행할 수 있게 엮는다. 5장 예제는 새 모델을 학습하지 않고 4장에서 등록한 모델로 배치 추론만 한다. 그래서 설치 순서보다 각 도구가 다음 단계에 무엇을 넘기는지 따라가는 편이 이해하기 쉽다.
 
-책은 클러스터가 준비돼 있다는 전제로 버킷 생성이나 설정 변경을 짧게 넘어간다. 그 부분을 보완하려고 [ml-platform-book-env](https://github.com/johklo/ml-platform-book-env)를 만들었다. 앞부분에서 세 도구가 서로 무엇을 넘기는지 설명하고, 이어지는 [실습 순서](#book-lab-sop)에서 이 저장소로 환경을 설치하고 책의 노트북과 파이프라인을 실행하는 과정을 화면과 함께 따라간다.
+책은 클러스터가 이미 있다고 보고 버킷 생성이나 설정 변경을 짧게 넘어간다. 그 빈 곳을 채우려고 [ml-platform-book-env](https://github.com/johklo/ml-platform-book-env)를 만들었고, 뒤의 [실습 순서](#book-lab-sop)에서 이 저장소로 책의 노트북과 파이프라인을 화면과 함께 실행한다.
 
 ## 실험 기록은 선택한 모델의 근거를 남긴다
 
-처음에는 노트북에서 데이터를 살피고 여러 모델을 비교한다. 이때 마지막 셀에 남은 점수와 모델 파일만으로는 어느 분할, 설정과 전처리에서 그 결과가 나왔는지 설명하기 어렵다. MLflow의 run은 그 실험 조건과 결과를 함께 찾아볼 수 있게 하는 기록 단위다.
+노트북에서 데이터를 살피고 여러 모델을 비교하다 보면 마지막 셀에 점수와 모델 파일이 남는다. 그것만으로는 어느 분할과 설정, 전처리에서 그 결과가 나왔는지 설명하기 어렵다. MLflow의 run은 실험 조건과 결과를 한곳에서 찾아볼 수 있게 묶는 기록 단위다.
 
-그래서 탐색 그래프, 학습 파라미터, 평가 메트릭과 모델 파일은 따로 저장하는 목록이 아니라 같은 실험을 설명하는 증거다. 탐색은 데이터 상태를, 파라미터는 시도한 조건을, 메트릭은 평가 결과를 보여 준다. 점수 차이를 모델의 차이로 해석하려면 비교한 데이터와 평가 조건도 확인해야 한다.
+탐색 그래프, 파라미터, 메트릭, 모델 파일은 한 실험을 설명하는 증거다. 탐색은 데이터 상태를, 파라미터는 시도한 조건을, 메트릭은 평가 결과를 보여 준다. 점수 차이를 모델 차이로 읽으려면 비교한 데이터와 평가 조건도 같은지 봐야 한다.
 
-Model Registry는 그중 사용할 모델에 이름과 버전을 부여한다. run이 실험의 근거라면 등록 모델은 다음 작업이 찾아갈 대상이다. 책의 `Production` stage는 이 연결을 위한 표지이며, API가 이미 배포됐다는 뜻이 아니다. stage가 가리키는 버전은 바뀔 수 있으므로 실제 실행에서는 구체 버전과 원천 run을 함께 남겨야 한다.
+Model Registry는 그중 실제로 쓸 모델에 이름과 버전을 붙여 다음 작업이 찾아갈 대상으로 만든다. 책의 `Production` stage는 그 표지이고 API 배포와는 관계가 없다. stage가 가리키는 버전은 바뀔 수 있어서 실제 실행에서는 구체 버전과 원천 run을 함께 남긴다.
 
-소득 분류에서는 모델만 넘길 수도 없다. 범주형 피처를 원-핫 인코딩한 열의 의미와 순서를 알아야 한다. 학습 때 기록한 `column_list.pkl`을 추론에서 내려받는 이유다. 열 수만 같고 순서나 범주가 다르면 모델은 실행돼도 다른 입력을 받는다. 학습 때 fit한 변환까지 모델과 함께 관리하면 이 조건을 더 명확하게 고정할 수 있다.
+소득 분류에서는 모델만 넘겨서도 안 된다. 범주형 피처를 원-핫 인코딩한 열이 무엇을 뜻하고 어떤 순서인지 알아야 한다. 열 수가 같아도 순서나 범주가 다르면 모델은 아무 오류 없이 다른 입력을 받는다. 학습 때 fit한 변환을 모델과 함께 관리하면 이 조건을 더 확실히 고정할 수 있다.
 
-MLflow가 모든 재현 조건을 자동으로 보관하는 것은 아니다. 데이터 출처 기록과 원천 파일의 보존, 의존성 선언과 실행 이미지의 확보는 각각 다른 작업이다. 메타데이터는 PostgreSQL에, 모델과 그래프는 S3에 남는 구조도 이 구분과 연결된다. 기록을 찾을 수 있는 상태와 그 기록의 파일을 실제로 읽을 수 있는 상태가 모두 필요하다.
+MLflow가 재현에 필요한 조건을 모두 알아서 보관해 주지는 않는다. 데이터 출처를 기록하는 일과 원천 파일을 보존하는 일은 다르다. 의존성을 선언하는 일과 실행 이미지를 확보하는 일도 다르다. 메타데이터는 PostgreSQL에, 모델과 그래프는 S3에 나눠 두므로 기록을 찾는 것과 그 파일을 실제로 읽는 것도 따로 확인해야 한다.
 
 ## 피처 저장소는 모델 입력의 의미와 시간을 잇는다
 
-모델을 선택한 뒤에는 예측할 사용자에게 어떤 값을 붙일지 정해야 한다. Feast는 이 조회를 피처 이름, 타입, 엔티티와 시간 기준으로 정의한다. Entity는 누구의 값인지를, FeatureView는 어떤 피처를 어떤 원천에서 읽을지를 나타낸다. Registry는 그 정의를 보관하며 피처 값 전체를 대신 저장하는 곳은 아니다.
+모델을 골랐으면 예측할 사용자에게 어떤 값을 붙일지 정해야 한다. Feast는 이 조회를 피처 이름과 타입, 엔티티, 시간 기준으로 정의한다. Entity는 누구의 값인지를, FeatureView는 어떤 피처를 어느 원천에서 읽을지를 나타낸다. Registry에는 이 정의가 들어가고, 피처 값 자체는 들어가지 않는다.
 
-이 때문에 `feast apply`로 정의를 등록하는 작업과 `materialize`로 값을 Redis에 적재하는 작업이 나뉜다. 과거 이력은 Offline store에서, 낮은 지연으로 사용할 최신값은 Online store에서 읽는다. 한 번 저장하면 모든 조회 목적을 해결하는 구조가 아니라 같은 피처 정의 아래 서로 다른 접근 조건을 제공하는 구조다.
+그래서 정의를 등록하는 `feast apply`와 값을 Redis에 적재하는 `materialize`가 따로 있다. 과거 이력은 Offline store에서 읽고, 지연이 짧아야 하는 최신값은 Online store에서 읽는다. 정의는 하나이고, 목적에 따라 읽는 곳이 다르다.
 
-5장의 배치 추론도 온라인 최신값을 쓰지는 않는다. 입력 파일에는 사용자 ID와 기준 시각이 들어가고, 그 시점에 맞는 피처를 조회한다. 반면 6장의 API는 요청 시 온라인 저장소의 피처를 읽는다. 배치와 온라인의 차이는 데이터 건수뿐 아니라 **언제의 값을 사용해 예측하는가**에도 있다.
+5장의 배치 추론은 온라인 최신값을 쓰지 않는다. 입력 파일에 사용자 ID와 기준 시각이 들어 있고, 그 시점에 맞는 피처를 조회한다. 6장의 API는 요청이 올 때 온라인 저장소에서 피처를 읽는다. 배치와 온라인은 데이터 건수만 다른 게 아니라 언제의 값으로 예측하느냐가 다르다.
 
-같은 피처 이름을 썼다는 사실만으로 학습과 추론이 일치하지는 않는다. 책의 학습 노트북은 CSV를 직접 읽고 Feast는 별도로 준비한다. 따라서 학습부터 Feast 조회가 자동으로 연결됐다고 해석하면 안 된다. 학습 데이터의 의미, 피처 정의와 인코딩을 대조하고, 필요한 경우 FeatureService와 데이터 스냅샷을 모델 기록에 연결해야 한다. 뒤의 보충 예제는 바로 이 빈 연결을 명시하는 연습이다.
+피처 이름이 같다고 학습과 추론이 일치하지도 않는다. 책의 학습 노트북은 CSV를 직접 읽고, Feast는 따로 준비한다. 학습 데이터의 의미와 피처 정의, 인코딩을 서로 맞춰 보고, 필요하면 FeatureService와 데이터 스냅샷을 모델 기록에 연결해야 한다. 글 끝의 보충 예제가 이 빠진 연결을 직접 만들어 보는 연습이다.
 
 ## 파이프라인은 그 연결을 반복 가능한 실행으로 만든다
 
-모델과 피처가 준비돼도 대상 읽기, 피처 조회, 추론과 결과 저장을 사람이 매번 이어 실행하면 중간 실패와 재실행을 관리하기 어렵다. KFP는 작업의 입력, 출력과 실행 환경을 컴포넌트로 나누고 그 의존 관계를 실행한다. MLflow나 Feast를 대체하는 것이 아니라 이들을 사용하는 작업을 조립한다.
+모델과 피처가 준비돼도 대상 읽기, 피처 조회, 추론, 결과 저장을 사람이 매번 이어서 돌리면 중간 실패와 재실행을 관리하기 어렵다. KFP는 작업마다 입력과 출력, 실행 환경을 컴포넌트로 나누고 그 의존 관계대로 실행한다. MLflow나 Feast를 대신하지 않고, 이들을 쓰는 작업을 조립한다.
 
-책에서 Python 파일, Dockerfile, 컴포넌트 YAML과 파이프라인 정의가 반복해서 등장하는 이유도 역할이 다르기 때문이다. Python은 실제 처리를, 이미지는 코드와 의존성의 실행 환경을, 컴포넌트 명세는 입출력과 실행 명령을 정한다. 파이프라인 정의는 그 작업들을 어떻게 연결할지 정하며, 컴파일은 실행 명세를 만드는 단계다. YAML이 생성됐다고 피처 조회나 모델 추론까지 끝난 것은 아니다.
+책에 Python 파일, Dockerfile, 컴포넌트 YAML, 파이프라인 정의가 계속 나오는 것도 맡은 일이 달라서다. Python은 실제 처리를 하고, 이미지는 코드와 의존성을 담은 실행 환경이 된다. 컴포넌트 명세는 입출력과 실행 명령을, 파이프라인 정의는 작업 사이의 연결을 정한다. 컴파일은 실행 명세만 뽑아내므로 YAML이 생겼다고 추론까지 끝난 것은 아니다.
 
-각 작업은 다른 Pod에서 실행된다. 노트북의 다음 셀처럼 앞 작업의 DataFrame을 그대로 받지 않는다. 파라미터로 작은 설정을 넘기고 아티팩트로 파일을 연결하는 이유다. 데이터 연결은 선행 작업의 완료를 기다리게 할 수 있지만 `Dataset` 타입만으로 열 이름, 결측과 사용자 키까지 검증하지는 않는다.
+작업은 각각 다른 Pod에서 돈다. 노트북처럼 앞 셀의 DataFrame을 다음 셀에서 그대로 받을 수 없으니, 작은 설정은 파라미터로 넘기고 파일은 아티팩트로 잇는다. 아티팩트로 연결하면 앞 작업이 끝날 때까지 기다리게 할 수는 있다. 하지만 `Dataset` 타입이 열 이름이나 결측, 사용자 키까지 검사해 주지는 않는다.
 
 | 책임 | 4~5장에서 남기는 것 | 다음 단계가 확인할 것 |
 | --- | --- | --- |
@@ -56,13 +56,13 @@ MLflow가 모든 재현 조건을 자동으로 보관하는 것은 아니다. �
 | KFP | 컴포넌트의 의존 관계, 실행과 아티팩트 이력 | 실제 입력과 출력이 연결됐는지 |
 | 예측 결과 | 업무용 버킷의 parquet | 누구의 어느 시점 예측인지, 재실행을 어떻게 구분할지 |
 
-KFP run ID는 작업 실행을 구분하지만 예측 대상의 업무 키는 아니다. 모델 입력에서 `user_id`를 제외할 수 있어도 결과에서 누구의 예측인지 잃으면 후속 업무에 사용할 수 없다. 같은 대상의 재실행이 결과를 덮어쓸지, 별도 버전으로 남을지도 저장 단계에서 정해야 한다.
+KFP run ID는 실행을 구분할 뿐 예측 대상을 가리키지 않는다. 모델 입력에서 사용자 ID를 빼더라도 결과에는 누구의 예측인지 남아야 한다. 같은 대상을 다시 돌렸을 때 덮어쓸지 새 버전으로 남길지도 저장 단계에서 정해 둔다.
 
-두 장이 만든 기반은 **선택한 모델, 그 모델에 맞는 피처, 이를 연결한 실행을 함께 추적하는 구조**다. 6장은 이 배치 연결을 요청 기반 서비스로 옮기고, 배포 뒤 입력과 품질이 달라지는지 살펴본다. 7장의 데이터 준비도 같은 계약을 탐지와 추천이라는 다른 문제에 적용하는 과정으로 이어진다.
+두 장을 거치면 **선택한 모델과 그 모델에 맞는 피처, 둘을 잇는 실행을 함께 추적하는 구조**가 생긴다. 6장은 이 배치 연결을 요청 기반 서비스로 옮기고, 배포 뒤 입력과 품질이 달라지는지 지켜본다. 7장의 데이터 준비도 같은 계약을 탐지와 추천이라는 다른 문제에 적용한다.
 
 ## 실습 순서 {#book-lab-sop}
 
-5장의 파이프라인은 모델을 학습하지 않는다. **4장에서 등록한 모델과 Feast 정의를 사용해 배치 추론하는 과정**이므로, 모델 등록과 피처 준비를 먼저 끝내야 한다.
+5장의 파이프라인은 모델을 학습하지 않는다. 4장에서 등록한 모델과 Feast 정의를 가져다 배치 추론을 하므로, 모델 등록과 피처 준비부터 끝내야 한다.
 
 ```mermaid
 flowchart LR
@@ -82,15 +82,15 @@ flowchart LR
 | D. KFP | 클러스터용 Registry와 설정, 파이프라인 실행 기록 |
 | E. 결과 확인 | `inference-datasets/income_predictions.parquet` |
 
-앞 단계의 완료 기준을 확인한 뒤 다음 단계로 넘어가면 된다. 명령은 저장소 최상위 폴더에서 실행하고, `cd`가 있는 단계만 작업 위치가 달라진다.
+표의 오른쪽 칸이 갖춰졌으면 다음 단계로 넘어간다. 명령은 저장소 최상위 폴더에서 실행하며, `cd`가 있는 단계만 위치가 바뀐다.
 
 ## A. 환경 세팅
 
 ### 먼저 볼 구성: 무엇이 함께 설치되는가
 
-책의 부록 A는 k3s 또는 MicroK8s 클러스터에 [kubeflow-argo](https://github.com/vmallya-123/kubeflow-argo)를 내려받아 Argo CD부터 설치한다. `kubectl apply -k argocd/` 뒤 `kubectl apply -f kubeflow.yaml`을 실행하면 Argo CD가 Kubeflow의 구성 요소별 Application을 배포하고 동기화한다.
+책의 부록 A는 k3s나 MicroK8s 클러스터에 [kubeflow-argo](https://github.com/vmallya-123/kubeflow-argo)를 내려받아 Argo CD부터 설치한다. `kubectl apply -k argocd/`에 이어 `kubectl apply -f kubeflow.yaml`을 실행하면 Argo CD가 Kubeflow의 구성 요소별 Application을 배포하고 동기화한다.
 
-여기서 Argo CD와 Argo Workflows를 구분해야 한다. **Argo CD는 책이 Kubeflow 설치에 선택한 GitOps 도구**이고, **Argo Workflows는 KFP가 파이프라인 작업을 Pod로 실행하는 엔진**이다. Kubeflow를 설치한다고 Argo CD가 자동으로 생기는 것은 아니다.
+이름이 비슷한 Argo CD와 Argo Workflows는 하는 일이 다르다. Argo CD는 책이 Kubeflow 설치에 고른 GitOps 도구이고, Argo Workflows는 KFP가 파이프라인 작업을 Pod로 돌리는 엔진이다. Kubeflow를 설치한다고 Argo CD가 따라 설치되지는 않는다.
 
 | 구성 요소 | 책의 설치 방식 | 이 실습 |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ flowchart LR
 | MLflow 서버 | 이미지 빌드 후 Deployment와 Service를 별도 적용 | MLflow 3.0.0 이미지를 빌드해 설치 |
 | 업무용 버킷 | MinIO에서 직접 생성 | 저장소 화면에서 직접 생성 |
 
-MinIO가 KFP에 포함된다는 것과 실습용 버킷까지 만들어진다는 것은 다르다. KFP가 준비하는 `mlpipeline` 외에 학습 데이터, 모델 파일, 피처와 예측 결과를 담을 버킷은 직접 만들어야 한다.
+KFP에 MinIO가 들어 있어도 실습용 버킷까지 생기지는 않는다. KFP가 쓰는 `mlpipeline`을 빼면 학습 데이터, 모델 파일, 피처, 예측 결과를 담을 버킷은 직접 만들어야 한다.
 
 ```mermaid
 flowchart LR
@@ -132,11 +132,11 @@ flowchart LR
     ML -->|"모델과 아티팩트"| S3
 ```
 
-책의 4장은 PC에서 `mlflow ui`를 띄우지만, 5장은 Pod에서 접근할 수 있는 MLflow 서버를 전제로 한다. 여기서는 처음부터 공용 서버 하나를 쓰고 PC에 `localhost:5000`으로 연결해, 노트북과 파이프라인이 같은 모델을 보게 했다.
+책의 4장은 PC에서 `mlflow ui`를 띄우지만 5장은 Pod에서도 닿는 MLflow 서버가 필요하다. 그래서 처음부터 클러스터에 서버를 하나 두고 PC에서는 `localhost:5000`으로 붙어, 노트북과 파이프라인이 같은 모델을 보게 했다.
 
 ### A-1. 도구 확인
 
-Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와 디스크 여유 40GB를 준비한다. 아래 절차는 Windows 11 PowerShell에서 실행했으며, macOS나 Linux에서는 가상환경 활성화와 PowerShell 전용 명령을 해당 셸에 맞게 바꾼다.
+Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와 디스크 여유 40GB가 필요하다. 아래 절차는 Windows 11 PowerShell 기준이다. macOS나 Linux라면 가상환경 활성화와 PowerShell 전용 명령을 쓰는 셸에 맞게 바꾼다.
 
 1. 저장소를 내려받고 도구를 확인한다.
    ```powershell
@@ -144,7 +144,7 @@ Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와
    cd ml-platform-book-env
    python bookenv.py check
    ```
-2. 마지막에 `All required tools are available.`이 나오면 된다. PATH에 없는 도구는 `$env:KIND = "C:\tools\kind.exe"`처럼 경로를 지정할 수 있다. `KUBECTL`, `DOCKER`, `GIT`도 같은 방식이다.
+2. 마지막 줄에 `All required tools are available.`이 나오면 된다. PATH에 없는 도구는 `$env:KIND = "C:\tools\kind.exe"`처럼 경로를 직접 지정한다. `KUBECTL`, `DOCKER`, `GIT`도 같다.
 
 ### A-2. 클러스터 설치
 
@@ -152,13 +152,13 @@ Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와
    ```powershell
    python bookenv.py up
    ```
-2. `The environment is ready. Next: python bookenv.py forward`가 나올 때까지 기다린다. 이미지 캐시가 있던 실행에서는 약 8분 걸렸고, 처음에는 다운로드와 빌드 때문에 20분 넘게 걸릴 수 있다.
+2. `The environment is ready. Next: python bookenv.py forward`가 나오면 끝이다. 이미지 캐시가 있을 때 약 8분 걸렸다. 처음이라면 다운로드와 빌드 때문에 20분을 넘길 수 있다.
 
-설치 중 `metadata-grpc-deployment`, `ml-pipeline`이 MySQL을 기다리며 재시작할 수 있다. 설치가 시간 초과로 끝나면 `python bookenv.py status`로 준비되지 않은 Pod를 확인한다. 원인을 해결한 뒤 `up`을 다시 실행하면 기존 클러스터를 재사용한다.
+설치 중 `metadata-grpc-deployment`와 `ml-pipeline`이 MySQL을 기다리며 재시작하기도 한다. 설치가 시간 초과로 끝나면 `python bookenv.py status`로 준비되지 않은 Pod를 찾는다. 원인을 고친 뒤 `up`을 다시 실행하면 기존 클러스터를 그대로 쓴다.
 
 ### A-3. 포트포워딩과 화면 확인
 
-1. 두 번째 터미널에서 다음 명령을 실행하고 실습이 끝날 때까지 켜 둔다.
+1. 두 번째 터미널에서 실행하고, 실습이 끝날 때까지 켜 둔다.
    ```powershell
    python bookenv.py forward
    ```
@@ -172,13 +172,13 @@ Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와
 
    ![처음 접속한 저장소의 버킷 목록.](/images/ml-platform-engineering/sop/storage-01-buckets-empty.png)
 
-포트가 이미 사용 중이면 로컬 MLflow나 이전 forward 창부터 확인한다. 실행 중 `Reconnecting ...`이 잠깐 보일 수 있는데, Pod가 재시작돼 터널을 다시 여는 메시지다. 계속 반복되거나 화면이 열리지 않으면 Pod 상태와 포트 충돌을 확인해야 한다.
+포트가 이미 쓰이고 있다면 로컬 MLflow나 예전 forward 창이 남았는지 본다. 실행 중 잠깐 보이는 `Reconnecting ...`은 Pod가 재시작돼 터널을 다시 연다는 메시지다. 계속 반복되거나 화면이 열리지 않으면 Pod 상태와 포트 충돌을 확인한다.
 
-책의 MinIO 콘솔은 `minio` / `minio123`으로 로그인하지만, KFP 2.4.1의 구형 MinIO 이미지를 받을 수 없어 이 환경은 SeaweedFS로 바꿨다. S3 API의 서비스 이름과 계정은 유지했고, 웹 화면만 로그인 없는 Filer를 쓴다. **`/buckets/` 아래 폴더 하나가 S3 버킷 하나**다. [KFP 공식 문서](https://www.kubeflow.org/docs/components/pipelines/operator-guides/configure-object-store/)에서도 2.15부터 기본 저장소를 SeaweedFS로 안내한다.
+책의 MinIO 콘솔은 `minio` / `minio123`으로 로그인한다. 그런데 KFP 2.4.1이 쓰는 구형 MinIO 이미지를 받을 수 없어서 이 환경은 SeaweedFS로 바꿨다. S3 API의 서비스 이름과 계정은 그대로 두고, 웹 화면만 로그인이 없는 Filer를 쓴다. 이 화면에서는 `/buckets/` 아래 폴더 하나가 S3 버킷 하나다. [KFP 공식 문서](https://www.kubeflow.org/docs/components/pipelines/operator-guides/configure-object-store/)도 2.15부터 기본 저장소로 SeaweedFS를 안내한다.
 
 ### A-4. 버킷 만들기
 
-버킷 이름은 도구별 책임을 구분하는 데도 도움이 된다. 학습 CSV, 모델 파일, 피처 정의, KFP 중간 파일과 최종 예측은 같은 저장소를 쓰더라도 서로 다른 데이터다.
+같은 저장소라도 버킷을 나눠 두면 데이터마다 어느 도구가 책임지는지 눈에 들어온다.
 
 | 버킷 | 저장할 것 | 사용하는 단계 |
 | --- | --- | --- |
@@ -195,11 +195,11 @@ Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와
    ![mlflow-datasets 버킷을 만든 화면.](/images/ml-platform-engineering/sop/storage-02-first-bucket.png)
 
 3. 같은 방법으로 `mlflow-artifacts`, `feature-data-sets`, `feature-registry`, `inference-datasets`를 차례로 만든다.
-4. 목록에 다섯 개와 `mlpipeline`이 보이는지 확인한다.
+4. 목록에 다섯 개와 `mlpipeline`이 함께 보이면 된다.
 
    ![실습용 버킷 다섯 개와 mlpipeline.](/images/ml-platform-engineering/sop/storage-03-all-buckets.png)
 
-책 본문의 `feature_data_sets`는 밑줄 때문에 S3 버킷 이름으로 쓸 수 없다. 저자 README와 코드가 쓰는 `feature-data-sets`로 맞춘다. 화면 대신 `python bookenv.py buckets`로 한 번에 만들어도 결과는 같다.
+책 본문에 나오는 `feature_data_sets`는 밑줄 때문에 S3 버킷 이름으로 쓸 수 없다. 저자 README와 코드에 있는 `feature-data-sets`를 따른다. 화면에서 하나씩 만드는 대신 `python bookenv.py buckets`로 한 번에 만들어도 된다.
 
 ### A-5. 책 코드와 가상환경
 
@@ -208,7 +208,7 @@ Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와
    git clone https://github.com/practical-mlops/chapter-4.git upstream/chapter-4
    git clone https://github.com/practical-mlops/chapter-5.git upstream/chapter-5
    ```
-   확인한 커밋은 chapter-4 `b67a822`, chapter-5 `332915b`이며 둘 다 2025-07-23 기준이다.
+   확인한 커밋은 chapter-4 `b67a822`, chapter-5 `332915b`이고 둘 다 2025-07-23 시점이다.
 2. 패키지를 설치하고 가상환경을 활성화한다.
    ```powershell
    uv venv .venv-book --python 3.11
@@ -222,19 +222,19 @@ Docker(메모리 8GB 이상 할당), kind 0.27, kubectl, git, Python 3.11, uv와
    ```
    `3.0.0 0.40.1 2.9.0 1.5.2`가 나오면 된다.
 
-책 본문은 `mlflow==2.6.0`이지만 공식 저장소와 부록은 3.0.0을 사용한다. 이 실습은 서버와 클라이언트를 모두 **3.0.0**으로 맞췄다. KFP 서버 2.4.1과 Python SDK 2.9.0은 서로 다른 구성 요소의 버전이므로 번호가 같아야 하는 것은 아니다.
+책 본문은 `mlflow==2.6.0`을 쓰지만 공식 저장소와 부록은 3.0.0이다. 여기서는 서버와 클라이언트를 모두 3.0.0으로 맞췄다. KFP 서버 2.4.1과 Python SDK 2.9.0은 서로 다른 구성 요소라서 번호가 달라도 괜찮다.
 
 ### A-6. JupyterLab
 
-1. 저장소 화면의 8888과 겹치지 않게 8890으로 실행한다.
+1. 저장소 화면이 쓰는 8888을 피해 8890으로 띄운다.
    ```powershell
    jupyter lab --notebook-dir book --port 8890
    ```
-2. 출력된 `http://127.0.0.1:8890/lab?token=...` 주소를 열고 `ch04` 폴더의 노트북 두 개를 확인한다. 이후 터미널 명령은 새 창에서 같은 가상환경을 활성화하고 실행한다.
+2. 출력된 `http://127.0.0.1:8890/lab?token=...` 주소로 들어가 `ch04` 폴더의 노트북 두 개를 확인한다. 이후 터미널 명령은 새 창에서 같은 가상환경을 활성화한 뒤 실행한다.
 
 ## B. MLflow로 학습과 모델 등록
 
-MLflow는 학습 알고리즘이 아니라 **실험 기록과 모델을 다시 찾기 위한 도구**다. `start_run()`으로 기록 범위를 열고, 그 안에서 `fit()`으로 학습한 뒤 메트릭과 모델을 남긴다.
+MLflow는 학습 자체가 아니라 실험 기록과 모델을 나중에 다시 찾는 일을 맡는다. `start_run()`으로 기록 범위를 열고, 그 안에서 `fit()`으로 학습한 다음 메트릭과 모델을 남긴다.
 
 | 개념 | 역할 | 이번 실습 |
 | --- | --- | --- |
@@ -245,7 +245,7 @@ MLflow는 학습 알고리즘이 아니라 **실험 기록과 모델을 다시 �
 | Artifact | 실행에서 남긴 파일 | 모델, 그래프, `column_list.pkl` |
 | Model Registry | 관리할 모델의 이름과 버전 | `random-forest-classifier` v1 |
 
-MLflow 서버가 PostgreSQL에 저장하는 것은 run과 모델 버전의 메타데이터이고, 실제 모델 파일은 `mlflow-artifacts`에 있다. 따라서 서버 화면이 열려도 S3 연결이 끊기면 모델 업로드나 다운로드는 실패할 수 있다.
+MLflow 서버가 PostgreSQL에 넣는 것은 run과 모델 버전의 메타데이터다. 모델 파일은 `mlflow-artifacts`에 있다. 그래서 서버 화면은 잘 열리는데 S3 연결이 끊겨 모델 업로드나 다운로드만 실패하는 일이 생긴다.
 
 ```mermaid
 sequenceDiagram
@@ -265,32 +265,32 @@ sequenceDiagram
 
 ### B-1. 노트북과 준비 셀
 
-1. `ch04/01_mlflow_tracking.ipynb`를 열고 커널이 `Python 3 (ipykernel)`인지 확인한다. JupyterLab을 `.venv-book`에서 실행했다면 해당 환경의 커널이다.
-2. 맨 위부터 `import pandas as pd ...`까지 네 셀을 `Shift+Enter`로 실행한다. 데이터 경로와 S3 접속 주소, 계정을 준비하는 셀이다.
+1. `ch04/01_mlflow_tracking.ipynb`를 열고 커널이 `Python 3 (ipykernel)`인지 본다. JupyterLab을 `.venv-book`에서 띄웠다면 그 환경의 커널이다.
+2. 맨 위부터 `import pandas as pd ...`까지 네 셀을 `Shift+Enter`로 실행한다. 데이터 경로와 S3 주소, 계정을 준비하는 셀이다.
 
    ![책의 학습 노트북을 JupyterLab에서 연 화면.](/images/ml-platform-engineering/sop/jupyter-01-notebook.png)
 
-노트북은 저자의 `chapter-4/mlflow/data_exploration_and_model_training.ipynb`를 바탕으로 만들었고, 환경에 맞춰 추가한 셀은 `[환경]`으로 표시했다. 첫 셀이 `AssertionError`로 끝나면 A-5의 코드 위치부터 확인한다.
+이 노트북은 저자의 `chapter-4/mlflow/data_exploration_and_model_training.ipynb`를 바탕으로 했고, 환경에 맞춰 넣은 셀에는 `[환경]` 표시를 달았다. 첫 셀이 `AssertionError`로 끝나면 A-5에서 받은 코드 위치부터 확인한다.
 
 ### B-2. 데이터 탐색과 첫 run
 
 1. `2. 데이터 탐색` 아래 셀 세 개를 실행한다. `df.info()`에 30,162행과 9개 열이 나오고 변수별 그래프가 `categorical_variable_plots/`에 저장된다.
 2. `3. MLflow 연결` 아래 셀 세 개를 실행한다. `income-classifier` 실험이 만들어지고 `artifact_location='s3://mlflow-artifacts/1'`이 출력된다.
-3. MLflow 화면에서 `income-classifier`를 열어 `eda-`로 시작하는 run의 Artifacts 탭에 PNG가 있는지 확인한다.
+3. MLflow 화면에서 `income-classifier`를 열고, `eda-`로 시작하는 run의 Artifacts 탭에 PNG가 있는지 본다.
 
-탐색에서는 결측 표기와 범주별 표본 수, 정답 비율을 먼저 본다. 어떤 열을 썼는지뿐 아니라 데이터가 어떤 상태였는지도 기록해야 다음 실험과 비교할 수 있다. 연결 오류라면 forward를, `NoSuchBucket`이라면 `mlflow-artifacts`를 확인한다.
+탐색 단계에서는 결측 표기와 범주별 표본 수, 정답 비율을 본다. 그때 데이터가 어떤 상태였는지 남겨 둬야 다음 실험과 비교가 된다. 연결 오류가 나면 forward 창을, `NoSuchBucket`이 나오면 `mlflow-artifacts` 버킷을 확인한다.
 
 ### B-3. 데이터 분할과 모델 학습
 
-1. `4. 학습 데이터 분할`과 `5. MinIO 버킷 확인` 셀을 실행한다. `mlflow-datasets bucket found`가 나와야 한다.
-2. `6. Decision Tree`, `7. Random Forest`, `8. XGBoost` 셀을 차례로 실행한다. 각각 약 1분 걸린다.
-3. MLflow에서 run 네 개(탐색 1개, 모델 3개)가 보이는지 확인한다.
+1. `4. 학습 데이터 분할`과 `5. MinIO 버킷 확인` 셀을 실행한다. `mlflow-datasets bucket found`가 나오면 된다.
+2. `6. Decision Tree`, `7. Random Forest`, `8. XGBoost` 셀을 차례로 실행한다. 각각 1분 정도 걸린다.
+3. MLflow에 run 네 개(탐색 1개, 모델 3개)가 보이면 된다.
 
    ![income-classifier에 기록된 탐색과 모델 학습 run.](/images/ml-platform-engineering/sop/mlflow-01-runs.png)
 
-소득 분류 예제는 직업과 학력 같은 범주형 열을 원-핫 인코딩한다. 추론에서도 같은 열 순서를 써야 해서 학습 시 `column_list.pkl`을 모델과 함께 기록하고, 5장의 추론 컴포넌트가 이를 내려받는다. 서비스에서 새 입력마다 인코딩 열을 임의로 만들면 모델은 같아도 다른 의미의 입력을 받게 된다.
+소득 분류 예제는 직업이나 학력 같은 범주형 열을 원-핫 인코딩한다. 추론에서도 열 순서가 같아야 하므로 학습할 때 `column_list.pkl`을 모델과 함께 기록하고, 5장의 추론 컴포넌트가 이 파일을 내려받는다. 서비스에서 입력이 올 때마다 인코딩 열을 새로 만들면 모델은 그대로인데 입력의 의미가 달라진다.
 
-이번 실행의 테스트 ROC AUC는 Decision Tree 약 0.817, Random Forest 0.855, XGBoost 0.714였다. 데이터 분할이 무작위라 같은 수치가 나오지는 않는다. `log_input()`은 데이터 출처를 기록하는 기능이지 원천 CSV를 자동으로 복사하는 기능은 아니라는 점도 구분해야 한다.
+이번 실행의 테스트 ROC AUC는 Decision Tree 약 0.817, Random Forest 0.855, XGBoost 0.714였다. 데이터를 무작위로 나누기 때문에 다시 돌리면 같은 수치가 나오지 않는다. `log_input()`도 데이터 출처를 기록할 뿐, 원천 CSV를 복사해 두지는 않는다.
 
 ### B-4. 모델 등록
 
@@ -300,17 +300,17 @@ sequenceDiagram
    bold-moose-377 0.8552045821993023 random-forest-classifier 1
    1 Production 30627206bc81449bad0da833f4e8d210
    ```
-3. **Models → random-forest-classifier**에서 버전과 원천 run을 확인한다.
+3. **Models → random-forest-classifier**에서 버전과 원천 run을 본다.
 
    ![MLflow에 등록한 random-forest-classifier 버전 1.](/images/ml-platform-engineering/sop/mlflow-02-registry.png)
 
-책에는 stage를 지정하는 과정이 빠져 있지만, 5장의 `model_stage` 파라미터가 이 값을 찾으므로 여기서 지정해 둔다. MLflow 3의 `FutureWarning`은 stage가 deprecated라는 안내다. Production 지정이 곧 API 배포를 의미하는 것도 아니다.
+책에는 stage를 지정하는 과정이 없다. 하지만 5장의 `model_stage` 파라미터가 이 값으로 모델을 찾기 때문에 여기서 지정해 둔다. MLflow 3에서 뜨는 `FutureWarning`은 stage 기능이 deprecated라는 안내다. Production으로 지정했다고 API가 배포되는 것도 아니다.
 
-책 코드를 따라가는 것과 실제 출시 기준은 나눠 봐야 한다. 책은 테스트 점수로 모델을 고르지만, 운영용 실험은 검증셋으로 후보를 선택하고 테스트셋은 마지막 확인에만 쓰는 편이 맞다. 또 stage나 alias는 다른 버전을 가리킬 수 있으므로 실제 배치에서는 실행 시작 시 구체 버전을 확정하고 `models:/이름/숫자` 형태로 기록하는 것이 좋다.
+출시 기준은 책과 다르게 잡는 편이 맞다. 책은 테스트 점수로 모델을 고르지만, 운영이라면 검증셋으로 후보를 고르고 테스트셋은 마지막 확인에만 쓴다. stage나 alias는 나중에 다른 버전을 가리킬 수 있으니 실제 배치에서는 시작할 때 구체 버전을 확정하고 `models:/이름/숫자` 형태로 남긴다.
 
 ## C. Feast로 피처 정의와 조회
 
-MLflow가 “어떤 모델을 만들었는가”를 기록한다면, Feast는 “모델이 사용할 피처를 어디서 어떤 기준으로 가져오는가”를 관리한다.
+MLflow가 어떤 모델을 만들었는지 기록한다면, Feast는 모델이 쓸 피처를 어디서 어떤 기준으로 가져올지 관리한다.
 
 ![Feast의 Registry, Offline store, Online store와 피처 조회 구조.](/images/ml-platform-engineering/figure-4-10.png "그림 4.10. Feast 피처 스토어 설계. 출처: Machine Learning Platform Engineering, 4장.")
 
@@ -323,7 +323,7 @@ MLflow가 “어떤 모델을 만들었는가”를 기록한다면, Feast는 �
 | Offline store | 과거 피처 이력 | `feature-data-sets`의 parquet |
 | Online store | 빠르게 조회할 최신 피처 | Redis |
 
-**`feast apply`와 `materialize`는 다른 작업**이다. 전자는 정의를 등록하고 후자는 피처 값을 온라인 저장소로 옮긴다. Registry에 FeatureView가 보인다고 Redis에도 값이 있다는 뜻은 아니다.
+**`feast apply`와 `materialize`는 다른 작업**이다. apply는 정의를 등록하고, materialize는 피처 값을 온라인 저장소로 옮긴다. Registry에 FeatureView가 보여도 Redis에는 아직 값이 없을 수 있다.
 
 ```mermaid
 flowchart LR
@@ -345,7 +345,7 @@ flowchart LR
    ```
 3. `3. 피처 저장소 폴더 준비` 셀 두 개를 실행한다. 저자의 `entity.py`, `features.py`, `feature_store.yaml`을 `feature_repo/`로 복사하면서 Redis 비밀번호를 `redis123`으로 바꾼다.
 
-이 노트북은 저자의 `chapter-4/Readme.md` 명령을 셀에서 실행하게 만든 것이다. S3와 Redis를 모두 쓰므로 forward의 9000과 6379 터널이 열려 있어야 한다.
+이 노트북은 저자의 `chapter-4/Readme.md`에 있는 명령을 셀에서 실행하도록 옮긴 것이다. S3와 Redis를 모두 쓰니 forward의 9000, 6379 터널이 열려 있어야 한다.
 
 ### C-2. 정의 등록
 
@@ -357,47 +357,47 @@ Deploying infrastructure for demographic
 Deploying infrastructure for occupation
 ```
 
-`NoSuchBucket`이면 `feature-registry`를 확인하고, Redis 인증 오류면 비밀번호 치환과 6379 터널을 확인한다. 이 단계까지는 온라인 피처 값을 적재하지 않았다.
+`NoSuchBucket`이 나오면 `feature-registry` 버킷을, Redis 인증 오류가 나면 비밀번호 치환과 6379 터널을 본다. 아직 온라인 피처 값은 적재하지 않은 상태다.
 
 ### C-3. 과거 시점 피처 조회
 
-`5. 과거 시점 피처 조회` 셀을 실행한다. 결과에 사용자와 `event_timestamp`, `Sex`가 함께 나온다.
+`5. 과거 시점 피처 조회` 셀을 실행하면 사용자와 `event_timestamp`, `Sex`가 함께 나온다.
 
 ```text
                                 user_id           event_timestamp    Sex
 0  9f2ac416-06e1-44a0-87bd-d4787c85bf66 2023-01-30 10:59:42+00:00   Male
 ```
 
-과거 조회의 핵심은 사용자 ID만이 아니라 **그때 알 수 있었던 값**을 붙인다는 점이다. 예를 들어 사용자 42의 근무 시간이 5월 21일에 36, 6월 4일에 52였다면 5월 22일 예측에는 36을 써야 한다. 최신값 52를 가져오면 미래 정보가 섞인다.
+과거 조회는 사용자 ID에 값을 붙이되, **그 시점에 알 수 있었던 값**을 붙인다. 사용자 42의 근무 시간이 5월 21일에 36, 6월 4일에 52였다고 하자. 5월 22일 예측에는 36을 써야 한다. 최신값 52를 가져오면 미래 정보가 섞인다.
 
-TTL이 2일이면 5월 25일 조회에서 21일 값은 너무 오래돼 제외된다. 또 21일 발생한 데이터가 23일 도착했다면 22일에는 알 수 없었으므로, 지연 도착이나 보정 이력이 있는 원천은 실제 사용 가능 시점까지 고려해야 한다. 시간 필드 하나만 추가한다고 모든 누설이 막히지는 않는다.
+TTL이 2일이면 5월 25일 조회에서 21일 값은 너무 오래돼 빠진다. 21일에 발생한 데이터가 23일에야 도착했다면 22일에는 알 수 없던 값이다. 지연 도착이나 보정 이력이 있는 원천은 시간 필드 하나로 끝나지 않고, 실제로 쓸 수 있게 된 시점까지 따져야 한다.
 
 ### C-4. 온라인 저장소 적재와 조회
 
 1. `6. 온라인 저장소로 적재` 셀을 실행한다. `feast materialize`가 README의 기간인 `2022-09-16T00:00:00`부터 `2023-09-17T00:00:00`까지 원천을 읽어 Redis에 최신값을 적재한다.
-2. `7. 온라인 피처 조회` 셀을 실행하고 `Sex` 값이 비어 있지 않은지 확인한다.
+2. `7. 온라인 피처 조회` 셀을 실행해 `Sex` 값이 비어 있지 않으면 된다.
 
-과거 조회는 엔티티의 기준 시각에 맞는 값을 찾고, 온라인 조회는 낮은 지연으로 최신값을 읽는 데 초점을 둔다. 그래서 5장처럼 과거 시각을 기준으로 배치 추론할 때는 온라인 최신값 대신 `get_historical_features()`를 쓴다.
+온라인 조회는 최신값을 빠르게 읽는 데 맞춰져 있다. 5장처럼 과거 시각을 기준으로 배치 추론을 할 때는 `get_historical_features()`를 쓴다.
 
-`None`이 나오면 적재 여부와 해당 사용자의 원천 데이터를 확인한다. HTTP 요청 성공이나 적재 기간 표시만으로 모든 사용자에게 유효한 피처가 있다고 볼 수는 없다.
+`None`이 나오면 적재 여부와 그 사용자의 원천 데이터를 본다. HTTP 요청이 성공하고 적재 기간이 찍혀도 모든 사용자에게 유효한 피처가 있다는 보장은 없다.
 
 ### C-5. 설정 파일 업로드
 
-`8. feature_store.yaml을 feature-registry 버킷에 올리기` 셀을 실행한다. 버킷에 `feature_store.yaml`, `registry_local.db`가 있으면 여기까지 완료다.
+`8. feature_store.yaml을 feature-registry 버킷에 올리기` 셀을 실행한다. 버킷에 `feature_store.yaml`과 `registry_local.db`가 보이면 C는 끝이다.
 
-중요한 점은 이 설정이 **PC에서 쓰는 localhost용 설정**이라는 것이다. Pod에서 `localhost`는 PC가 아니라 해당 Pod 자신을 가리키므로, D 단계에서는 클러스터 주소를 쓰는 정의와 설정을 따로 준비한다.
+이 설정은 PC에서 쓰는 localhost용이다. Pod 안에서 `localhost`는 그 Pod 자신이라서, D에서는 클러스터 주소를 쓰는 정의와 설정을 따로 준비한다.
 
 ### 학습과 추론에서 같은 피처를 쓴다는 것
 
-책의 학습 노트북은 CSV를 직접 읽고 Feast는 뒤에서 별도로 준비한다. 따라서 **이 노트북이 Feast에서 학습 피처를 조회하거나 FeatureService를 MLflow에 기록하는 것은 아니다.** 책의 흐름을 실행한 것과 학습부터 추론까지 피처 계약을 고정한 것은 구분해야 한다.
+앞의 학습 노트북은 Feast에서 학습 피처를 조회하지 않고, FeatureService를 MLflow에 기록하지도 않는다. 책의 흐름을 끝까지 돌린 것과 학습부터 추론까지 피처 계약을 고정한 것은 별개의 일이다.
 
-실제 연결을 강화하려면 필요한 FeatureView를 `income_model_v1` 같은 FeatureService로 묶고, 학습 코드가 그 서비스로 과거 피처를 조회하게 한다. 그때 MLflow run과 모델 버전에 서비스 이름, 피처 목록, 정의 파일의 해시와 데이터 스냅샷을 남기면 추론에서 같은 계약인지 확인할 수 있다. 이 추가 연결은 아래의 보충 예제로 분리했다.
+연결을 실제로 만들려면 필요한 FeatureView를 `income_model_v1` 같은 FeatureService로 묶고, 학습 코드가 그 서비스로 과거 피처를 조회하게 한다. 이때 MLflow run과 모델 버전에 서비스 이름, 피처 목록, 정의 파일 해시, 데이터 스냅샷을 남겨 두면 추론 때 같은 계약인지 대조할 수 있다. 이 부분은 글 끝의 보충 예제로 따로 뺐다.
 
 ## D. Kubeflow Pipelines로 배치 추론
 
 ![S3 파일 전달, Feast 피처 조회와 MLflow 모델 조회를 연결한 배치 추론.](/images/ml-platform-engineering/figure-5-02.png "그림 5.2. Kubeflow Pipelines와 MinIO, Feast, MLflow의 상호작용. 출처: Machine Learning Platform Engineering, 5장.")
 
-그림에서 작업 순서와 데이터 이동을 나눠 보면 이해하기 쉽다. KFP는 단계의 순서와 의존성을 관리하고, 실제 데이터는 작업 Pod가 파일로 저장해 다음 Pod에 전달한다. 앞 Pod의 파이썬 객체나 메모리를 공유하는 구조가 아니다.
+그림은 작업 순서와 데이터 이동을 나눠 보면 읽기 쉽다. KFP는 단계의 순서와 의존성을 관리한다. 데이터는 작업 Pod가 파일로 저장해 다음 Pod로 넘기며, Pod끼리 파이썬 객체나 메모리를 공유하지 않는다.
 
 | 컴포넌트 | 입력 | 출력과 접속 대상 |
 | --- | --- | --- |
@@ -425,7 +425,7 @@ sequenceDiagram
     K->>S: inference-datasets에 결과 저장
 ```
 
-모델 이름과 처리 설정 같은 작은 값은 파라미터로, 대상 목록과 피처 테이블은 파일 아티팩트로 전달한다. `Input[Dataset]`과 `Output[Dataset]`은 파일 전달 계약이지 열 타입이나 결측 검사가 아니다. 스키마와 업무 키 검사는 컴포넌트 코드에서 해야 한다.
+모델 이름이나 처리 설정 같은 작은 값은 파라미터로, 대상 목록과 피처 테이블은 파일 아티팩트로 넘긴다. `Input[Dataset]`과 `Output[Dataset]`은 파일을 주고받는 약속이고, 열 타입이나 결측까지 검사하지는 않는다. 스키마와 업무 키 검사는 컴포넌트 코드에서 직접 해야 한다.
 
 ### D-1. 책 코드를 환경에 맞추기
 
@@ -435,13 +435,13 @@ sequenceDiagram
 python book/ch05/prepare.py
 ```
 
-저자 README가 바꾸라고 안내한 컴포넌트 이미지 이름과 Redis 비밀번호를 수정하는 단계다. 이미지 네 개의 참조가 `book-ch5/components:0.1`로 바뀌었다는 줄과 `Redis password set`이 나오면 된다.
+저자 README에서 바꾸라고 한 컴포넌트 이미지 이름과 Redis 비밀번호를 고치는 단계다. 이미지 네 개의 참조가 `book-ch5/components:0.1`로 바뀌었다는 줄과 `Redis password set`이 출력되면 된다.
 
 ### D-2. 이미지 빌드와 적재
 
-책은 이미지를 Docker Hub에 push하지만 이 환경은 로컬에서 빌드해 kind 노드에 바로 넣는다. 저자의 `python:3.10-slim-buster`는 패키지 설치에서 404가 나서 bookworm으로 바꿨고, 컴포넌트의 scikit-learn은 모델을 저장한 노트북과 같은 1.5.2로 맞췄다.
+책은 이미지를 Docker Hub에 push하지만, 여기서는 로컬에서 빌드해 kind 노드에 바로 넣는다. 저자의 `python:3.10-slim-buster`는 패키지 설치 중 404가 나서 bookworm으로 바꿨다. 컴포넌트의 scikit-learn도 모델을 저장한 노트북과 같은 1.5.2로 맞췄다.
 
-1. 이미지를 빌드한다. 처음에는 두 개를 합쳐 10분 넘게 걸릴 수 있다.
+1. 이미지를 빌드한다. 처음에는 두 개 합쳐 10분 넘게 걸릴 수 있다.
    ```powershell
    docker build -t book-ch5/feast-job:0.1 -f book/ch05/Dockerfile.feast-job upstream/chapter-5/scripts/feast
    docker build -t book-ch5/components:0.1 -f book/ch05/Dockerfile.components upstream/chapter-5
@@ -452,7 +452,7 @@ python book/ch05/prepare.py
    python bookenv.py load book-ch5/components:0.1
    ```
 
-PC에서 이미지가 보인다고 kind 노드에도 있는 것은 아니다. 이미지를 다시 빌드했다면 적재도 다시 해야 한다.
+PC에 이미지가 있어도 kind 노드에는 없을 수 있다. 이미지를 다시 빌드했다면 적재도 다시 한다.
 
 ### D-3. 클러스터에서 Feast 정의 등록
 
@@ -462,9 +462,9 @@ kubectl -n kubeflow wait --for=condition=complete --timeout=300s job/feast-job
 kubectl -n kubeflow logs job/feast-job
 ```
 
-저자 Job에서 이미지 이름과 네임스페이스를 바꾼 것으로, 클러스터 주소를 사용하는 `s3://feature-registry/registry.db`를 만든다. 로그에 `Deploying infrastructure` 세 줄이 나오는지 확인한다.
+저자의 Job에서 이미지 이름과 네임스페이스만 바꿨다. 이 Job이 클러스터 주소를 쓰는 `s3://feature-registry/registry.db`를 만들고, 로그에 `Deploying infrastructure` 세 줄이 나오면 된다.
 
-`entity_key_serialization_version` 경고는 저자의 설정에 명시되지 않아 나오며, `ErrImageNeverPull`은 D-2의 적재를 먼저 확인한다. 다시 실행하려면 `kubectl -n kubeflow delete job feast-job`으로 기존 Job을 지우고 적용한다.
+`entity_key_serialization_version` 경고는 저자 설정에 이 값이 명시되지 않아서 나온다. `ErrImageNeverPull`이 뜨면 D-2의 적재부터 확인한다. 다시 실행할 때는 `kubectl -n kubeflow delete job feast-job`으로 기존 Job을 지운 뒤 적용한다.
 
 ### D-4. 입력 파일 업로드와 컴파일
 
@@ -478,7 +478,7 @@ kubectl -n kubeflow logs job/feast-job
    | `upstream/chapter-5/scripts/feast/feature_store.yaml` | `feature-registry/feature_store_k8s.yaml` |
    | `upstream/chapter-4/feast/data/entity_df.parquet` | `feature-data-sets/entity_df.parquet` |
 
-   4장의 localhost용 `feature_store.yaml`을 덮어쓰지 않도록 클러스터용 파일 이름을 따로 정했다.
+   4장의 localhost용 `feature_store.yaml`을 덮어쓰지 않으려고 클러스터용 파일에는 다른 이름을 붙였다.
 2. 컴파일하고 이미지 참조를 확인한다.
    ```powershell
    cd upstream/chapter-5
@@ -486,9 +486,9 @@ kubectl -n kubeflow logs job/feast-job
    cd ../..
    Select-String -Path upstream/chapter-5/income_classifier_pipeline.yaml -Pattern "image:"
    ```
-   macOS와 Linux에서는 마지막 줄 대신 `grep "image:" upstream/chapter-5/income_classifier_pipeline.yaml`을 쓴다. 모든 이미지가 `book-ch5/components:0.1`이어야 하며, `varunmallya/...`가 보이면 D-1을 실행한 뒤 다시 컴파일한다.
+   macOS와 Linux에서는 마지막 줄 대신 `grep "image:" upstream/chapter-5/income_classifier_pipeline.yaml`을 쓴다. 이미지는 모두 `book-ch5/components:0.1`이어야 한다. `varunmallya/...`가 보이면 D-1을 실행하고 다시 컴파일한다.
 
-컴파일은 정의를 실행 명세 YAML로 바꾸는 단계일 뿐 아직 Pod를 만들거나 데이터를 읽지는 않는다. 이미지, 서비스 주소와 권한이 맞는지는 실제 실행에서 확인해야 한다.
+컴파일은 정의를 실행 명세 YAML로 바꾸기만 한다. 이 시점에는 Pod도 뜨지 않고 데이터도 읽지 않는다. 이미지와 서비스 주소, 권한이 맞는지는 실제로 실행해 봐야 안다.
 
 ### D-5. 파이프라인 업로드
 
@@ -497,15 +497,15 @@ kubectl -n kubeflow logs job/feast-job
    ![KFP의 Pipelines 목록.](/images/ml-platform-engineering/sop/kfp-01-pipelines.png)
 
 2. **Pipeline Name**에 `income-classifier-pipeline`, 설명에 `Chapter 5 income classifier batch inference`를 입력한다.
-3. **Upload a file** 라디오 버튼을 먼저 누르고 **Choose file**로 `upstream/chapter-5/income_classifier_pipeline.yaml`을 고른다.
+3. **Upload a file** 라디오 버튼을 먼저 누른 다음 **Choose file**로 `upstream/chapter-5/income_classifier_pipeline.yaml`을 고른다.
 
    ![파이프라인 YAML을 업로드하는 화면.](/images/ml-platform-engineering/sop/kfp-02-upload.png)
 
-4. **Create**를 눌러 컴포넌트 네 개가 이어진 그래프를 확인한다.
+4. **Create**를 누르면 컴포넌트 네 개가 이어진 그래프가 나온다.
 
    ![업로드한 파이프라인의 네 컴포넌트.](/images/ml-platform-engineering/sop/kfp-03-pipeline-graph.png)
 
-라디오 버튼을 누르지 않으면 `Package URL is empty` 오류가 날 수 있다. 빈 파이프라인이 남았다면 목록에서 삭제한 뒤 다시 업로드한다.
+라디오 버튼을 건너뛰면 `Package URL is empty` 오류가 나기도 한다. 빈 파이프라인이 남았다면 목록에서 지우고 다시 올린다.
 
 ### D-6. 실험 만들고 실행하기
 
@@ -513,9 +513,9 @@ kubectl -n kubeflow logs job/feast-job
 
    ![KFP 실험을 만드는 화면.](/images/ml-platform-engineering/sop/kfp-04-create-experiment.png)
 
-   MLflow의 Experiment와 이름은 같지만 별개다. KFP 실험은 파이프라인 실행을, MLflow 실험은 학습 run을 묶는다.
+   MLflow의 Experiment와 이름만 같고 서로 관계는 없다. KFP 실험은 파이프라인 실행을, MLflow 실험은 학습 run을 묶는다.
 2. 실행 화면에서 **Pipeline → Choose**로 `income-classifier-pipeline`을 고르고 **Use this pipeline**을 누른다. 실험 목록으로 돌아왔다면 해당 실험의 **Create run**으로 들어간다.
-3. **Run name**에 `income-classifier-run-1`을 넣고 파라미터를 채운다. 같은 값은 `book/ch05/run-parameters.json`에도 있다.
+3. **Run name**에 `income-classifier-run-1`을 넣고 파라미터를 채운다. 같은 값이 `book/ch05/run-parameters.json`에도 있다.
 
    | 파라미터 | 값 |
    | --- | --- |
@@ -536,11 +536,11 @@ kubectl -n kubeflow logs job/feast-job
 
    ![KFP 실행에 넘길 파라미터.](/images/ml-platform-engineering/sop/kfp-05-run-parameters.png)
 
-4. **Start**를 누른다. 이번 실행은 약 2분 걸렸고, 네 작업이 차례로 초록색 체크로 바뀌었다.
+4. **Start**를 누른다. 이번 실행은 2분 정도 걸렸고, 네 작업이 차례로 성공 표시로 바뀌었다.
 
    ![네 작업이 성공한 KFP 실행 그래프.](/images/ml-platform-engineering/sop/kfp-06-run-graph.png)
 
-서비스 주소에 `localhost`를 넣지 않는 이유는 작업이 PC가 아닌 Pod에서 돌기 때문이다. 또한 책의 방식은 키를 파라미터로 전달해 UI에도 노출하므로 로컬 실습에만 사용하고, 운영에서는 Secret과 서비스 계정 권한으로 전달해야 한다.
+작업이 Pod에서 돌기 때문에 서비스 주소에 `localhost`를 쓰지 않는다. 책처럼 키를 파라미터로 넘기면 UI에도 그대로 보이니, 운영에서는 Secret과 서비스 계정 권한으로 넘긴다.
 
 ### D-7. 결과 확인
 
@@ -552,8 +552,8 @@ kubectl -n kubeflow logs job/feast-job
 
    ![최종 쓰기 작업에 전달된 입력 아티팩트.](/images/ml-platform-engineering/sop/kfp-08-write-io.png)
 
-   주소가 `minio://mlpipeline/...`로 보이는 것은 이 구성에서 KFP가 S3 호환 아티팩트 위치를 표시하는 방식이다. 실제 저장소 이미지는 SeaweedFS다.
-3. http://localhost:8888/buckets/inference-datasets/ 에서 `income_predictions.parquet`를 확인한다.
+   주소가 `minio://mlpipeline/...`로 보이는 것은 이 구성에서 KFP가 S3 호환 아티팩트 위치를 그렇게 표시하기 때문이다. 실제 저장소 이미지는 SeaweedFS다.
+3. http://localhost:8888/buckets/inference-datasets/ 에 `income_predictions.parquet`가 있으면 된다.
 
    ![업무용 버킷에 저장된 최종 예측 파일.](/images/ml-platform-engineering/sop/storage-04-predictions.png)
 
@@ -566,21 +566,21 @@ kubectl -n kubeflow logs job/feast-job
    user_id in output: False
    ```
 
-여기까지 확인하면 작업 성공뿐 아니라 **파일 전달과 실제 결과 저장**까지 이어진 것이다. parquet 미리보기에 `PAR1`이나 깨진 문자가 나오면 텍스트로 표시한 것이므로, 그 화면만으로 내용이 잘못됐다고 판단하지 않는다.
+이제 작업 성공만이 아니라 파일 전달과 결과 저장까지 확인했다. parquet 미리보기에 `PAR1`이나 깨진 문자가 보이는 것은 파일을 텍스트로 띄웠기 때문이라 내용 문제는 아니다.
 
 ## E. 결과 해석과 오류 대응
 
 ### 실행 성공과 예측 품질은 다르다
 
-책 코드의 결과에는 `user_id`가 없다. 추론 코드가 인코딩 전에 이 열을 지우기 때문인데, 실제 서비스라면 예측이 누구의 것인지 알 수 있도록 결과에 다시 붙여야 한다. 모델 입력에서 ID를 제외하는 것과 결과에서 ID를 버리는 것은 다른 문제다.
+책 코드의 결과에는 `user_id`가 없다. 추론 코드가 인코딩 전에 이 열을 지우기 때문이다. 실제 서비스라면 누구의 예측인지 알 수 있게 결과에 다시 붙여야 한다. 모델 입력에서 ID를 빼는 것과 결과에서 ID를 버리는 것은 다른 문제다.
 
-확률과 클래스도 구분해야 한다. `predict_proba()`가 반환한 값은 클래스 확률 추정치이지 클래스 번호가 아니며, 열 순서는 `classes_`로 확인한다. 임계값은 오탐과 미탐의 업무 비용에 맞춰 검증한다.
+확률과 클래스도 섞이기 쉽다. `predict_proba()`가 돌려주는 값은 클래스 확률 추정치이고 클래스 번호가 아니다. 열 순서는 `classes_`로 확인하고, 임계값은 오탐과 미탐의 업무 비용에 맞춰 검증한다.
 
-재실행을 추적하려면 대상 사용자와 기준 시각, 구체 모델 버전, 피처 정의, 코드와 데이터 스냅샷을 함께 남기는 편이 좋다. KFP run ID는 실행을 구분하지만 같은 날짜의 결과가 중복 저장되지 않게 해 주는 업무 키는 아니다.
+재실행을 추적하려면 대상 사용자와 기준 시각, 구체 모델 버전, 피처 정의, 코드와 데이터 스냅샷을 함께 남긴다. KFP run ID만으로는 같은 날짜의 결과가 중복 저장되는 것을 막지 못한다.
 
 ### 실패한 단계에서 확인할 것
 
-실패한 상자의 **Logs**를 보고 해당 단계의 입력과 접속 대상부터 확인한다. 포트포워딩은 PC에서 쓰는 경로이고, Pod의 통신은 클러스터 서비스 주소를 따른다는 점을 나눠 보면 원인을 좁히기 쉽다.
+실패한 상자의 **Logs**를 열고 그 단계의 입력과 접속 대상부터 본다. PC는 포트포워딩으로, Pod는 클러스터 서비스 주소로 통신하니 둘을 나눠 생각하면 원인이 빨리 좁혀진다.
 
 | 실패 위치나 증상 | 확인할 것 |
 | --- | --- |
@@ -594,11 +594,11 @@ kubectl -n kubeflow logs job/feast-job
 | 추론 시 scikit-learn 버전 오류 | 학습 노트북과 컴포넌트 이미지의 1.5.2 일치 |
 | `apt-get`의 404 | buster 대신 제공한 bookworm Dockerfile 사용 |
 
-실행 이후에는 사용자나 피처가 누락된 경우, 스키마가 틀린 경우, 잘못된 모델 버전을 넘긴 경우도 따로 시험해야 한다. 없는 값을 모두 0으로 채워 성공시키면 잘못된 예측을 알아채기 어려워진다. S3의 일시 장애에는 제한된 재시도가 가능하지만 스키마 오류는 입력을 고치기 전까지 반복해도 해결되지 않는다.
+사용자나 피처가 빠지거나 스키마가 틀리거나 엉뚱한 모델 버전이 넘어가는 경우는 따로 시험해 봐야 한다. 없는 값을 전부 0으로 채워 성공시키면 잘못된 예측을 알아채기 어렵다. S3의 일시 장애는 횟수를 제한한 재시도로 넘길 수 있지만, 스키마 오류는 입력을 고치기 전까지 몇 번을 돌려도 그대로다.
 
 ### 실습 종료
 
-JupyterLab과 forward 창을 `Ctrl+C`로 끄면 접속만 멈춘다. 다시 시작할 때는 `python bookenv.py status`로 상태를 확인하고 A-3부터 진행하면 된다. 클러스터와 모든 실습 기록을 지우려면 다음을 실행한다.
+JupyterLab과 forward 창은 `Ctrl+C`로 끄면 접속만 끊긴다. 다시 시작할 때는 `python bookenv.py status`로 상태를 보고 A-3부터 하면 된다. 클러스터와 실습 기록을 모두 지우려면 다음을 실행한다.
 
 ```powershell
 python bookenv.py down
@@ -607,7 +607,7 @@ docker rmi book-ch5/components:0.1 book-ch5/feast-job:0.1 book-env/mlflow:3.0.0 
 
 ## 보충: 피처 계약을 고정하는 작은 로컬 예제
 
-책 코드의 전체 연결을 확인한 뒤, **Feast로 학습 데이터를 조회하고 사용한 FeatureService를 MLflow 모델 버전까지 기록하는 방식**을 따로 연습할 수 있다. 아래는 기존 작은 예제의 코드이며, 위 `book-env` 실습의 필수 단계는 아니다.
+Feast로 학습 데이터를 조회하고 그때 쓴 FeatureService를 MLflow 모델 버전에 기록하는 방식은 따로 연습해 볼 수 있다. 아래는 예전에 만든 작은 예제이고, 위 `book-env` 실습에 꼭 필요한 단계는 아니다.
 
 | 실행 순서 | 코드 | 확인할 것 |
 | --- | --- | --- |
@@ -616,7 +616,7 @@ docker rmi book-ch5/components:0.1 book-ch5/feast-job:0.1 book-env/mlflow:3.0.0 
 | 3 | [pipeline_study.py](/downloads/ml-platform-engineering/kfp-cluster/pipeline_study.py) | 모델 버전의 FeatureService tag와 추론 계약 비교 |
 | 4 | [run_pipeline_study.py](/downloads/ml-platform-engineering/kfp-cluster/run_pipeline_study.py) | 로컬에서 네 작업 실행 |
 
-Python 3.11의 Linux 또는 WSL2에서 별도 폴더와 가상환경을 사용한다. Windows 네이티브에서는 KFP `SubprocessRunner`의 셸과 경로 처리가 다르므로 이 예제는 WSL2에서 실행한다.
+Python 3.11이 있는 Linux나 WSL2에서 별도 폴더와 가상환경을 만든다. Windows 네이티브에서는 KFP `SubprocessRunner`의 셸과 경로 처리가 달라서 이 예제는 WSL2에서 돌린다.
 
 ```bash
 python3 -m venv .venv
@@ -630,10 +630,10 @@ python pipeline_study.py
 python run_pipeline_study.py
 ```
 
-이 예제는 MLflow 2.16.2와 로컬 SQLite를 쓰므로 위의 MLflow 3.0.0 서버용 가상환경과 섞지 않는다. 결과에는 사용자 `42`, 기준 시각 `2025-05-22`, 근무 시간 `36.0`, FeatureService `income_model_v1`과 고정 모델 URI가 남는다. 합성 데이터의 점수를 책의 소득 데이터 성능과 비교하는 예제는 아니다.
+이 예제는 MLflow 2.16.2와 로컬 SQLite를 쓰니 위의 MLflow 3.0.0용 가상환경과 섞지 않는다. 실행하면 사용자 `42`, 기준 시각 `2025-05-22`, 근무 시간 `36.0`, FeatureService `income_model_v1`과 고정된 모델 URI가 결과에 남는다. 합성 데이터라서 점수를 책의 소득 데이터 성능과 비교하는 용도는 아니다.
 
-이 작은 예제를 별도 kind 클러스터로 옮길 때 쓰던 [Dockerfile](/downloads/ml-platform-engineering/kfp-cluster/Dockerfile), [제출 스크립트](/downloads/ml-platform-engineering/kfp-cluster/submit_cluster.py), [저장소 패치](/downloads/ml-platform-engineering/kfp-cluster/object-store-patch.yaml), [Executor 패치](/downloads/ml-platform-engineering/kfp-cluster/executor-patch.yaml)도 남겨 두었다. 위 SOP의 `book-ch5` 이미지와는 별개이며, 처음에는 추가 클러스터 대신 로컬 실행까지만 확인해도 충분하다.
+이 작은 예제를 별도 kind 클러스터에 올릴 때 쓰던 [Dockerfile](/downloads/ml-platform-engineering/kfp-cluster/Dockerfile), [제출 스크립트](/downloads/ml-platform-engineering/kfp-cluster/submit_cluster.py), [저장소 패치](/downloads/ml-platform-engineering/kfp-cluster/object-store-patch.yaml), [Executor 패치](/downloads/ml-platform-engineering/kfp-cluster/executor-patch.yaml)도 남겨 두었다. 위 실습의 `book-ch5` 이미지와는 별개다. 처음에는 클러스터를 하나 더 만들지 말고 로컬 실행까지만 해 봐도 충분하다.
 
-책 코드대로 실행하는 과정과 운영에 필요한 보완을 구분해 보면, MLflow와 Feast, KFP가 자동으로 모든 것을 연결해 주는 도구는 아니라는 점이 보인다. 각 단계가 다음 단계에 무엇을 넘기는지 확인하고, 그 연결을 기록으로 남기는 것이 이 두 장에서 가져갈 핵심이다.
+책 코드를 돌려 보고 운영에 필요한 보완을 따로 적어 보니, MLflow와 Feast, KFP가 연결을 알아서 챙겨 주지는 않았다. 각 단계가 다음 단계에 무엇을 넘기는지 확인하고 그 연결을 기록으로 남기는 일은 여전히 사람 몫이다.
 
 [이전: 03. Kubernetes 기반](../03-kubernetes-foundation/), [시리즈 목차](../), [다음: 06. 모델을 프로덕션으로](../06-productionizing-models/)

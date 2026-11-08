@@ -2,7 +2,7 @@
 title: "07. 데이터 분석과 준비"
 description: "탐색에서 정한 데이터 의미를 재현 가능한 준비 파이프라인으로 옮기고 탐지와 추천의 검증, 학습과 서빙 계약으로 연결하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-08T15:00:00+09:00
+lastmod: 2026-11-08T17:00:00+09:00
 weight: 70
 draft: false
 tags: ["book-club", "ml-platform-engineering", "kubeflow", "data-engineering"]
@@ -12,7 +12,7 @@ tags: ["book-club", "ml-platform-engineering", "kubeflow", "data-engineering"]
 
 이 장은 노트북에서 찾은 처리 규칙을 다음 실행에서도 똑같이 반복되는 준비 파이프라인으로 옮기는 과정이다. 탐색으로 데이터의 의미를 정하고, 컴포넌트 사이의 전달 계약으로 산출물을 잇고, 학습 목적에 맞는 품질 검사로 쓸 입력을 가려낸다. 세 일은 성공의 기준이 서로 다르다. 파일이 내려받아졌다고 다음 Pod가 읽을 수 있는 것도, 읽힌다고 학습에 맞는 데이터인 것도 아니다.
 
-책은 노트북 설정으로 탐색 환경을, 데이터 전달 예제로 작업 사이의 경계를, 두 프로젝트로 그 경계를 지나는 데이터의 의미를 다룬다. 셋은 결국 [학습, 서빙, 관측에 이어지는 계약](#training-serving-contract)으로 모인다. 이 장이 플랫폼의 어느 구간인지는 [전체 그림](#platform-map)에, 실제로 돌려 보는 과정은 [실습 순서](#book-ch07-sop)에 있다.
+책은 노트북 설정으로 탐색 환경을, 데이터 전달 예제로 작업 사이의 경계를, 두 프로젝트로 그 경계를 지나는 데이터의 의미를 다룬다. 셋은 [학습, 서빙, 관측에 이어지는 계약](#training-serving-contract)으로 모인다. 이 장이 플랫폼의 어느 구간인지는 [전체 그림](#platform-map)에, 직접 따라 하는 과정은 [실습 순서](#book-ch07-sop)에 있다.
 
 ## 전체 그림 {#platform-map}
 
@@ -499,7 +499,7 @@ flowchart LR
 
 ## A. 탐색 환경과 노트북
 
-지금 위치는 전체 그림의 ①~②다.
+전체 그림에서는 ①~②에 해당한다.
 
 ### A-1. 앞 장의 환경 확인
 
@@ -737,9 +737,7 @@ toleration은 특정 taint를 허용할 뿐, 그 노드에 꼭 배치하라는 �
 
 ## B. 파라미터와 아티팩트 전달
 
-지금 위치는 전체 그림의 ③~⑧이다.
-
-책은 데이터 준비에 앞서 작은 joke 파이프라인으로 두 전달 방식을 보여 준다. 저자 저장소의 `chapter_7\pipeline.py`는 문자열과 정수를 파라미터로, `chapter_7\generate_jokes_pipeline.py`는 파일을 아티팩트로 넘긴다.
+책은 데이터 준비에 앞서 작은 joke 파이프라인으로 두 전달 방식을 보여 준다. 전체 그림의 ③~⑧이다. 저자 저장소의 `chapter_7\pipeline.py`는 문자열과 정수를 파라미터로, `chapter_7\generate_jokes_pipeline.py`는 파일을 아티팩트로 넘긴다.
 
 ### B-1. 두 파이프라인 컴파일
 
@@ -837,7 +835,7 @@ Remove-Item python311.tar
 
    ![count-words가 입력 아티팩트의 S3 주소를 받은 화면.](/images/ml-platform-engineering/sop/ch07-b-art-io.png)
 
-   Input Artifacts에 보이는 것은 내용이 아니라 `minio://mlpipeline/v2/artifacts/joke-pipeline/<run_id>/generate-joke/<id>/output_jokes` 주소다. 이것이 아티팩트의 `.uri`다. `Error in retrieving artifact preview`는 화면이 미리보기를 만들지 못했다는 뜻일 뿐이다. 이 아티팩트는 `jokes.txt`를 담은 폴더이고, 작업이 이 주소의 파일을 읽어 세 농담의 단어 수 `43`을 Output Parameters에 남겼으니 전달은 성공했다.
+   Input Artifacts에 보이는 것은 내용이 아니라 `minio://mlpipeline/v2/artifacts/joke-pipeline/<run_id>/generate-joke/<id>/output_jokes` 주소다. 이것이 아티팩트의 `.uri`다. `Error in retrieving artifact preview`는 화면이 미리보기를 만들지 못했다는 뜻이고, 전달 실패와는 관계가 없다. 이 아티팩트는 `jokes.txt`를 담은 폴더이고, 작업이 이 주소의 파일을 읽어 세 농담의 단어 수 `43`을 Output Parameters에 남겼으니 전달은 성공했다.
 
 코드에서 쓰는 `.path`는 Pod 안의 로컬 경로다. C-3의 실제 로그를 보면 같은 아티팩트가 다음처럼 두 이름을 가진다.
 
@@ -875,7 +873,7 @@ B를 마치면 실험 `ch07-data-prep`에 성공한 실행 두 개가 남는다.
 
 ## C. 신분증 탐지 데이터 준비
 
-지금 위치는 전체 그림의 ⑤~⑩ 가운데 신분증 데이터 경로다.
+여기서부터는 전체 그림의 ⑤~⑩을 신분증 데이터로 지난다.
 
 ```mermaid
 flowchart LR
@@ -1091,7 +1089,7 @@ flowchart LR
 
 분할마다 이미지와 라벨 수는 같다. 그런데 train의 이미지 90장 중 23장은 자기 라벨이 다른 분할로 갔고, 그 자리에 다른 이미지의 라벨 23개가 들어왔다. `unmatched=46`은 짝 없는 이미지와 라벨 stem을 더한 수다.
 
-원인은 목록을 만드는 방식에 있다. 원본은 `glob`으로 이미지 목록과 라벨 목록을 따로 만든 뒤 같은 `random_state`로 나눈다. 그런데 `glob`은 파일을 이름순으로 정렬하지 않는다. 이번 Linux 컨테이너에서는 두 폴더의 나열 순서가 서로 달라, 같은 위치의 이미지와 라벨이 같은 표본이 아니게 됐다. Windows의 탐색 노트북에서는 두 목록이 모두 이름순으로 나와 문제가 보이지 않았다. PC에서 멀쩡하던 코드가 컨테이너에서만 어긋난다는 점이 이 장에서 가장 의외였다. 파일 수만 출력하는 저자의 `output_file_contents`는 성공으로 끝났다.
+원인은 목록을 만드는 방식에 있다. 원본은 `glob`으로 이미지 목록과 라벨 목록을 따로 만든 뒤 같은 `random_state`로 나눈다. 그런데 `glob`은 파일을 이름순으로 정렬하지 않는다. 이번 Linux 컨테이너에서는 두 폴더의 나열 순서가 서로 달라, 같은 위치의 이미지와 라벨이 같은 표본이 아니게 됐다. Windows의 탐색 노트북에서는 두 목록이 모두 이름순으로 나와 문제가 보이지 않았다. PC에서 멀쩡하던 코드가 컨테이너에서만 어긋난 것이다. 파일 수만 출력하는 저자의 `output_file_contents`는 성공으로 끝났다.
 
 라벨 형식 오류(`bad_label_lines`)는 0이니 형식 검사로는 이 문제를 잡을 수 없다. 이대로 학습하면 실행은 되지만 다른 이미지의 박스를 정답으로 배운다. clip 중복은 무작위 분할의 결과로, 같은 영상의 인접 프레임이 학습과 평가에 함께 들어갔다는 뜻이다.
 
@@ -1176,7 +1174,7 @@ YOLO 박스라면 클래스 ID, 중심 좌표 x와 y, 너비, 높이의 의미�
 
 ## D. MovieLens 평점 데이터 준비
 
-지금 위치는 전체 그림의 ⑤~⑩ 가운데 추천 데이터 경로다.
+같은 ⑤~⑩ 구간을 이번에는 추천 데이터로 지난다.
 
 ### D-1. 컴포넌트와 데이터 규모
 
@@ -1513,7 +1511,7 @@ MovieLens의 열 이름은 `userId`, `movieId`, `rating`, `timestamp`다. 그런
 
 ## E. 결과 정리와 다음 단계
 
-지금 위치는 전체 그림의 ⑩에서 ⑪, ⑫로 넘어가는 지점이다.
+⑩을 마치고 ⑪, ⑫로 넘어가기 전에 결과를 모은다.
 
 ### E-1. 실행 기록 확인
 
