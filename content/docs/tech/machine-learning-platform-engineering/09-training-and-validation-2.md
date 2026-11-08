@@ -2,19 +2,21 @@
 title: "09. 모델 학습과 검증 II"
 description: "PVC로 데이터를 한 번만 준비하고, TensorBoard와 MLflow로 학습과 실행 사이의 근거를 남기며, 추천 모델의 지표와 등록 판단을 실제 실행으로 확인하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-07T21:30:00+09:00
+lastmod: 2026-11-08T15:00:00+09:00
 weight: 90
 draft: false
 tags: ["book-club", "ml-platform-engineering", "model-training", "mlflow", "tensorboard", "kubeflow"]
 ---
 
-8장까지의 파이프라인은 돌아가기는 한다. 그런데 다운로드 컴포넌트가 받은 데이터를 학습과 검증 컴포넌트가 다시 내려받고, 학습이 어떻게 진행됐는지는 끝난 뒤 로그를 뒤져야 알 수 있으며, 어제 실행과 오늘 실행 중 어느 쪽 모델을 써야 하는지는 사람이 기억해야 한다. 9장은 이 세 가지를 차례로 다룬다. **데이터를 어디에 두고 누가 읽는가**(PVC와 객체 저장소), **한 번의 학습 안에서 무슨 일이 있었는가**(TensorBoard), **여러 실행 중 무엇을 다음 단계로 넘기는가**(MLflow 실험 추적과 레지스트리)다.
+8장의 파이프라인은 일단 돌아간다. 불편한 점은 그다음에 보인다. 다운로드 컴포넌트가 받은 데이터를 학습과 검증 컴포넌트가 또 내려받는다. 학습이 어떻게 흘러갔는지는 끝난 뒤 로그를 뒤져야 안다. 어제 모델과 오늘 모델 중 무엇을 쓸지는 사람이 기억해야 한다.
 
-책은 두 예제로 이 흐름을 보여 준다. 신분증 탐지(YOLO)에서 PVC와 TensorBoard를 쓰고, 영화 추천(MovieLens)에서 객체 저장소 직접 읽기와 MLflow를 쓴다. 두 예제가 다른 도구를 쓰는 이유는 도구의 우열이 아니라 데이터 모양과 질문이 다르기 때문이다. 이 글은 먼저 전체 구조와 각 선택의 이유를 설명하고, 이어지는 [실습 순서](#book-ch09-sop)에서 두 파이프라인을 실제 클러스터에서 실행한 과정과 화면을 따라간다. 실행하면서 책 본문과 저자 코드가 다른 곳, 지금은 그대로 돌지 않는 곳, 숫자가 실제로 무엇을 말하는지도 함께 적었다.
+9장은 이 세 가지를 다룬다. 데이터는 PVC와 객체 저장소에 두고, 한 번의 학습 안은 TensorBoard로 보고, 여러 실행 중 무엇을 넘길지는 MLflow로 정한다. 책은 신분증 탐지(YOLO)에 PVC와 TensorBoard를, 영화 추천(MovieLens)에 객체 저장소와 MLflow를 쓴다. 도구가 갈린 것은 우열 때문이 아니라 데이터 모양과 묻는 질문이 달라서다.
+
+두 파이프라인을 실제 클러스터에서 돌린 과정은 [실습 순서](#book-ch09-sop)에 있다. 돌려 보니 책 본문과 저자 코드가 어긋나는 곳이 꽤 있었고, 파이프라인이 기록한 숫자도 생각과 다른 것을 말하고 있었다. 그 이야기를 설명 중간중간에 함께 적었다.
 
 ## 전체 그림 {#platform-map}
 
-9장에 나오는 구성 요소는 많지만 하는 일은 "무엇을 어디로 넘기는가"로 정리된다. 아래 그림은 이번 실습이 실제로 쓴 위치와 전달물이다. 파란 상자가 이 장에서 다루는 부분, 회색이 7장에서 준비해 둔 입력, 점선 주황색이 10장 이후에 이어질 부분이다.
+9장의 구성 요소는 많지만 결국 "무엇을 어디로 넘기는가"의 문제다. 아래 그림은 이번 실습에서 실제로 쓴 위치와 전달물이다. 강조된 상자가 이 장의 범위이고, 7장에서 준비한 입력과 10장 이후로 이어질 부분을 구분해 두었다.
 
 ```mermaid
 %%{init: {"flowchart": {"rankSpacing": 25, "nodeSpacing": 18, "padding": 6}}}%%
@@ -77,7 +79,7 @@ flowchart LR
 | ⑩ | promote Pod, 로컬 Python | 등록 모델 버전과 `staging` 별칭 | MLflow 모델 레지스트리 | [E-2](#ch09-e-2), [F-2](#ch09-f-2) |
 | ⑪ | 10장 서빙 | 별칭이 가리키는 모델 | 다음 장 | 이 장에서는 실행하지 않음 |
 
-추천 파이프라인 한 번이 실제로 어떤 순서로 무엇을 주고받는지는 아래와 같다. 핵심은 `train-model`이 내놓는 **MLflow run_id 하나**가 검증, 등록, 이후 추론까지 이어지는 연결 고리라는 점이다.
+추천 파이프라인 한 번이 주고받는 순서는 아래와 같다. 눈여겨볼 것은 `train-model`이 내놓는 **MLflow run_id 하나**다. 검증, 등록, 이후 추론이 모두 이 값으로 이어진다.
 
 ```mermaid
 sequenceDiagram
@@ -114,17 +116,21 @@ sequenceDiagram
 
 ## 반복 다운로드를 PVC 하나로 묶는다 {#pvc-concepts}
 
-8장의 탐지 파이프라인은 다운로드 컴포넌트가 데이터셋 전체를 받고, 학습 컴포넌트가 분할 결과를 다시 받고, 검증 컴포넌트가 검증 분할을 또 받는다. 컴포넌트마다 다른 Pod에서 돌기 때문이다. 노트북이라면 같은 폴더를 계속 썼겠지만 Pod 사이에는 공유된 디스크가 없으니, KFP 아티팩트로 S3에 올렸다 내려받는 일을 반복한다. 데이터가 크면 이 복사가 학습보다 오래 걸린다.
+8장의 탐지 파이프라인에서는 같은 데이터가 세 번 내려받아진다. 다운로드 컴포넌트가 전체를 받고, 학습 컴포넌트가 분할 결과를 다시 받고, 검증 컴포넌트가 검증 분할을 또 받는다. 컴포넌트마다 다른 Pod에서 돌고, Pod 사이에는 공유 디스크가 없기 때문이다. 그래서 KFP 아티팩트로 S3에 올렸다 내려받기를 반복한다. 노트북이었다면 같은 폴더를 계속 썼을 것이다. 데이터가 크면 이 복사가 학습보다 오래 걸린다.
 
-PersistentVolumeClaim(PVC)은 이 문제에 대한 Kubernetes의 답이다. PVC는 "이만한 크기와 이런 접근 방식의 저장 공간이 필요하다"는 요청이고, StorageClass가 그 요청을 실제 볼륨(PV)으로 만들어 연결한다. 파이프라인 맨 앞에서 PVC를 만들고 모든 컴포넌트가 같은 PVC를 `/data`에 마운트하면, 다운로드는 한 번만 하고 다음 단계는 로컬 파일처럼 읽는다. 책이 "MinIO는 POSIX 파일시스템이 아니다"라고 강조하는 이유가 여기에 있다. 객체 저장소에서는 파일을 옮기거나 디렉터리를 나누는 일이 모두 업로드와 다운로드인데, YOLO는 `images/`와 `labels/` 폴더 구조를 파일시스템 경로로 기대한다.
+Kubernetes의 답은 PersistentVolumeClaim(PVC)이다. PVC는 "이만한 크기, 이런 접근 방식의 저장 공간이 필요하다"는 요청이고, StorageClass가 그 요청을 실제 볼륨(PV)으로 만들어 붙인다. 파이프라인 맨 앞에서 PVC를 만들고 모든 컴포넌트가 이를 `/data`에 마운트하면 다운로드는 한 번으로 끝난다. 다음 단계는 로컬 파일처럼 읽으면 된다.
 
-대신 PVC에는 지켜야 할 조건이 생긴다.
+책이 "MinIO는 POSIX 파일시스템이 아니다"라고 강조하는 것도 같은 맥락이다. 객체 저장소에서는 파일을 옮기거나 폴더를 나누는 일이 전부 업로드와 다운로드다. 그런데 YOLO는 `images/`와 `labels/` 폴더 구조를 파일 경로로 기대한다.
 
-- **접근 모드**. 책이 쓰는 `ReadWriteOnce`(RWO)는 "한 노드에서만 읽고 쓸 수 있다"는 뜻이다. 한 Pod만 쓸 수 있다는 뜻은 아니어서, 같은 노드에 뜬 여러 Pod는 함께 마운트할 수 있다. 이번 실습의 kind 클러스터는 노드가 하나라 문제가 드러나지 않지만, 여러 노드 클러스터에서는 다음 컴포넌트가 다른 노드에 배치되면 마운트 대기에 걸린다. 여러 노드에서 동시에 써야 한다면 `ReadWriteMany`를 지원하는 스토리지(NFS, CephFS 등)가 필요하다.
-- **의존 관계**. 아티팩트로 데이터를 넘길 때는 KFP가 입출력 연결을 보고 순서를 정했다. PVC로 넘기면 KFP는 데이터 흐름을 모르므로 `.after()`로 순서를 직접 적어야 한다. 같은 이유로 **캐시도 PVC 안의 파일을 모른다**. 입력 파라미터가 같으면 KFP는 다운로드와 분할을 "이미 했다"며 건너뛰는데, 새 실행의 PVC는 비어 있다. 실습의 [B-5](#ch09-b-5)에서 이 실패를 실제로 만났다.
-- **수명**. `CreatePVC`와 `DeletePVC`로 실행 단위의 볼륨을 만들고 지우지만, `DeletePVC`는 마지막 단계가 성공해야 실행된다. 중간에 실패하거나 취소한 실행의 PVC는 남는다. 또 PVC를 참조하는 Pod가 남아 있으면 삭제 요청 뒤에도 `Terminating`에 머문다. 끝난 Argo 작업 Pod도 여기에 포함됐다. 책의 팁(`TTL_SECONDS_AFTER_WORKFLOW_FINISH`)은 끝난 워크플로와 Pod를 정리해 이 연결을 끊는 설정이다.
+대신 PVC를 쓰면 신경 쓸 것이 셋 생긴다.
 
-그래서 PVC와 객체 저장소는 대체 관계가 아니라 역할이 다르다. 객체 저장소는 실행이 끝나도 남아야 하는 원본과 결과(데이터셋 버전, 모델, 평가 결과)를 두는 곳이고, 실행 단위 PVC는 그 실행 동안 여러 단계가 같은 파일을 빠르게 공유하는 작업 공간이다. 책도 추천 예제에서는 PVC 대신 S3의 parquet를 직접 읽는다. 표 형식 데이터는 파일 몇 개라 처음부터 네트워크로 읽어도 시작이 빠르고, 이미지 수백 장을 반복해서 읽는 탐지 학습은 로컬 볼륨이 유리하다.
+첫째는 접근 모드다. 책이 쓰는 `ReadWriteOnce`(RWO)는 "한 노드에서만 읽고 쓸 수 있다"는 뜻이다. 한 Pod로 제한되는 것이 아니어서 같은 노드의 Pod 여럿은 함께 마운트할 수 있다. 노드가 하나인 kind에서는 문제가 드러나지 않는다. 노드가 여럿이면 다음 컴포넌트가 다른 노드에 배치되는 순간 마운트 대기에 걸린다. 여러 노드에서 동시에 써야 한다면 `ReadWriteMany`를 지원하는 NFS나 CephFS 같은 스토리지가 필요하다.
+
+둘째는 의존 관계다. 아티팩트로 데이터를 넘길 때는 KFP가 입출력 연결을 보고 순서를 정했다. PVC로 넘기면 KFP는 데이터 흐름을 모르므로 `.after()`로 순서를 직접 적어야 한다. 같은 이유로 **캐시도 PVC 안의 파일을 모른다**. 입력 파라미터가 같으면 KFP는 다운로드와 분할을 "이미 했다"며 건너뛰는데, 새 실행의 PVC는 비어 있다. 실습의 [B-5](#ch09-b-5)에서 실제로 이 실패를 만났다.
+
+셋째는 수명이다. `CreatePVC`와 `DeletePVC`로 실행마다 볼륨을 만들고 지우지만, `DeletePVC`는 마지막 단계가 성공해야 돈다. 실패하거나 취소한 실행의 PVC는 남는다. PVC를 참조하는 Pod가 남아 있으면 삭제 요청 뒤에도 `Terminating`에 머무는데, 끝난 Argo 작업 Pod도 여기에 포함됐다. 책의 팁인 `TTL_SECONDS_AFTER_WORKFLOW_FINISH`는 끝난 워크플로와 Pod를 치워 이 참조를 끊는 설정이다.
+
+그렇다고 PVC가 객체 저장소를 대체하지는 않는다. 둘은 역할이 다르다. 데이터셋 버전, 모델, 평가 결과처럼 실행 뒤에도 남아야 하는 것은 객체 저장소에 둔다. 실행 단위 PVC는 그 실행 동안 여러 단계가 같은 파일을 빠르게 나눠 쓰는 작업 공간이다. 책도 추천 예제에서는 S3의 parquet를 바로 읽는다. 표 데이터는 파일 몇 개라 네트워크로 읽어도 금방 시작하고, 이미지 수백 장을 반복해 읽는 탐지 학습은 로컬 볼륨이 유리하다.
 
 | 기준 | 실행 단위 PVC | S3 직접 읽기 |
 | --- | --- | --- |
@@ -135,11 +141,11 @@ PersistentVolumeClaim(PVC)은 이 문제에 대한 Kubernetes의 답이다. PVC�
 | 여러 노드 | RWO면 같은 노드에 묶인다 | 제약이 없다 |
 | 계보 | 경로만으로는 어떤 데이터인지 알 수 없다 | 버킷과 경로가 데이터셋 이름이 된다 |
 
-공유 저장소가 계보를 대신하지는 않는다는 점도 기억해야 한다. `/data/train`에 무엇이 있었는지는 실행이 끝나 PVC가 지워지면 알 수 없다. 원본 URI와 분할 시드처럼 같은 상태를 다시 만들 수 있는 정보는 실행 파라미터나 MLflow에 남겨야 한다.
+한 가지 더 있다. 공유 저장소가 계보를 대신해 주지는 않는다. 실행이 끝나 PVC가 지워지면 `/data/train`에 무엇이 있었는지 알 길이 없다. 원본 URI와 분할 시드처럼 같은 상태를 다시 만들 수 있는 정보는 실행 파라미터나 MLflow에 따로 남겨야 한다.
 
 ## 책 코드와 실제 저장소의 차이: PVC 파이프라인 {#pvc-code-gaps}
 
-책의 리스팅 9.1~9.9는 저자 저장소 [object-detection-project](https://github.com/practical-mlops/object-detection-project)의 `pipeline_with_pvc.py`(커밋 `c6afb11`)와 거의 같다. 그대로 실행하면 이번 환경에서는 여러 곳에서 막히며, 일부는 환경과 무관한 논리 문제다.
+책의 리스팅 9.1~9.9는 저자 저장소 [object-detection-project](https://github.com/practical-mlops/object-detection-project)의 PVC 파이프라인(커밋 `c6afb11`)과 거의 같다. 그대로 돌리면 여러 곳에서 막힌다. 환경 탓인 것도 있지만, 일부는 어디서 돌려도 생기는 논리 문제다.
 
 | 위치 | 책과 저자 코드 | 실제로 일어나는 일 | 이 실습의 수정 |
 | --- | --- | --- | --- |
@@ -152,99 +158,116 @@ PersistentVolumeClaim(PVC)은 이 문제에 대한 Kubernetes의 답이다. PVC�
 | 학습 이미지 | `python:3.11-slim`에 `apt-get install libgl1-mesa-glx` 후 `pip install ultralytics torch` | 현재 `python:3.11-slim`의 기반인 Debian trixie에는 `libgl1-mesa-glx` 패키지가 없다([Debian 패키지 검색](https://packages.debian.org/search?keywords=libgl1-mesa-glx&searchon=names&suite=all&section=all) 기준, 이 단계는 직접 실행하지 않았다). 버전을 고정하지 않은 `torch`는 CUDA 빌드를 받아 수 GB를 내려받고, 검증 컴포넌트의 `ultralytics 8.3.56`과 학습 쪽 버전도 어긋난다 | 검증과 같은 `ultralytics/ultralytics:8.3.56-cpu` 이미지 사용 |
 | 캐시 | 검증 단계만 캐시를 끔 | 재실행하면 다운로드와 분할이 캐시로 건너뛰어 새 PVC가 빈 채로 학습이 실패한다 | 다운로드, 분할, 학습도 캐시를 끔 |
 
-학습 이미지를 바꾸면서 하나가 더 생겼다. 학습 스크립트를 `/train.py`에 쓰면 이 이미지의 `/ultralytics` 소스 폴더가 파이썬 경로에서 먼저 잡혀 `cannot import name 'YOLO'`가 난다. 스크립트를 `/tmp/train.py`에 쓰도록 바꿨다. 저자 코드의 문제가 아니라 이미지를 바꾼 데서 생긴 문제다.
+학습 이미지를 바꾼 탓에 문제가 하나 더 생겼다. 학습 스크립트를 `/train.py`에 쓰면 이 이미지 안의 `/ultralytics` 소스 폴더가 파이썬 경로에서 먼저 잡혀 `cannot import name 'YOLO'`가 난다. 스크립트 위치를 `/tmp/train.py`로 옮겨 피했다. 저자 코드가 아니라 이미지 교체에서 온 문제다.
 
 ## TensorBoard는 한 번의 학습 안을 본다 {#tensorboard-concepts}
 
-PVC가 데이터를 한 번만 옮기는 문제를 풀었다면, 다음은 "학습이 잘 되고 있는가"를 끝나기 전에 보는 문제다. TensorBoard는 학습 코드가 남긴 이벤트 파일을 읽어 epoch별 손실, 학습률, 검증 지표와 모델 그래프를 그린다. 책이 TensorBoard를 PVC 절 바로 뒤에 둔 이유도 여기에 있다. 학습 Pod가 PVC에 이벤트 파일을 쓰고, TensorBoard Pod가 같은 PVC를 마운트하면 학습 도중에도 곡선이 갱신된다.
+PVC로 데이터 복사를 줄였다면 다음 질문은 "학습이 잘 되고 있는가"다. 끝나기 전에 알고 싶다. TensorBoard는 학습 코드가 남긴 이벤트 파일을 읽어 epoch별 손실, 학습률, 검증 지표, 모델 그래프를 그린다. 학습 Pod가 PVC에 이벤트 파일을 쓰고 TensorBoard Pod가 같은 PVC를 마운트하면, 학습 도중에도 곡선이 갱신된다. 책이 TensorBoard를 PVC 바로 뒤에 둔 이유다.
 
-TensorBoard 그래프가 증명하는 것과 증명하지 않는 것을 구분해야 한다.
+다만 이 그래프로 알 수 있는 것에는 한계가 있다. 그 실행에서 손실이 줄었는지, 학습률 스케줄이 의도대로 움직였는지, 과적합 조짐이 있는지는 보인다. 과적합 조짐이란 학습 손실은 주는데 검증 손실이 느는 현상이다. 모델 구조가 의도한 그래프인지도 확인할 수 있다.
 
-- 증명하는 것: 그 실행에서 손실이 줄었는지, 학습률 스케줄이 의도대로 움직였는지, 과적합 조짐(학습 손실은 주는데 검증 손실은 느는 현상)이 있는지, 모델 구조가 의도한 그래프인지.
-- 증명하지 않는 것: 그 검증 지표가 배포 뒤 성능을 대표하는지. YOLO 학습은 매 epoch `val` 분할로 지표를 계산하고 그 값으로 `best.pt`를 고른다. 저자의 `validate_model`도 같은 `val` 분할을 다시 평가한다. 이번 실행에서 두 값이 `mAP50 0.995`, `mAP50-95 0.964`로 똑같이 나온 이유다. `test` 분할은 어디에서도 쓰이지 않는다. 선택에 쓴 데이터로 잰 점수는 낙관적일 수밖에 없다.
+그 검증 지표가 배포 뒤 성능을 대표하는지는 따로 따져야 한다. YOLO는 매 epoch `val` 분할로 지표를 계산하고 그 값으로 `best.pt`를 고른다. 저자의 검증 컴포넌트도 같은 `val` 분할을 다시 평가한다. 그래서 이번 실행에서 두 값이 `mAP50 0.995`, `mAP50-95 0.964`로 똑같이 나왔다. `test` 분할은 어디에서도 쓰이지 않았다. 선택에 쓴 데이터로 잰 점수는 낙관적일 수밖에 없다.
 
-책은 Kubeflow 대시보드의 **TensorBoards** 메뉴에서 PVC를 골라 인스턴스를 띄운다. 이 메뉴는 Kubeflow 전체 설치에 들어 있는 Tensorboard 컨트롤러와 웹 앱이 제공하는 기능이고, 이번 환경처럼 KFP만 설치하면 없다. 그래서 같은 일을 하는 Deployment를 직접 만들어 PVC를 읽기 전용으로 마운트했다. 컨트롤러가 대신 해 주던 일이 무엇인지(PVC 마운트, 포트 연결, 정리) 오히려 분명히 보인다.
+책은 Kubeflow 대시보드의 **TensorBoards** 메뉴에서 PVC를 골라 인스턴스를 띄운다. 이 메뉴는 Kubeflow 전체 설치에 딸린 컨트롤러와 웹 앱이 제공한다. KFP만 설치한 이번 환경에는 없어서, 같은 일을 하는 Deployment를 직접 만들어 PVC를 읽기 전용으로 붙였다. 해 보니 컨트롤러가 대신 해 주던 일(PVC 마운트, 포트 연결, 정리)이 오히려 또렷하게 보였다.
 
-TensorBoard가 한 실행 안을 들여다본다면, 여러 실행을 나란히 놓고 고르는 일은 다른 도구가 맡는다. 책의 표현으로는 TensorBoard는 디버깅과 내부 관찰, MLflow는 실험 색인과 모델 버전 관리다. 이벤트 파일은 PVC와 함께 사라지므로, 나중에도 봐야 하는 곡선이라면 실행 뒤 객체 저장소로 옮기거나 MLflow에 핵심 지표를 함께 남겨야 한다.
+여러 실행을 나란히 놓고 고르는 일은 다른 도구의 몫이다. 책의 구분으로는 TensorBoard가 디버깅과 내부 관찰을, MLflow가 실험 색인과 모델 버전 관리를 맡는다. 이벤트 파일은 PVC와 함께 사라진다. 나중에도 봐야 할 곡선이라면 객체 저장소로 옮기거나 핵심 지표를 MLflow에도 남겨야 한다.
 
 ## 추천 모델은 무엇을 맞히는지부터 정한다 {#recommender-concepts}
 
-추천 예제로 넘어가면 데이터 모양이 바뀐다. 이미지 폴더가 아니라 `사용자, 영화, 평점, 시각` 네 열짜리 표다. 7장의 데이터 준비 파이프라인이 MovieLens를 parquet로 바꿔 `train`, `val`, `test`로 나눠 S3에 올렸고, 9장은 그 parquet를 PVC 없이 바로 읽는다. 학습 파이프라인의 단계는 다음 순서로 이어진다.
+추천 예제로 넘어가면 데이터 모양부터 다르다. 이미지 폴더가 아니라 `사용자, 영화, 평점, 시각` 네 열짜리 표다. 7장의 데이터 준비 파이프라인이 MovieLens를 parquet로 바꿔 `train`, `val`, `test`로 나눠 S3에 올려 두었고, 9장은 그 파일을 PVC 없이 바로 읽는다. 학습 파이프라인은 다음 단계로 이어진다.
 
-1. **qa-data**: 학습 직전에 데이터 가정을 다시 확인한다. 책은 이것이 데이터 준비 파이프라인과 학습 파이프라인을 분리하는 장치라고 설명한다. 준비 쪽이 바뀌어도 학습 쪽이 잘못된 입력을 그대로 받지 않게 하는 계약 검사다.
+1. **qa-data**: 학습 직전에 데이터 가정을 다시 확인한다. 책은 이것을 데이터 준비와 학습 파이프라인을 떼어 놓는 장치로 설명한다. 준비 쪽이 바뀌어도 학습 쪽이 잘못된 입력을 그대로 받지 않게 하는 계약 검사다.
 2. **get-dataset-metadata**: 임베딩 크기를 정할 사용자 수와 영화 수를 구한다.
-3. **negative-sampling**: 사용자마다 보지 않은 영화 10편을 평점 0으로 추가한다. 관측된 평점만 학습하면 "본 영화는 다 좋다"는 쪽으로 치우치기 때문이다.
-4. **train-model**: 사용자와 영화 임베딩을 곱한 뒤 작은 MLP로 평점을 예측하는 행렬 분해 모델을 L1 손실로 학습하고, MLflow에 기록한다.
+3. **negative-sampling**: 사용자마다 보지 않은 영화 10편을 평점 0으로 추가한다. 관측된 평점만 학습하면 "본 영화는 다 좋다"는 쪽으로 치우친다.
+4. **train-model**: 사용자와 영화 임베딩을 곱한 뒤 작은 MLP로 평점을 예측하는 행렬 분해 모델이다. L1 손실로 학습하고 MLflow에 기록한다.
 5. **validate-model**: `val`로 precision@50, recall@50, RMSE를 계산해 같은 MLflow run에 더한다.
-6. **promote-model-to-staging**: 현재 `staging` 별칭 모델과 지표를 비교해 새 버전을 등록할지 정한다.
+6. **promote-model-to-staging**: 현재 `staging` 별칭 모델과 지표를 비교해 새 버전 등록 여부를 정한다.
 
 ### 스키마 검사가 잡아야 했던 것 {#schema-contract}
 
-MovieLens 원본 열 이름은 `userId`, `movieId`, `rating`, `timestamp`다. 책 리스팅 9.10의 QA는 `user_id`, `item_id`, `rating`이 있는지 검사한다. 이 검사를 실제 parquet에 돌리면 `AssertionError: Required columns not found. Found Index(['userId', 'movieId', 'rating', 'timestamp'])`로 실패한다. 저자 저장소의 실제 `qa_data`는 열 이름이 아니라 열 수(4)와 행 수(1,875만 이상)만 검사하고, 나머지 컴포넌트는 `userId`, `movieId`를 쓴다. 7장의 `split_dataset`도 `ratings_df.user_id.max()`를 계산하는 줄이 있어 원본 열 이름과 맞지 않는다. 책이 말하는 "스키마 검증"을 하려면 열 이름과 타입을 실제 데이터 계약에 맞춰 적어야 한다는 것을, 책 자신의 코드가 보여 주는 셈이다.
+MovieLens 원본의 열 이름은 `userId`, `movieId`, `rating`, `timestamp`다. 그런데 책 리스팅 9.10의 QA는 `user_id`, `item_id`, `rating`을 찾는다. 실제 parquet에 돌리면 `AssertionError: Required columns not found. Found Index(['userId', 'movieId', 'rating', 'timestamp'])`로 실패한다.
 
-ID를 그대로 임베딩 인덱스로 쓰는 점도 계약의 일부다. 모델은 `userId - 1`, `movieId - 1`을 인덱스로 쓰고, 영화 수를 `movieId`의 최댓값으로 정한다. 이번에 쓴 MovieLens ml-latest-small은 영화가 9,724편인데 `movieId` 최댓값이 193,609라 영화 임베딩이 193,610행이 된다. 학습 파라미터 389만 개의 대부분이 한 번도 등장하지 않는 ID의 자리다. 실서비스라면 ID를 연속 인덱스로 바꾸는 사전을 만들고 그 사전도 모델과 함께 버전 관리해야 한다.
+저자 저장소의 실제 `qa_data`는 열 이름을 보지 않는다. 열 수(4)와 행 수(1,875만 이상)만 검사하고, 나머지 컴포넌트는 `userId`, `movieId`를 쓴다. 7장의 `split_dataset`에도 `ratings_df.user_id.max()`를 계산하는 줄이 있어 원본과 맞지 않는다. 책이 말하는 스키마 검증을 하려면 열 이름과 타입을 실제 데이터 계약에 맞춰 적어야 한다. 그 필요를 책 자신의 코드가 보여 주는 셈이라 조금 아이러니했다.
+
+ID를 그대로 임베딩 인덱스로 쓰는 것도 계약의 일부다. 모델은 `userId - 1`, `movieId - 1`을 인덱스로 쓰고, 영화 수를 `movieId`의 최댓값으로 정한다. 이번에 쓴 MovieLens ml-latest-small은 영화가 9,724편인데 `movieId` 최댓값은 193,609다. 영화 임베딩이 193,610행이 되고, 학습 파라미터 389만 개 대부분이 한 번도 나오지 않는 ID의 자리다. 실서비스라면 ID를 연속 인덱스로 바꾸는 사전을 만들고, 그 사전도 모델과 함께 버전 관리해야 한다.
 
 ### 지표는 사용자 경험의 어느 부분을 재는가 {#recommendation-metrics}
 
-책은 precision@50, recall@50, RMSE를 고른다. 세 지표가 재는 것은 서로 다르고, 저자 코드의 계산 방식까지 보면 해석이 더 달라진다.
+책은 precision@50, recall@50, RMSE를 고른다. 세 지표는 재는 대상이 다르다. 저자 코드가 계산하는 방식까지 보면 해석은 더 달라진다.
 
-- **RMSE**는 평점 예측 오차다. 그런데 `validate_model`은 배치 32개의 **평균 예측과 평균 정답**을 모아 RMSE를 낸다. 평균을 내면 오차가 상쇄되므로 값이 크게 작아진다. 이번 실행에서 저자 방식의 `rms`는 0.20이었지만, 평점 하나하나로 계산한 RMSE는 1.08이었다. 학습 데이터 평균 평점(3.50)을 모든 영화에 똑같이 예측하는 기준선의 RMSE가 1.05이니, 모델은 상수 예측보다도 나을 것이 없었다.
-- **precision@50, recall@50**은 이름과 달리 전체 영화 중 상위 50편을 고르는 평가가 아니다. 사용자의 `val` 행들, 즉 이미 평점을 남긴 영화들 안에서 예측 순으로 50개를 자르고, 평점 3 이상을 "관련 있음"으로 센다. `val` 평점의 81%가 3 이상이고, 사용자의 87%는 `val` 행이 50개보다 적다(중앙값 10개). 그러면 상위 50개가 사용자의 `val` 행 전체가 되는 경우가 대부분이라 값이 0.85, 0.94처럼 높게 나온다. 사용자가 실제로 보게 될 추천 목록, 즉 아직 보지 않은 수천 편 중 상위 몇 편이 맞는지는 재지 않는다.
-- 그래서 실습의 [F-2](#ch09-f-2)에서는 같은 모델로 **보지 않은 영화 전체를 순위화한 Recall@10과 NDCG@10**을 계산하고, 학습 데이터에서 많이 평가된 순서대로 추천하는 **인기순 기준선**과 비교했다. 모델은 Recall@10 0.0002~0.0016, 인기순은 0.099였다. 추천 목록 품질로 보면 이번 모델은 가장 단순한 기준선에도 크게 못 미친다.
+먼저 RMSE는 평점 예측 오차다. 그런데 `validate_model`은 배치 32개의 **평균 예측과 평균 정답**으로 RMSE를 낸다. 평균을 내면 오차가 서로 상쇄돼 값이 크게 작아진다. 이번 실행에서 저자 방식의 `rms`는 0.20이었지만 평점 하나하나로 계산하면 1.08이었다. 학습 데이터 평균 평점(3.50)을 모든 영화에 똑같이 예측하는 기준선이 1.05다. 모델이 상수 예측보다도 나을 게 없었다.
 
-NDCG는 맞춘 영화가 목록의 앞에 있을수록 점수를 더 주는 지표다. 사용자가 첫 화면 몇 줄만 본다면 Recall보다 NDCG가 경험에 가깝다. 어떤 지표를 쓰든 **기준선과 나란히 보지 않은 숫자는 판단 근거가 되지 못한다.** 책의 표 9.1과 9.2도 같은 함정을 보여 준다. 학습률을 1e-2로 바꾼 실행을 "조금 나빠졌다"고 했지만, 표의 recall은 0.63에서 0.86으로, RMSE는 0.290에서 0.284로 오히려 좋아졌다. 지표 해석을 사람의 기억에 맡기면 이런 일이 생기고, 그것이 실험 추적이 필요한 이유이기도 하다.
+precision@50과 recall@50은 이름과 달리 전체 영화에서 상위 50편을 고르는 평가가 아니다. 사용자가 이미 평점을 남긴 `val` 행들 안에서 예측 순으로 50개를 자르고, 평점 3 이상을 "관련 있음"으로 센다. `val` 평점의 81%가 3 이상이고, 사용자의 87%는 `val` 행이 50개보다 적다(중앙값 10개). 상위 50개가 대개 그 사용자의 `val` 행 전부가 되니 0.85, 0.94처럼 높게 나올 수밖에 없다. 아직 보지 않은 수천 편 중 상위 몇 편을 맞히는지, 즉 사용자가 실제로 보게 될 목록의 품질은 재지 않는다.
+
+그래서 실습의 [F-2](#ch09-f-2)에서 같은 모델로 보지 않은 영화 전체를 순위화해 Recall@10과 NDCG@10을 계산했다. 비교 대상은 학습 데이터에서 많이 평가된 순서대로 추천하는 인기순 기준선이다. 모델은 Recall@10 0.0002~0.0016, 인기순은 0.099였다. 추천 목록으로 보면 이 모델은 가장 단순한 기준선에도 한참 못 미친다.
+
+NDCG는 맞힌 영화가 목록 앞쪽에 있을수록 점수를 더 준다. 사용자가 첫 화면 몇 줄만 본다면 Recall보다 경험에 가깝다. 어떤 지표를 쓰든 **기준선과 나란히 놓지 않은 숫자는 판단 근거가 되지 못한다.**
+
+책의 표 9.1과 9.2에도 같은 함정이 있다. 책은 학습률을 1e-2로 바꾼 실행을 "조금 나빠졌다"고 했다. 그런데 표를 보면 recall은 0.63에서 0.86으로, RMSE는 0.290에서 0.284로 오히려 좋아졌다. 지표 해석을 기억에 맡기면 이런 일이 생긴다. 실험 추적이 필요한 이유이기도 하다.
 
 ### 후보는 validation으로 고르고 test는 마지막에 한 번 쓴다 {#validation-vs-test}
 
-분할을 셋으로 나누는 이유는 역할이 다르기 때문이다. `train`으로 학습하고, `val`로 후보(학습률, epoch, 모델 구조)를 고르고, 고른 뒤 한 번만 `test`로 일반화 성능을 확인한다. 저자 코드는 이 이름과 역할이 섞여 있다. `train-model`은 매 epoch **`test` 분할**로 `avg_testing_loss`를 기록한다. 이 곡선을 보고 epoch나 학습률을 고르면 test가 선택에 쓰인 셈이다. 반대로 등록 판단은 `val` 지표로 한다. 이 실습에서는 저자 구조를 유지하되, 등록과 비교에는 `val` 지표만 썼고 test 지표는 따로 보고하지 않았다.
+데이터를 셋으로 나누는 것은 역할이 달라서다. `train`으로 학습하고, `val`로 학습률이나 epoch, 모델 구조 같은 후보를 고르고, 고른 뒤 `test`로 한 번만 일반화 성능을 확인한다.
+
+저자 코드에서는 이 역할이 섞여 있다. `train-model`은 매 epoch **`test` 분할**로 `avg_testing_loss`를 기록한다. 이 곡선을 보고 epoch나 학습률을 고르면 test가 선택에 쓰인 셈이다. 반면 등록 판단은 `val` 지표로 한다. 이 실습은 저자 구조를 유지하되 등록과 비교에는 `val` 지표만 썼고, test 지표는 따로 보고하지 않았다.
 
 ### 무작위 분할은 미래로 과거를 맞히게 한다 {#temporal-leakage}
 
-7장의 분할은 평점 행을 무작위로 섞어 75:15:10으로 나눈다. 추천 서비스는 과거 행동으로 미래 행동을 맞혀야 하는데, 무작위 분할은 같은 사용자의 나중 평점을 학습에 넣고 더 이른 평점을 검증에 둔다. 이번 데이터에서 `val` 평점의 **98.8%**가 같은 사용자의 가장 늦은 `train` 평점보다 이른 시각이었다. 사용자 취향의 변화나 새로 개봉한 영화의 인기처럼 실제 서비스에서 어려운 부분이 평가에서 사라진다. 서비스에 가까운 평가를 원하면 시각 기준으로 자르거나, 사용자별 마지막 몇 개를 남기는 방식으로 분할해야 한다.
+7장의 분할은 평점 행을 무작위로 섞어 75:15:10으로 나눈다. 추천 서비스는 과거 행동으로 미래를 맞혀야 한다. 무작위 분할은 반대로 같은 사용자의 나중 평점을 학습에 넣고 더 이른 평점을 검증에 둔다.
+
+이번 데이터에서 `val` 평점의 **98.8%**가 같은 사용자의 가장 늦은 `train` 평점보다 이른 시각이었다. 이 숫자를 보고 꽤 놀랐다. 취향 변화나 새 영화의 인기처럼 실제 서비스에서 어려운 부분이 평가에서 통째로 빠진다는 뜻이다. 서비스에 가까운 평가를 원하면 시각 기준으로 자르거나 사용자별 마지막 몇 개를 남기는 방식으로 나눠야 한다.
 
 ### 콜드 스타트 {#cold-start}
 
-임베딩 모델은 학습에서 본 사용자와 영화만 안다. 무작위 분할에서는 거의 모든 사용자가 학습에 등장해(이번 `val`에서 처음 보는 사용자 0명) 이 문제가 가려진다. 영화 쪽은 `val`의 635행이 학습에 없던 영화였고, 이 영화들의 임베딩은 초기화된 무작위 값 그대로다. 실습의 [F-3](#ch09-f-3)에서 사용자 50에게 나온 추천 상위에 평점 수가 적은 낯선 영화가 몰린 것도 같은 현상이다. 신규 사용자와 신규 영화에는 인기순이나 장르 같은 다른 신호로 답하고, 어떤 경로로 답했는지도 기록해야 한다.
+임베딩 모델은 학습에서 본 사용자와 영화만 안다. 무작위 분할에서는 거의 모든 사용자가 학습에 나오므로 이 문제가 가려진다. 이번 `val`에서도 처음 보는 사용자는 0명이었다.
+
+영화 쪽은 다르다. `val`의 635행이 학습에 없던 영화였고, 이 영화들의 임베딩은 초기화된 무작위 값 그대로다. 실습의 [F-3](#ch09-f-3)에서 사용자 50의 추천 상위에 평점 수가 적은 낯선 영화가 몰린 것도 같은 현상이다. 신규 사용자와 신규 영화에는 인기순이나 장르 같은 다른 신호로 답하고, 어떤 경로로 답했는지도 기록해야 한다.
 
 ## MLflow는 실행 사이의 계보를 잇는다 {#mlflow-lineage}
 
-TensorBoard가 한 실행의 곡선을 보여 준다면, MLflow는 "어떤 조건의 실행이 어떤 결과를 냈고, 그중 무엇이 지금 쓰이는가"를 남긴다. 책의 리스팅 9.13은 학습 함수의 입력 인자를 모두 파라미터로, epoch별 손실을 지표로, 모델 요약과 입출력 시그니처가 붙은 모델을 아티팩트로 기록한다. 검증 컴포넌트는 다른 Pod에서 실행되지만 **같은 run_id**에 지표를 더한다. 학습과 평가가 분리돼도 기록은 한 줄로 이어진다.
+TensorBoard가 한 실행의 곡선을 보여 준다면 MLflow는 실행 사이를 잇는다. 어떤 조건의 실행이 어떤 결과를 냈고, 그중 무엇을 지금 쓰는지를 남긴다. 책의 리스팅 9.13은 학습 함수의 입력 인자를 모두 파라미터로, epoch별 손실을 지표로 기록한다. 모델은 요약과 입출력 시그니처를 붙여 아티팩트로 남긴다. 검증 컴포넌트는 다른 Pod에서 돌지만 **같은 run_id**에 지표를 더하므로, 학습과 평가가 갈라져도 기록은 한 줄로 이어진다.
 
-여기서 run_id가 KFP 컴포넌트의 문자열 출력이라는 점이 중요하다. KFP는 "어떤 Pod가 어떤 입력으로 돌았는가"를, MLflow는 "어떤 파라미터와 지표, 모델이 한 묶음인가"를 기록한다. 두 기록을 잇는 것이 run_id다. 데이터셋 버전(버킷과 경로)과 코드 버전(이미지나 커밋)을 MLflow 파라미터나 태그로 함께 남기지 않으면, 이 연결은 모델에서 데이터까지 거슬러 올라가지 못한다. 이번 실행도 데이터셋 이름은 파이프라인 파라미터로만 남았고 MLflow run에는 없다.
+run_id는 KFP 컴포넌트의 문자열 출력이다. KFP는 어떤 Pod가 어떤 입력으로 돌았는지를, MLflow는 어떤 파라미터와 지표와 모델이 한 묶음인지를 기록한다. 이 둘을 잇는 것이 run_id다.
+
+하지만 이것만으로 모델에서 데이터까지 거슬러 올라가지는 못한다. 데이터셋 버전(버킷과 경로)과 코드 버전(이미지나 커밋)을 MLflow 파라미터나 태그로 함께 남겨야 한다. 이번 실행에서도 데이터셋 이름은 파이프라인 파라미터로만 남았고 MLflow run에는 없었다.
 
 ### 모델 파일은 누가 업로드하는가 {#artifact-path}
 
-책의 "Uploads to MLflow" 상자는 실무에서 자주 막히는 지점을 짚는다. 이 환경의 MLflow 서버는 `--default-artifact-root s3://mlflow-artifacts`로 떠 있고 아티팩트 프록시를 쓰지 않는다. 그러면 서버는 "이 경로에 올려라"라고 알려 줄 뿐이고, **모델 파일은 학습 Pod가 S3에 직접 올린다.** 학습 Pod에 S3 주소와 키가 없으면 메타데이터 기록은 성공하고 모델 업로드에서 실패한다. 저자 코드는 이 설정을 넣지 않았으므로 학습, 검증, 등록 단계에 `MLFLOW_S3_ENDPOINT_URL`과 키를 환경 변수로 넣었다. 프록시 모드(`--serve-artifacts`)를 쓰면 학습 코드는 MLflow 주소만 알면 되지만 큰 파일이 모두 서버 한 곳을 지나간다. 책의 설명대로 권한 관리의 단순함과 전송 병목 사이의 선택이다.
+책의 "Uploads to MLflow" 상자는 실무에서 자주 막히는 지점을 짚는다. 이 환경의 MLflow 서버는 아티팩트 저장 위치를 `s3://mlflow-artifacts` 버킷으로 지정했고 아티팩트 프록시는 쓰지 않는다. 이 구성에서 서버는 "이 경로에 올려라"라고 알려 줄 뿐이다. **모델 파일은 학습 Pod가 S3에 직접 올린다.**
 
-MLflow 3에서는 저장 위치도 바뀌었다. 모델 파일이 run 폴더가 아니라 `mlflow-artifacts/<실험 ID>/models/m-.../`에 LoggedModel로 저장된다. 책과 저자 코드의 `runs:/<run_id>/model` 주소는 MLflow 3.0.0에서도 그대로 동작했다.
+그래서 학습 Pod에 S3 주소와 키가 없으면 메타데이터 기록은 성공하고 모델 업로드에서만 실패한다. 저자 코드에는 이 설정이 없어 학습, 검증, 등록 단계에 S3 주소와 키를 환경 변수로 넣었다. 프록시 모드를 쓰면 학습 코드는 MLflow 주소만 알면 되지만, 큰 파일이 전부 서버 한 곳을 지나간다. 책의 설명대로 권한 관리의 단순함과 전송 병목 사이의 선택이다.
+
+MLflow 3에서는 저장 위치도 바뀌었다. 모델 파일이 run 폴더가 아니라 실험 ID 아래 `models/m-.../` 폴더에 LoggedModel로 저장된다. 그래도 책과 저자 코드의 `runs:/<run_id>/model` 주소는 MLflow 3.0.0에서 그대로 동작했다.
 
 ### 등록과 별칭은 "지금 무엇을 쓰는가"를 정한다 {#registry-alias}
 
-실험이 쌓이면 그중 다음 단계로 넘길 모델을 골라 이름을 붙여야 한다. MLflow 레지스트리는 등록 모델 이름 아래 버전을 쌓고, `staging`, `prod` 같은 **별칭**이 특정 버전을 가리키게 한다. 서빙은 버전 번호 대신 별칭을 찾고, 롤백은 별칭을 이전 버전으로 옮기는 일이 된다. 4장의 `Production` stage는 MLflow 3에서 사용 중단 예고된 방식이고, 9장은 별칭을 쓴다.
+실험이 쌓이면 그중 다음 단계로 넘길 모델을 골라 이름을 붙여야 한다. MLflow 레지스트리는 등록 모델 이름 아래 버전을 쌓고, `staging`이나 `prod` 같은 **별칭**이 특정 버전을 가리키게 한다. 서빙은 버전 번호 대신 별칭으로 모델을 찾는다. 롤백은 별칭을 이전 버전으로 옮기는 일이 된다. 4장에서 쓴 `Production` stage는 MLflow 3에서 사용 중단이 예고됐고, 9장은 별칭을 쓴다.
 
-저자의 `promote_model_to_staging`은 새 run의 지표를 현재 `staging` 버전과 비교해 RMSE가 0.0001보다 더 나빠지지 않고 precision과 recall이 각각 0.3, 0.2보다 더 떨어지지 않으면 새 버전을 `staging`으로 올린다. 구조는 합리적이지만 몇 가지를 알고 써야 한다.
+저자의 `promote_model_to_staging`은 새 run의 지표를 현재 `staging` 버전과 비교한다. RMSE가 0.0001보다 더 나빠지지 않고 precision과 recall이 각각 0.3, 0.2보다 더 떨어지지 않으면 새 버전을 `staging`으로 올린다. 구조는 합리적이지만, 실제로 써 보면 걸리는 곳이 네 군데 있다.
 
-- 첫 실행에서는 `staging`이 없어 `current_staging`이 `None`인데, 바로 다음 줄에서 `current_staging.run_id`를 읽어 `AttributeError`가 난다. 코드 순서상 반드시 생기는 오류라 조건을 고친 뒤 실행했다.
-- 파라미터로 받은 `registered_model_name`을 쓰지 않고 `recommender_production`을 하드코딩한다. 여러 사람이 같은 서버를 쓰면 서로의 모델 버전을 덮는다. 파라미터를 쓰도록 고쳤다.
-- 비교 기준인 `rms`, `precision_50`, `recall_50`이 위에서 본 대로 추천 품질을 잘 대표하지 않는다. 문턱값이 정교해도 지표가 틀리면 판단이 틀린다.
-- 책 리스팅 9.17과 저자 README는 `prod` 별칭을 찾지만 파이프라인은 `staging`만 만든다. `prod`로 옮기는 단계는 사람이 검토하는 몫으로 남겨 두었고, 실제로 `prod`를 조회하면 `Registered model alias prod not found`가 난다.
+첫 실행에서는 `staging`이 없어 `current_staging`이 `None`인데, 바로 다음 줄이 `current_staging.run_id`를 읽어 `AttributeError`가 난다. 코드 순서상 반드시 생기는 오류라 조건을 고친 뒤 돌렸다. 파라미터로 받은 `registered_model_name`을 쓰지 않고 `recommender_production`을 하드코딩한 것도 문제다. 여러 사람이 같은 서버를 쓰면 서로의 모델 버전을 덮으므로 파라미터를 쓰도록 고쳤다.
+
+더 근본적인 것은 비교 기준이다. `rms`, `precision_50`, `recall_50`은 앞에서 본 대로 추천 품질을 잘 대표하지 못한다. 문턱값이 아무리 정교해도 지표가 틀리면 판단도 틀린다. 마지막으로 책 리스팅 9.17과 저자 README는 `prod` 별칭을 찾지만 파이프라인은 `staging`만 만든다. `prod`로 옮기는 일은 사람이 검토할 몫으로 남겼고, 실제로 `prod`를 조회하면 `Registered model alias prod not found`가 난다.
 
 ### 모델 클래스 없이 불러온다는 말의 조건 {#pickle-python-version}
 
-책은 MLflow 덕분에 "모델 정의 없이" 모델을 불러올 수 있다고 한다. `mlflow.pytorch`는 모델 객체를 클래스 코드까지 함께 직렬화하기 때문이다. 이 직렬화에는 파이썬 바이트코드가 들어간다. 학습 컴포넌트는 KFP SDK 2.11의 기본 이미지 `python:3.9`에서 돌았고, 이 모델을 Python 3.12 환경에서 불러오자 `TypeError: code() argument 13 must be str, not int`로 실패했다. Python 3.9와 PyTorch 2.8.0으로 맞춘 환경에서는 정상적으로 불러왔다. 모델 파일과 함께 기록되는 `python_env.yaml`이 이 조건을 적어 두는 파일이다. 서빙 이미지를 만들 때 이 버전을 지켜야 하고, 장기 보관할 모델이라면 TorchScript나 ONNX처럼 파이썬 버전에 덜 묶인 형식도 함께 고려한다.
+책은 MLflow 덕분에 모델 정의 없이도 모델을 불러올 수 있다고 한다. `mlflow.pytorch`가 모델 객체를 클래스 코드까지 함께 직렬화하기 때문이다. 문제는 이 직렬화에 파이썬 바이트코드가 들어간다는 점이다.
+
+학습 컴포넌트는 KFP SDK 2.11의 기본 이미지인 `python:3.9`에서 돌았다. 이 모델을 Python 3.12에서 불러오자 `TypeError: code() argument 13 must be str, not int`로 실패했다. Python 3.9와 PyTorch 2.8.0으로 맞춘 환경에서는 문제없이 불러왔다. 모델과 함께 기록되는 `python_env.yaml`이 바로 이 조건을 적어 두는 파일이다. 서빙 이미지는 이 버전을 지켜야 한다. 오래 보관할 모델이라면 TorchScript나 ONNX처럼 파이썬 버전에 덜 묶인 형식도 함께 고려할 만하다.
 
 ## 이 장이 남기는 한계 {#remaining-limits}
 
-9장이 만든 구조는 데이터 준비, 학습, 검증, 등록을 하나의 실행으로 묶고 그 근거를 남긴다. 실행해 보면 남는 일도 분명하다.
+9장의 구조는 데이터 준비, 학습, 검증, 등록을 한 실행으로 묶고 그 근거를 남긴다. 그래도 돌려 보고 나니 남은 일이 분명하게 보였다.
 
-- PVC는 실행 단위 작업 공간일 뿐이다. 실패한 실행의 PVC와 끝난 Pod 정리를 자동화해야 하고, 데이터 버전은 객체 저장소와 실행 기록에 따로 남겨야 한다.
-- 지표가 사용자 경험을 대표하는지 검증되지 않았다. 전체 후보 순위 지표, 인기순 기준선, 시간 기준 분할 없이 등록 판단을 자동화하면 상수 예측보다 못한 모델도 `staging`에 오른다. 이번 실습에서 실제로 그랬다.
-- 계보가 절반만 이어진다. MLflow run에 데이터셋 경로, 분할 방식, 코드 커밋이 없다.
-- `staging`에서 `prod`로 넘어가는 검토 절차와 그 기록은 아직 없다. 10장은 별칭으로 모델을 찾아 서빙하므로, 어떤 별칭을 누가 옮기는지가 곧 배포 절차가 된다.
+PVC는 실행 단위 작업 공간일 뿐이다. 실패한 실행의 PVC와 끝난 Pod를 치우는 일은 자동화해야 하고, 데이터 버전은 객체 저장소와 실행 기록에 따로 남겨야 한다.
+
+가장 큰 문제는 지표다. 그 숫자가 사용자 경험을 대표하는지 아무도 확인하지 않았다. 전체 후보 순위 지표, 인기순 기준선, 시간 기준 분할 없이 등록을 자동화하면 상수 예측보다 못한 모델도 `staging`에 오른다. 이번 실습에서 실제로 그렇게 됐다.
+
+계보도 절반만 이어진다. MLflow run에 데이터셋 경로, 분할 방식, 코드 커밋이 없다. `staging`에서 `prod`로 넘기는 검토 절차와 그 기록도 아직 없다. 10장은 별칭으로 모델을 찾아 서빙하므로, 누가 어떤 별칭을 옮기는지가 곧 배포 절차가 된다.
 
 ## 실습 순서 {#book-ch09-sop}
 
-두 파이프라인을 차례로 실행한다. 탐지 파이프라인으로 PVC와 TensorBoard를 확인하고, 추천 파이프라인으로 S3 직접 읽기와 MLflow 기록, 등록 판단을 확인한 뒤, 마지막에 등록된 모델을 내려받아 지표를 다시 계산한다. 아래 출력과 화면은 2026년 11월 7일 이 순서대로 실행해 얻은 것이다.
+두 파이프라인을 차례로 돌린다. 탐지 파이프라인에서 PVC와 TensorBoard를, 추천 파이프라인에서 S3 직접 읽기와 MLflow 기록, 등록 판단을 본다. 끝으로 등록된 모델을 내려받아 지표를 다시 잰다. 아래 출력과 화면은 2026년 11월 7일에 이 순서로 실행해 얻었다.
 
 ```mermaid
 flowchart LR
@@ -269,11 +292,11 @@ flowchart LR
 | F. 지표 다시 보기 | 평점별 RMSE, 전체 후보 Recall@10과 NDCG@10, 인기순 기준선, 사용자 추천 예시 |
 | G. 정리 | 지운 PVC, Deployment, 남겨 둘 기록 |
 
-B, C와 D, E, F는 서로 독립이라 어느 쪽을 먼저 해도 된다. 명령은 [ml-platform-book-env](https://github.com/johklo/ml-platform-book-env) 저장소 최상위 폴더의 PowerShell에서 실행한다고 가정하며, 이 장에서 만드는 파일은 `ch09\` 폴더에 둔다.
+B, C와 D, E, F는 서로 독립이라 순서를 바꿔도 된다. 명령은 [ml-platform-book-env](https://github.com/johklo/ml-platform-book-env) 저장소 최상위 폴더의 PowerShell에서 실행하고, 이 장에서 만드는 파일은 `ch09\` 폴더에 둔다.
 
 ## A. 환경과 코드 준비 {#ch09-a}
 
-지금 위치: 전체 그림의 ①을 준비하는 단계다.
+지금 위치는 전체 그림의 ① 준비 단계다.
 
 ### A-1. 클러스터와 화면 확인 {#ch09-a-1}
 
@@ -290,7 +313,7 @@ B, C와 D, E, F는 서로 독립이라 어느 쪽을 먼저 해도 된다. 명�
    NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
    standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  10m
    ```
-   `WaitForFirstConsumer`는 PVC를 마운트할 Pod가 생길 때까지 실제 볼륨을 만들지 않는다는 뜻이다. 실행을 중간에 취소하면 PVC가 `Pending`으로 남는 이유이기도 하다.
+   `WaitForFirstConsumer`는 PVC를 마운트할 Pod가 생겨야 실제 볼륨을 만든다는 뜻이다. 실행을 중간에 취소하면 PVC가 `Pending`으로 남는 것도 이 때문이다.
 3. http://localhost:8888/buckets/ 에 `mlflow-artifacts`와 `mlpipeline`이 있는지 본다. 없으면 `python bookenv.py buckets`를 한 번 실행한다.
 
 ### A-2. 저자 코드와 가상환경 {#ch09-a-2}
@@ -311,11 +334,11 @@ B, C와 D, E, F는 서로 독립이라 어느 쪽을 먼저 해도 된다. 명�
    uv pip install --python .venv-ch09 kfp==2.11.0 kfp-kubernetes==1.4.0 mlflow==3.0.0 boto3 pandas pyarrow scikit-learn
    .\.venv-ch09\Scripts\Activate.ps1
    ```
-   책의 `pip install kfp[kubernetes]`가 설치하는 것이 `kfp-kubernetes` 패키지다. KFP SDK 버전은 컴포넌트의 기본 이미지를 정한다. 2.9.0으로 컴파일하면 기본 이미지가 `python:3.8`이 되는데, MLflow 3.0.0은 Python 3.9 이상이 필요하다. 2.11.0의 기본 이미지는 `python:3.9`다.
+   책의 `pip install kfp[kubernetes]`가 설치하는 것이 `kfp-kubernetes` 패키지다. SDK 버전이 중요한 이유는 컴포넌트의 기본 이미지를 정하기 때문이다. 2.9.0으로 컴파일하면 기본 이미지가 `python:3.8`인데, MLflow 3.0.0은 Python 3.9 이상이 필요하다. 2.11.0의 기본 이미지는 `python:3.9`다.
 
 ### A-3. 제출 스크립트 {#ch09-a-3}
 
-UI에서 YAML을 올려도 되지만, 같은 파이프라인을 파라미터만 바꿔 여러 번 실행하므로 스크립트로 제출한다. 파이프라인이 이미 있으면 새 버전으로 올리고, KFP 실험 `ch09`에 실행을 만든다.
+UI에서 YAML을 올려도 되지만, 같은 파이프라인을 파라미터만 바꿔 여러 번 돌릴 것이라 스크립트로 제출한다. 파이프라인이 이미 있으면 새 버전으로 올리고, KFP 실험 `ch09`에 실행을 만든다.
 
 `ch09\submit.py`:
 
@@ -352,17 +375,17 @@ run = client.run_pipeline(
 print("run", run.run_id)
 ```
 
-`enable_caching=False`를 넘겼지만, 파이프라인 ID로 실행할 때는 컴파일된 YAML의 캐시 설정이 그대로 쓰였다. 캐시는 B-5에서 보듯 파이프라인 코드에서 꺼야 한다.
+`enable_caching=False`를 넘겨도 파이프라인 ID로 실행하면 컴파일된 YAML의 캐시 설정이 그대로 쓰였다. 캐시는 B-5에서 보듯 파이프라인 코드에서 꺼야 한다.
 
 완료 기준: `kubectl get storageclass`에 `standard`가 보이고, `python -c "import kfp, mlflow; print(kfp.__version__, mlflow.__version__)"`가 `2.11.0 3.0.0`을 출력한다.
 
 ## B. PVC 탐지 파이프라인 {#ch09-b}
 
-지금 위치: 전체 그림의 ①, ③, ④, ⑤다.
+지금 위치는 전체 그림의 ①, ③, ④, ⑤다.
 
 ### B-1. 저자 코드 고치기 {#ch09-b-1}
 
-`upstream\object-detection-project\pipeline_with_pvc.py`를 [앞의 표](#pvc-code-gaps)대로 고친다. 핵심 변경은 다음과 같다.
+`upstream\object-detection-project\pipeline_with_pvc.py`를 [앞의 표](#pvc-code-gaps)대로 고친다. 핵심 변경만 옮기면 다음과 같다.
 
 ```python
 # split_dataset: 이미지와 라벨을 파일 이름으로 짝짓는다
@@ -400,11 +423,11 @@ train_op = train_model(epochs=epochs, batch=batch, yolo_model_name=yolo_model_na
                        imgsz=imgsz).after(split_op).set_caching_options(False)
 ```
 
-파이프라인 이름은 다른 실습과 구분되게 `ch09-yolo-pvc-pipeline`으로 바꿨다. CPU에서 끝나도록 이미지 크기를 파라미터 `imgsz`로 뺐다. 기본값은 책과 같은 640이다.
+파이프라인 이름은 다른 실습과 겹치지 않게 `ch09-yolo-pvc-pipeline`으로 바꿨다. CPU에서도 끝나도록 이미지 크기는 파라미터 `imgsz`로 뺐고, 기본값은 책과 같은 640이다.
 
 ### B-2. 이미지 준비 {#ch09-b-2}
 
-학습과 검증이 쓰는 `ultralytics/ultralytics:8.3.56-cpu`는 풀어 놓은 크기가 7.8GB다. 노드가 직접 받게 둬도 되지만, 미리 받아 kind 노드에 넣으면 실행 시간이 예측 가능해진다.
+학습과 검증이 쓰는 `ultralytics/ultralytics:8.3.56-cpu`는 풀어 놓으면 7.8GB다. 노드가 직접 받게 둬도 되지만, 미리 받아 kind 노드에 넣어 두면 실행 시간을 예측하기 쉽다.
 
 ```powershell
 docker pull ultralytics/ultralytics:8.3.56-cpu
@@ -426,9 +449,9 @@ kind load docker-image ultralytics/ultralytics:8.3.56-cpu --name book-env
    ```powershell
    python ch09\submit.py upstream\object-detection-project\ch09_yolo_pvc_pipeline.yaml --pipeline ch09-yolo-pvc-pipeline --run ch09-yolo-pvc-run-4 --params '{"epochs":3,"batch":8,"imgsz":320}'
    ```
-   이 글의 성공한 실행이 네 번째 실행이라 이름이 `run-4`다. 앞의 세 번은 B-5와 G의 실패 사례다.
+   이 글에서 성공한 실행이 네 번째라 이름이 `run-4`다. 앞의 세 번은 B-5와 G의 실패 사례다.
 
-다운로드(1.2GB), 분할, 3 epoch 학습(약 5분), 검증까지 전체 약 15분 걸렸다.
+다운로드(1.2GB), 분할, 3 epoch 학습(약 5분), 검증까지 모두 약 15분 걸렸다.
 
 ### B-4. PVC와 그래프 확인 {#ch09-b-4}
 
@@ -440,7 +463,7 @@ kind load docker-image ultralytics/ultralytics:8.3.56-cpu --name book-env
    NAME                                             STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS
    65a853f2-87d4-4404-bd95-b548c5446dc6-ch09-yolo   Bound    pvc-c1b1067d-4948-4f89-85ea-a4ddd3d70fde   5Gi        RWO            standard
    ```
-2. KFP 화면의 **Runs**에서 실행을 연다. 모든 단계가 `createpvc`에서 갈라져 나오는 그래프가 책의 그림 9.2, 9.3에 해당한다. 마지막의 `deletepvc`는 검증이 끝난 뒤에 실행된다.
+2. KFP 화면의 **Runs**에서 실행을 연다. 모든 단계가 `createpvc`에서 갈라져 나오는 그래프로, 책의 그림 9.2, 9.3에 해당한다. 마지막 `deletepvc`는 검증이 끝난 뒤에 돈다.
 
    ![ch09-yolo-pvc-run-4의 그래프. createpvc에서 download-dataset, split-dataset, train-model, validate-model, deletepvc로 이어진다.](/images/ml-platform-engineering/sop/ch09-b-yolo-run-graph.png)
 
@@ -455,11 +478,11 @@ kind load docker-image ultralytics/ultralytics:8.3.56-cpu --name book-env
    images=570 labels=570 mismatched pairs in original order=570
    paired by file name: 570
    ```
-   저자 코드 그대로였다면 570쌍이 모두 다른 파일끼리 묶여 분할됐다는 뜻이다.
+   저자 코드 그대로였다면 570쌍 모두 엉뚱한 파일끼리 묶인 채 분할됐을 것이다.
 
    ![split-dataset 로그. 원래 순서에서 570쌍이 모두 어긋났고 파일 이름으로 다시 짝지었다.](/images/ml-platform-engineering/sop/ch09-b-split-logs.png)
 
-2. 캐시가 PVC와 어떻게 충돌하는지는 두 번째 실행에서 드러났다. 첫 실행과 파라미터가 같아 `download-dataset`과 `split-dataset`이 캐시로 처리됐고(구름 모양 아이콘), 새로 만든 빈 PVC에서 학습이 시작돼 실패했다.
+2. 캐시와 PVC의 충돌은 두 번째 실행에서 드러났다. 파라미터가 첫 실행과 같아 `download-dataset`과 `split-dataset`이 캐시로 처리됐고(구름 모양 아이콘), 학습은 새로 만든 빈 PVC에서 시작해 실패했다.
 
    ![캐시로 건너뛴 download-dataset과 split-dataset, 실패한 train-model.](/images/ml-platform-engineering/sop/ch09-b-cached-run.png)
 
@@ -467,11 +490,11 @@ kind load docker-image ultralytics/ultralytics:8.3.56-cpu --name book-env
    Dataset '.../data_yaml/data.yaml' images not found, missing path '/data/val/images'
    ```
 
-   KFP 캐시는 입력과 출력 아티팩트만 보고 같은 작업인지 판단한다. PVC에 쓰는 일은 KFP가 모르는 외부 상태이므로, PVC에 결과를 남기는 단계는 캐시를 꺼야 한다.
+   KFP 캐시는 입력과 출력 아티팩트만 보고 같은 작업인지 판단한다. PVC에 쓴 내용은 KFP가 모르는 외부 상태다. PVC에 결과를 남기는 단계는 캐시를 꺼야 한다.
 
 ### B-6. 학습과 검증 결과 {#ch09-b-6}
 
-`train-model` 로그의 마지막 부분이다. TensorBoard 기록이 켜졌고 결과가 PVC의 `/data/runs`에 저장됐다.
+`train-model` 로그의 끝부분이다. TensorBoard 기록이 켜졌고 결과는 PVC의 `/data/runs`에 저장됐다.
 
 ```text
 TensorBoard: Start with 'tensorboard --logdir /data/runs/yolov8n_custom', view at http://localhost:6006/
@@ -482,17 +505,17 @@ Starting training for 3 epochs...
 Results saved to /data/runs/yolov8n_custom
 ```
 
-열 순서는 이미지 수, 객체 수, precision, recall, mAP50, mAP50-95다. 분할은 train 427장, val 85장, test 58장이다. `validate-model`도 같은 val 85장으로 같은 `0.995`, `0.964`를 냈다. [앞에서 설명한 대로](#tensorboard-concepts) 이 숫자는 학습이 `best.pt`를 고를 때 쓴 데이터로 잰 값이고, test 58장은 쓰이지 않았다.
+열은 이미지 수, 객체 수, precision, recall, mAP50, mAP50-95 순이다. 분할은 train 427장, val 85장, test 58장이다. `validate-model`도 같은 val 85장으로 똑같은 `0.995`, `0.964`를 냈다. [앞에서 본 대로](#tensorboard-concepts) 학습이 `best.pt`를 고를 때 쓴 데이터로 잰 값이고, test 58장은 쓰이지 않았다.
 
 완료 기준: 실행의 모든 단계가 초록색이고, `kubectl -n kubeflow get pvc`에서 이 실행의 PVC를 찾을 수 있다.
 
 ## C. TensorBoard {#ch09-c}
 
-지금 위치: 전체 그림의 ⑤, ⑥이다.
+지금 위치는 전체 그림의 ⑤, ⑥이다.
 
 ### C-1. PVC를 마운트한 TensorBoard 띄우기 {#ch09-c-1}
 
-책은 Kubeflow 대시보드의 **TensorBoards > New TensorBoard**에서 PVC를 고른다. KFP만 설치한 이 환경에는 그 메뉴가 없으므로 같은 일을 하는 Deployment를 만든다. B-4에서 확인한 PVC 이름을 `claimName`에 넣는다. 책의 순서처럼 `createpvc`가 끝난 뒤라면 학습 도중에 띄워도 된다.
+책은 Kubeflow 대시보드의 **TensorBoards > New TensorBoard**에서 PVC를 고른다. KFP만 설치한 이 환경에는 그 메뉴가 없어 같은 일을 하는 Deployment를 만든다. `claimName`에는 B-4에서 본 PVC 이름을 넣는다. 책의 순서처럼 `createpvc`가 끝났다면 학습 도중에 띄워도 된다.
 
 1. `ch09\tensorboard.yaml`을 만든다.
    ```yaml
@@ -524,7 +547,7 @@ Results saved to /data/runs/yolov8n_custom
            - name: pipeline-data
              persistentVolumeClaim: {claimName: 65a853f2-87d4-4404-bd95-b548c5446dc6-ch09-yolo, readOnly: true}
    ```
-2. 적용하고, 세 번째 터미널에서 포트를 연결한다. 8888과 6006 대신 비어 있는 6009를 썼다.
+2. 적용하고, 세 번째 터미널에서 포트를 연결한다. 포트는 8888과 6006 대신 비어 있는 6009를 썼다.
    ```powershell
    kubectl apply -f ch09\tensorboard.yaml
    kubectl -n kubeflow get pods -l app=ch09-tensorboard
@@ -532,22 +555,22 @@ Results saved to /data/runs/yolov8n_custom
    ```
    Pod가 `Running`이 되기까지 `pip install` 때문에 30초 정도 걸린다.
 
-같은 PVC를 학습 Pod와 TensorBoard Pod가 동시에 마운트할 수 있는 것은 둘이 같은 노드에 있기 때문이다. RWO의 "Once"는 노드 단위다.
+학습 Pod와 TensorBoard Pod가 같은 PVC를 동시에 마운트할 수 있는 것은 둘이 같은 노드에 있어서다. RWO의 "Once"는 노드 단위다.
 
 ### C-2. 스칼라와 그래프 보기 {#ch09-c-2}
 
-1. http://127.0.0.1:6009/#timeseries 를 열고 위쪽 태그 필터에 `metrics/mAP|val/box`를 입력한다. 실행 `yolov8n_custom`의 epoch별 mAP50, mAP50-95, 검증 box 손실이 보인다. 책의 그림 9.9에 해당한다.
+1. http://127.0.0.1:6009/#timeseries 를 열고 위쪽 태그 필터에 `metrics/mAP|val/box`를 입력한다. 실행 `yolov8n_custom`의 epoch별 mAP50, mAP50-95, 검증 box 손실이 나온다. 책의 그림 9.9에 해당한다.
 
    ![TensorBoard Time Series. metrics/mAP50(B) 0.995, metrics/mAP50-95(B) 0.9636, val/box_loss 0.3262로 3 epoch 동안 변화했다.](/images/ml-platform-engineering/sop/ch09-c-tensorboard-scalars.png)
 
-   3 epoch뿐이라 곡선이 세 점이다. 그래도 val 손실이 줄고 mAP가 오르는 방향, 학습률 `lr/pg0` 같은 스케줄 곡선은 확인할 수 있다.
-2. **GRAPHS** 탭에서 모델 그래프를 본다. 로그의 `model graph visualization added`가 남긴 것으로, 책의 그림 9.10에 해당하는 화면이다. 처음에는 `input`, `DetectionModel`, `output` 세 상자로 접혀 보인다.
+   3 epoch뿐이라 곡선이라기보다 점 세 개다. 그래도 val 손실이 줄고 mAP가 오르는 방향과 `lr/pg0` 같은 학습률 스케줄은 읽을 수 있다.
+2. **GRAPHS** 탭에서 모델 그래프를 본다. 로그의 `model graph visualization added`가 남긴 것으로 책의 그림 9.10에 해당한다. 처음에는 `input`, `DetectionModel`, `output` 세 상자로 접혀 있다.
 
    ![TensorBoard GRAPHS 탭. input, DetectionModel, output으로 이어진 모델 그래프.](/images/ml-platform-engineering/sop/ch09-c-tensorboard-graph.png)
 
 ### C-3. 실행이 끝난 뒤의 PVC {#ch09-c-3}
 
-실행이 성공하면 마지막 `deletepvc`가 PVC 삭제를 요청한다. 그런데 TensorBoard가 아직 마운트하고 있으면 PVC는 바로 사라지지 않는다.
+실행이 성공하면 마지막 `deletepvc`가 PVC 삭제를 요청한다. 하지만 TensorBoard가 아직 마운트하고 있으면 PVC는 바로 사라지지 않는다.
 
 ```powershell
 kubectl -n kubeflow get pvc 65a853f2-87d4-4404-bd95-b548c5446dc6-ch09-yolo
@@ -565,17 +588,19 @@ Used By:       ch09-tensorboard-56fd9f7964-wmknp
                ch09-yolo-pvc-pipeline-sb4jq-system-container-impl-95559514
 ```
 
-`Used By`에 TensorBoard뿐 아니라 이미 끝난 작업 Pod 네 개도 있다. Kubernetes는 PVC를 참조하는 Pod가 남아 있는 동안 삭제를 미룬다. 덕분에 TensorBoard는 실행이 끝난 뒤에도 로그를 보여 주지만, 보는 동안 디스크도 계속 차지한다. 실패해서 `deletepvc`까지 가지 못한 실행의 PVC는 `Bound`로 남는다. 이번에도 실패하거나 취소한 세 실행의 PVC가 남아 있었다. 실패한 두 실행의 PVC는 삭제 요청 뒤에도 `Terminating`에 머물다가 그 실행의 끝난 Pod를 지운 뒤에야 사라졌다. 정리 명령은 [G-2](#ch09-g-2)에 모았다.
+`Used By`에는 TensorBoard뿐 아니라 이미 끝난 작업 Pod 네 개도 있다. Kubernetes는 PVC를 참조하는 Pod가 남아 있는 동안 삭제를 미룬다. 덕분에 실행이 끝난 뒤에도 TensorBoard로 로그를 볼 수 있지만, 그동안 디스크도 계속 차지한다.
+
+실패해서 `deletepvc`까지 가지 못한 실행의 PVC는 `Bound`로 남는다. 이번에도 실패하거나 취소한 세 실행의 PVC가 남아 있었다. 그중 실패한 두 실행의 PVC는 삭제를 요청해도 `Terminating`에 머물렀고, 그 실행의 끝난 Pod를 지우고 나서야 사라졌다. 정리 명령은 [G-2](#ch09-g-2)에 모았다.
 
 완료 기준: TensorBoard 화면에 mAP 곡선이 보이고, 정리 뒤 `kubectl -n kubeflow get pvc`에 `ch09-yolo` PVC가 남지 않는다.
 
 ## D. 추천 학습 파이프라인 {#ch09-d}
 
-지금 위치: 전체 그림의 ②, ③, ⑦, ⑧, ⑨다.
+지금 위치는 전체 그림의 ②, ③, ⑦, ⑧, ⑨다.
 
 ### D-1. 데이터 준비와 업로드 {#ch09-d-1}
 
-책은 7장의 데이터 준비 파이프라인이 `datasets` 버킷의 `ml-25m/`에 올린 MovieLens 25M(평점 2,500만 개)을 쓴다. CPU 실습에서 끝낼 수 있도록 같은 GroupLens의 **ml-latest-small**(평점 100,836개, 사용자 610명, 영화 9,724편)을 쓰고, 7장의 `split_dataset`과 같은 방식(`train_test_split`, 75:15:10, `random_state=42`)으로 나눠 별도 버킷 `ch09-datasets`에 올렸다. 데이터 규모가 250분의 1이라 지표 값은 책과 비교할 수 없다. MovieLens는 [GroupLens 이용 조건](https://files.grouplens.org/datasets/movielens/ml-latest-small-README.html)에 따라 연구와 학습 목적으로만 쓰고, 내려받은 파일은 저장소에 커밋하지 않는다.
+책은 7장의 데이터 준비 파이프라인이 `datasets` 버킷의 `ml-25m/`에 올린 MovieLens 25M(평점 2,500만 개)을 쓴다. 이 실습은 CPU에서 끝내기 위해 같은 GroupLens의 **ml-latest-small**(평점 100,836개, 사용자 610명, 영화 9,724편)을 쓴다. 나누는 방식은 7장의 `split_dataset`과 같고(`train_test_split`, 75:15:10, `random_state=42`), 결과는 별도 버킷 `ch09-datasets`에 올린다. 규모가 250분의 1이라 지표 값을 책과 비교할 수는 없다. MovieLens는 [GroupLens 이용 조건](https://files.grouplens.org/datasets/movielens/ml-latest-small-README.html)에 따라 연구와 학습 목적으로만 쓰고, 내려받은 파일은 저장소에 커밋하지 않는다.
 
 1. `ch09\data` 폴더에서 원본을 받는다.
    ```powershell
@@ -634,9 +659,9 @@ Used By:       ch09-tensorboard-56fd9f7964-wmknp
 | 같은 파일 | 학습, 검증, 등록 단계에 `MLFLOW_S3_ENDPOINT_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 환경 변수 | [아티팩트를 Pod가 직접 올리는 구성](#artifact-path)이다 |
 | `model_training.py`, `model_validation.py`, `model_registration.py` | `mlflow`를 `mlflow==3.0.0`으로 고정하고 `boto3` 추가 | 클라이언트를 서버 버전에 맞추고, S3 업로드와 다운로드에 `boto3`가 필요하다 |
 | `model_registration.py` | `current_staging is not None and ...`, 하드코딩한 `recommender_production` 대신 `registered_model_name`, 비교 지표 출력 | [첫 등록 오류와 이름 충돌](#registry-alias) |
-| `model_training.py` | `log_metric`에 문자열 대신 `float` 전달 | 필수는 아니다. MLflow 3.0.0은 문자열 `"0.912345"`도 받아들이는 것을 확인했다. `:3f`가 소수 셋째 자리 반올림이 아니라 폭 지정이라 의도와 다르기도 하다 |
+| `model_training.py` | `log_metric`에 문자열 대신 `float` 전달 | 필수는 아니다. MLflow 3.0.0은 문자열 `"0.912345"`도 받아들였다. 다만 `:3f`는 소수 셋째 자리 반올림이 아니라 폭 지정이라 의도와도 다르다 |
 
-파이프라인에 넣은 환경 변수 부분은 다음과 같다.
+파이프라인에 넣은 환경 변수 부분이다.
 
 ```python
 promote = promote_model_to_staging(...).after(val).set_caching_options(False)
@@ -647,11 +672,11 @@ for task in (training, val, promote):
     task.set_env_variable('AWS_SECRET_ACCESS_KEY', 'minio123')
 ```
 
-실습 편의를 위해 키를 코드에 적었지만, 실제로는 `kfp.kubernetes.use_secret_as_env`로 Secret에서 읽어야 한다. 데이터 준비 컴포넌트에도 같은 키가 코드에 직접 들어 있다.
+실습 편의로 키를 코드에 적었지만, 실제로는 `kfp.kubernetes.use_secret_as_env`로 Secret에서 읽어야 한다. 데이터 준비 컴포넌트에도 같은 키가 코드에 박혀 있다.
 
 ### D-3. 학습률 두 가지로 실행 {#ch09-d-3}
 
-책의 표 9.1, 9.2처럼 학습률만 바꾼 실행 두 개를 만든다. 다른 사람의 실습과 겹치지 않게 MLflow 실험과 등록 모델 이름을 `ch09-recommender`로 지정했다. CPU에서 끝나도록 epoch는 책의 30 대신 10이다.
+책의 표 9.1, 9.2처럼 학습률만 바꾼 실행 두 개를 만든다. 다른 사람의 실습과 겹치지 않게 MLflow 실험과 등록 모델 이름은 `ch09-recommender`로 했다. CPU에서 끝나도록 epoch는 책의 30 대신 10이다.
 
 ```powershell
 cd upstream\movie-recommender-project
@@ -667,7 +692,7 @@ python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09
 python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09_training_pipeline.yaml --pipeline ch09-recommender-training --run ch09-rec-lr-0.01 --params "{$common,`"training_learning_rate`":0.01}"
 ```
 
-한 실행에 약 15~20분 걸렸다. 대부분은 학습과 검증 Pod가 실행할 때마다 `torch`를 `pip install`하는 시간이고, 학습 자체는 4~9분이었다.
+한 실행에 15~20분쯤 걸렸다. 학습 자체는 4~9분이고, 나머지는 학습과 검증 Pod가 매번 `torch`를 `pip install`하는 시간이다.
 
 ### D-4. 그래프와 로그 확인 {#ch09-d-4}
 
@@ -675,7 +700,7 @@ python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09
 
    ![ch09-rec-lr-0.001 실행 그래프. qa-training-data에서 promote-model-to-staging까지 모두 성공했다.](/images/ml-platform-engineering/sop/ch09-d-recommender-run-graph.png)
 
-2. `qa-training-data` 로그는 실제 열 이름과 타입을 보여 준다. 책 리스팅 9.10의 `user_id`, `item_id`가 아니다.
+2. `qa-training-data` 로그에 실제 열 이름과 타입이 찍힌다. 책 리스팅 9.10의 `user_id`, `item_id`와 다르다.
    ```text
    Running QA
    {'userId': dtype('int64'), 'movieId': dtype('int64'), 'rating': dtype('float64'), 'timestamp': dtype('int64')} (75627, 4)
@@ -685,7 +710,7 @@ python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09
 
    ![train-model 입력 파라미터. 학습률 0.001, 임베딩 20, 은닉 256, n_items 193609, n_users 610.](/images/ml-platform-engineering/sop/ch09-d-train-output.png)
 
-4. `validate-model`의 **Logs**에서 입력으로 받은 `model_run_id`와 계산한 지표를 본다. 학습 단계의 출력 문자열이 그대로 검증 단계의 입력이 됐다.
+4. `validate-model`의 **Logs**에서 입력으로 받은 `model_run_id`와 계산한 지표를 본다. 학습 단계가 출력한 문자열이 그대로 검증 단계의 입력이 된다.
 
    ![validate-model 로그. model_run_id 615d3f32...와 precision_50 0.8463, recall_50 0.9381, rms 0.2040.](/images/ml-platform-engineering/sop/ch09-d-validate-logs.png)
 
@@ -693,12 +718,12 @@ python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09
 
 ## E. MLflow 비교와 등록 {#ch09-e}
 
-지금 위치: 전체 그림의 ⑧, ⑨, ⑩이다.
+지금 위치는 전체 그림의 ⑧, ⑨, ⑩이다.
 
 ### E-1. 실행 비교 {#ch09-e-1}
 
-1. http://localhost:5000 에서 실험 `ch09-recommender`를 열면 run 두 개가 있다. 이름은 MLflow가 무작위로 붙였고, 파라미터의 `model_learning_rate`로 구분한다. `efficient-pug-796`이 0.001, `capable-mink-204`가 0.01이다.
-2. 목록 위의 차트 보기 버튼을 누르면 epoch별 손실과 검증 지표가 run별로 겹쳐 그려진다. 책의 그림 9.11에 해당한다. 두 run을 체크하고 **Compare**를 누르면 파라미터와 지표 표를 나란히 볼 수 있다.
+1. http://localhost:5000 에서 실험 `ch09-recommender`를 열면 run이 두 개 있다. 이름은 MLflow가 무작위로 붙였으니 파라미터 `model_learning_rate`로 구분한다. `efficient-pug-796`이 0.001, `capable-mink-204`가 0.01이다.
+2. 목록 위의 차트 보기 버튼을 누르면 epoch별 손실과 검증 지표가 run별로 겹쳐 그려진다. 책의 그림 9.11에 해당한다. 두 run을 체크하고 **Compare**를 누르면 파라미터와 지표를 표로 나란히 볼 수 있다.
 
    ![MLflow 차트 보기. 학습률 0.01 run의 학습, test 손실이 더 낮고 precision_50, recall_50, rms 막대가 run별로 표시된다.](/images/ml-platform-engineering/sop/ch09-e-mlflow-runs.png)
 
@@ -710,11 +735,11 @@ python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09
 | 마지막 epoch `avg_testing_loss`(L1) | 0.8694 | 0.8440 |
 | 학습 시간 | 8.6분 | 4.0분 |
 
-학습 시간 차이는 첫 실행이 탐지 파이프라인과 동시에 돌아 CPU를 나눠 쓴 탓이 크다. 지표만 보면 학습률 0.01이 모든 항목에서 조금 낫다. 이 숫자가 실제로 무엇을 말하는지는 F에서 다시 본다.
+학습 시간 차이는 첫 실행이 탐지 파이프라인과 동시에 돌면서 CPU를 나눠 쓴 탓이 크다. 지표만 보면 학습률 0.01이 모든 항목에서 조금씩 낫다. 이 숫자가 실제로 무엇을 말하는지는 F에서 다시 따진다.
 
 ### E-2. 모델 파일과 레지스트리 {#ch09-e-2}
 
-1. 모델 파일은 MLflow 서버가 아니라 S3에 있다. http://localhost:8888/buckets/mlflow-artifacts/ 에서 실험 ID 폴더(`2`) 아래 `models/m-.../artifacts/data/`를 열면 `model.pth`가 있다. 학습 Pod가 D-2에서 넣은 환경 변수로 직접 올린 파일이다. 16MB 중 대부분이 193,610행짜리 영화 임베딩이다.
+1. 모델 파일은 MLflow 서버가 아니라 S3에 있다. http://localhost:8888/buckets/mlflow-artifacts/ 에서 실험 ID 폴더(`2`) 아래 `models/m-.../artifacts/data/`를 열면 `model.pth`가 보인다. 학습 Pod가 D-2의 환경 변수로 직접 올린 파일이다. 16MB 중 대부분은 193,610행짜리 영화 임베딩이다.
 
    ![mlflow-artifacts/2/models/m-3d3e.../artifacts/data 폴더의 model.pth 16MB와 pickle_module_info.txt.](/images/ml-platform-engineering/sop/ch09-e-storage-model.png)
 
@@ -731,27 +756,27 @@ python ch09\submit.py upstream\movie-recommender-project\compiled_pipelines\ch09
    Created version '2' of model 'ch09-recommender'.
    registered ch09-recommender v2 as staging
    ```
-3. **Models**에서 `ch09-recommender`를 연다. 새 레지스트리 UI 안내 창이 뜨면 닫는다. Version 2에 `@ staging` 별칭이 붙어 있고, Version 1은 별칭이 없다. 별칭이 옮겨 갔을 뿐 v1은 그대로 남아 있으므로 되돌리려면 별칭만 다시 옮기면 된다.
+3. **Models**에서 `ch09-recommender`를 연다. 새 레지스트리 UI 안내 창이 뜨면 닫는다. Version 2에 `@ staging` 별칭이 붙어 있고 Version 1에는 별칭이 없다. 별칭만 옮겨 갔을 뿐 v1은 그대로 있으니, 되돌리려면 별칭을 다시 옮기면 된다.
 
    ![MLflow 등록 모델 ch09-recommender. Version 2에 staging 별칭, Version 1은 별칭 없음.](/images/ml-platform-engineering/sop/ch09-e-mlflow-registry.png)
 
-책 리스팅 9.17은 `prod` 별칭을 찾는다. 파이프라인은 `staging`까지만 옮기므로, 10장으로 넘어가기 전에 검토한 버전에 사람이 `prod`를 붙여야 한다. 이 실습에서는 F의 결과 때문에 `prod`를 붙이지 않았다.
+책 리스팅 9.17은 `prod` 별칭을 찾는다. 파이프라인은 `staging`까지만 옮기므로, 10장으로 가기 전에 검토한 버전에 사람이 `prod`를 붙여야 한다. 이번에는 F의 결과를 보고 `prod`를 붙이지 않았다.
 
 완료 기준: 등록 모델 `ch09-recommender`에 버전 두 개가 있고 `staging`이 v2를 가리킨다.
 
 ## F. 지표 다시 보기 {#ch09-f}
 
-지금 위치: 전체 그림의 ⑩이다. 등록된 모델을 PC로 내려받아, 파이프라인이 기록한 숫자를 서비스 관점의 지표와 기준선으로 다시 잰다.
+지금 위치는 전체 그림의 ⑩이다. 등록된 모델을 PC로 내려받아, 파이프라인이 기록한 숫자를 서비스 관점의 지표와 기준선으로 다시 잰다.
 
 ### F-1. 모델을 불러올 환경 {#ch09-f-1}
 
-학습 컴포넌트의 파이썬 버전을 따라야 한다. 컴파일한 YAML에서 `train-model`의 이미지가 `python:3.9`이고, MLflow는 모델 폴더의 `python_env.yaml`에 기록 당시의 파이썬 버전을 남긴다. 모델을 불러올 PC의 파이썬은 3.12였고, A-2 환경에서 `mlflow.pytorch.load_model`을 부르면 다음 오류가 난다. 경고 메시지로 학습 쪽 PyTorch가 `2.8.0+cpu`였다는 것도 확인했다.
+모델을 불러오는 쪽은 학습 컴포넌트의 파이썬 버전을 따라야 한다. 컴파일한 YAML에서 `train-model`의 이미지는 `python:3.9`이고, MLflow는 모델 폴더의 `python_env.yaml`에 기록 당시의 파이썬 버전을 남긴다. PC의 파이썬은 3.12였다. A-2 환경에서 `mlflow.pytorch.load_model`을 부르면 다음 오류가 나고, 함께 뜨는 경고에서 학습 쪽 PyTorch가 `2.8.0+cpu`였음을 알 수 있다.
 
 ```text
 TypeError: code() argument 13 must be str, not int
 ```
 
-학습 Pod와 같은 Python 3.9, PyTorch 2.8.0 환경을 따로 만든다. Windows에서는 `greenlet` 최신판이 Python 3.9용 바이너리가 없어 소스 빌드에 실패했으므로 버전을 고정했다.
+학습 Pod와 같은 Python 3.9, PyTorch 2.8.0 환경을 따로 만든다. Windows에서는 `greenlet` 최신판에 Python 3.9용 바이너리가 없어 소스 빌드가 실패하므로 버전을 고정했다.
 
 ```powershell
 uv venv .venv-ch09-py39 --python 3.9
@@ -760,7 +785,7 @@ uv pip install --python .venv-ch09-py39 torch==2.8.0 mlflow==3.0.0 greenlet==3.1
 
 ### F-2. 지표 다시 계산 {#ch09-f-2}
 
-`ch09\evaluate_recommender.py`는 세 가지를 계산한다. 저자 방식(배치 평균)과 평점별 RMSE, 보지 않은 영화 전체를 순위화한 Recall@10과 NDCG@10을 인기순 기준선과 함께, 그리고 무작위 분할이 가리는 정보다. 평점 4 이상인 `val` 영화를 "관련 있음"으로 봤다.
+`ch09\evaluate_recommender.py`는 세 가지를 계산한다. 첫째는 저자 방식(배치 평균)과 평점별 RMSE다. 둘째는 보지 않은 영화 전체를 순위화한 Recall@10과 NDCG@10으로, 인기순 기준선과 함께 낸다. 셋째는 무작위 분할이 가리는 정보다. 평점 4 이상인 `val` 영화를 "관련 있음"으로 봤다.
 
 ```python
 import os, sys
@@ -856,11 +881,13 @@ val items never seen in train: 635 rows, val users never seen in train: 0 rows
 | Recall@10(보지 않은 영화 전체) | 0.0002 | 0.0016 | 0.0990 |
 | NDCG@10 | 0.0006 | 0.0018 | 0.1224 |
 
-저자 방식의 `rms`는 배치를 섞는 순서에 따라 파이프라인 기록(0.2040, 0.1982)과 조금 다르지만 같은 크기다. 평점별로 재면 학습률 0.01 모델은 평균 평점을 그대로 예측하는 것과 같은 수준이고, 0.001 모델은 그보다 못하다. 추천 목록으로 보면 두 모델 모두 인기순보다 수십 배 낮다. 그런데도 E-2의 등록 판단은 두 번 모두 "등록"이었다. 파이프라인의 자동화는 제대로 동작했지만, **그 자동화가 믿은 숫자가 질문에 맞지 않았다.**
+저자 방식의 `rms`는 배치를 섞는 순서에 따라 파이프라인 기록(0.2040, 0.1982)과 조금 다르지만 크기는 같다. 평점별로 재면 학습률 0.01 모델은 평균 평점을 그대로 예측하는 것과 같은 수준이고, 0.001 모델은 그보다 못하다. 추천 목록으로 보면 두 모델 모두 인기순보다 수십 배 낮다.
+
+그런데도 E-2의 등록 판단은 두 번 다 "등록"이었다. 자동화 자체는 제대로 동작했다. **문제는 그 자동화가 믿은 숫자가 질문에 맞지 않았다는 데 있다.** 이 장에서 가장 오래 남는 장면이 이것이었다.
 
 ### F-3. 사용자 한 명의 추천 보기 {#ch09-f-3}
 
-책의 리스팅 9.17과 그림 9.12, 9.13처럼 별칭으로 모델을 찾아 한 사용자에게 추천해 본다. `ch09\recommend_user.py`는 리스팅 9.17을 줄인 것으로, 학습에서 본 영화를 빼고 점수 상위 10편과 그 사용자가 높게 평가한 영화를 함께 출력한다.
+책의 리스팅 9.17과 그림 9.12, 9.13처럼 별칭으로 모델을 찾아 한 사용자에게 추천해 본다. `ch09\recommend_user.py`는 리스팅 9.17을 줄인 것이다. 학습에서 본 영화를 빼고 점수 상위 10편을 뽑고, 그 사용자가 높게 평가한 영화도 함께 출력한다.
 
 ```python
 import os, sys
@@ -923,7 +950,7 @@ user 50 top-rated in train:
          Blade Runner (1982)     4.0
 ```
 
-고전 영화를 높게 평가한 사용자에게 평점이 거의 없는 영화들이 상위에 올랐다. 학습 데이터에 거의 등장하지 않은 영화의 임베딩이 초기값에 가까운 채 남아 점수가 우연히 높게 나온 결과로, [콜드 스타트](#cold-start)에서 설명한 현상이다. 책의 그림 9.12처럼 "그럴듯한" 결과가 나올지는 데이터 규모와 학습 길이에 크게 좌우되고, 사람이 결과를 직접 보는 확인이 지표만큼 중요하다는 책의 요약이 여기서 실감 난다.
+고전 영화를 높게 평가한 사용자에게 평점이 거의 없는 영화들이 올라왔다. 학습 데이터에 거의 나오지 않은 영화의 임베딩이 초기값 근처에 머물다 우연히 높은 점수를 받은 결과다. [콜드 스타트](#cold-start)에서 말한 현상이 그대로 보인다. 책의 그림 9.12처럼 그럴듯한 결과가 나올지는 데이터 규모와 학습 길이에 크게 달려 있다. 사람이 결과를 직접 보는 확인이 지표만큼 중요하다는 책의 요약이 여기서 실감 났다.
 
 완료 기준: 두 run의 평점별 RMSE, Recall@10, NDCG@10을 기준선과 함께 설명할 수 있다.
 
@@ -944,7 +971,7 @@ user 50 top-rated in train:
 | `Registered model alias prod not found` | 리스팅 9.17 | 파이프라인은 `staging`만 만든다 |
 | `TypeError: code() argument 13 must be str, not int` | 로컬 `load_model` | 학습 Pod와 파이썬 버전이 다르다. F-1의 Python 3.9 환경 |
 
-이번 실행에서 실제로 본 것은 캐시로 인한 `missing path`, `YOLO` import 오류, `Terminating`에 멈춘 PVC, 취소한 실행이 남긴 `Pending` PVC, `prod` 별칭 없음, 파이썬 버전 `TypeError`다. StorageClass 이름, TensorBoard의 빈 화면, QA 조건, S3 환경 변수, 첫 등록의 `NoneType` 오류는 실행 전에 고쳐서 직접 만나지 않았고, 코드와 서버 구성을 읽고 판단한 것이다.
+이번에 실제로 만난 것은 캐시로 인한 `missing path`, `YOLO` import 오류, `Terminating`에 멈춘 PVC, 취소한 실행이 남긴 `Pending` PVC, `prod` 별칭 없음, 파이썬 버전 `TypeError`다. StorageClass 이름, TensorBoard 빈 화면, QA 조건, S3 환경 변수, 첫 등록의 `NoneType` 오류는 미리 고쳐서 직접 겪지 않았다. 이 다섯은 코드와 서버 구성을 읽고 판단한 것이다.
 
 ### G-2. 정리 {#ch09-g-2}
 
@@ -963,6 +990,8 @@ user 50 top-rated in train:
 
 ## 마치며 {#closing}
 
-9장의 세 도구는 각각 다른 질문에 답한다. PVC는 "이 실행 동안 데이터를 어디에 두고 누가 읽는가", TensorBoard는 "이 학습 안에서 무슨 일이 있었는가", MLflow는 "어떤 조건의 실행이 어떤 결과를 냈고 지금 무엇을 쓰는가"다. 실제로 돌려 보면 연결은 생각보다 쉽게 끊긴다. 캐시는 PVC를 모르고, `DeletePVC`는 실패한 실행을 치우지 않으며, 등록 자동화는 지표가 틀려도 충실하게 등록한다. 다음 장은 `staging`과 `prod` 별칭으로 모델을 찾아 서빙하므로, 이번 장에서 남긴 run_id와 별칭이 그대로 배포 경로가 된다.
+9장의 세 도구는 서로 다른 질문에 답한다. PVC는 이 실행 동안 데이터를 어디에 두고 누가 읽는지를, TensorBoard는 한 번의 학습 안에서 무슨 일이 있었는지를 다룬다. MLflow는 어떤 조건의 실행이 어떤 결과를 냈고 지금 무엇을 쓰는지를 남긴다.
+
+막상 돌려 보니 이 연결은 생각보다 쉽게 끊겼다. 캐시는 PVC를 모르고, `DeletePVC`는 실패한 실행을 치우지 않는다. 등록 자동화는 지표가 틀려도 충실하게 등록한다. 다음 장은 `staging`과 `prod` 별칭으로 모델을 찾아 서빙한다. 이번 장에서 남긴 run_id와 별칭이 그대로 배포 경로가 되는 셈이다.
 
 [이전: 08. 학습과 검증 I](../08-training-and-validation-1/), [시리즈 목차](../), [다음: 10. 추론과 서빙](../10-inference-and-serving/)
