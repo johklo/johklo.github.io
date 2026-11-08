@@ -12,6 +12,18 @@ from urllib.parse import unquote, urljoin, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 SERIES_URL = "/docs/tech/machine-learning-platform-engineering/"
 SOURCE = ROOT / "content" / SERIES_URL.lstrip("/")
+PRACTICE_URL = f"{SERIES_URL}practice/"
+PRACTICE_PAGES = {
+    "04-experiments-features-pipelines": ("ch04-05", "book-lab-sop"),
+    "06-productionizing-models": ("ch06", "book-ch06-sop"),
+    "07-data-preparation": ("ch07", "book-ch07-sop"),
+    "08-training-and-validation-1": ("ch08", "book-ch08-sop"),
+    "09-training-and-validation-2": ("ch09", "book-ch09-sop"),
+    "10-inference-and-serving": ("ch10", "book-ch10-sop"),
+    "11-monitoring-and-explainability": ("ch11", "book-ch11-sop"),
+    "12-llm-powered-systems": ("ch12", "book-ch12-sop"),
+    "13-production-llm-systems": ("ch13", "book-ch13-sop"),
+}
 
 
 class PageLinks(HTMLParser):
@@ -132,13 +144,20 @@ class MLPlatformPublicationTest(unittest.TestCase):
             indexed.update(url for url in data if url.startswith(SERIES_URL))
         self.assertEqual(
             indexed,
-            {SERIES_URL, f"{SERIES_URL}lab-guide/"} | {
+            {SERIES_URL, f"{SERIES_URL}lab-guide/", PRACTICE_URL} | {
                 f"{SERIES_URL}{slug}/" for slug in self.visible
+            } | {
+                f"{PRACTICE_URL}{page}/" for page, _ in PRACTICE_PAGES.values()
             },
         )
 
     def test_chapters_explain_tools_within_the_sop_and_keep_legacy_redirects(self):
-        target = f"{SERIES_URL}04-experiments-features-pipelines/"
+        article = f"{SERIES_URL}04-experiments-features-pipelines/"
+        self.assertIn(
+            "book-lab-sop",
+            PageLinks(self.page_path(article).read_text(encoding="utf-8")).ids,
+        )
+        target = f"{PRACTICE_URL}ch04-05/"
         html = self.page_path(target).read_text(encoding="utf-8")
         document = PageLinks(html)
         self.assertIn("book-lab-sop", document.ids)
@@ -170,9 +189,9 @@ class MLPlatformPublicationTest(unittest.TestCase):
             self.assertIn(f"https://johklo.github.io{target}", legacy)
 
     def test_published_series_links_and_section_anchors_resolve(self):
-        pages = [SERIES_URL] + [
+        pages = [SERIES_URL, PRACTICE_URL] + [
             f"{SERIES_URL}{slug}/" for slug in sorted(self.visible)
-        ]
+        ] + [f"{PRACTICE_URL}{page}/" for page, _ in PRACTICE_PAGES.values()]
         for url in pages:
             document = self.page_path(url).read_text(encoding="utf-8")
             for href in PageLinks(document).links:
@@ -256,29 +275,21 @@ class MLPlatformPublicationTest(unittest.TestCase):
                         PageLinks(page.read_text(encoding="utf-8")).ids,
                     )
 
-    def test_book_explanations_keep_visible_practice_after_concepts(self):
-        for slug, anchor in (
-            ("04-experiments-features-pipelines", "book-lab-sop"),
-            ("06-productionizing-models", "book-ch06-sop"),
-            ("07-data-preparation", "book-ch07-sop"),
-            ("08-training-and-validation-1", "book-ch08-sop"),
-            ("09-training-and-validation-2", "book-ch09-sop"),
-            ("10-inference-and-serving", "book-ch10-sop"),
-            ("11-monitoring-and-explainability", "book-ch11-sop"),
-            ("12-llm-powered-systems", "book-ch12-sop"),
-            ("13-production-llm-systems", "book-ch13-sop"),
-        ):
+    def test_book_explanations_link_to_separate_practice_records(self):
+        for slug, (page, anchor) in PRACTICE_PAGES.items():
             with self.subTest(chapter=slug):
-                document = self.page_path(
-                    f"{SERIES_URL}{slug}/"
-                ).read_text(encoding="utf-8")
-                parsed = PageLinks(document)
+                article_url = f"{SERIES_URL}{slug}/"
+                practice_url = f"{PRACTICE_URL}{page}/"
+                article = self.page_path(article_url).read_text(encoding="utf-8")
+                parsed = PageLinks(article)
                 self.assertEqual(parsed.details, [])
                 self.assertIn(anchor, parsed.ids)
-                before, practice = re.split(
-                    rf'id="?{anchor}"?[\s>]', document, maxsplit=1
+                self.assertIn(practice_url, parsed.links)
+                self.assertNotRegex(
+                    article, r'<img[^>]+src="?/images/ml-platform-engineering/sop/'
                 )
-                self.assertGreaterEqual(len(re.findall(r"<h2\b", before)), 3)
+                practice = self.page_path(practice_url).read_text(encoding="utf-8")
+                self.assertIn(article_url, PageLinks(practice).links)
                 self.assertRegex(practice, r"<pre\b")
                 self.assertRegex(
                     practice, r'<img[^>]+src="?/images/ml-platform-engineering/sop/'
@@ -453,6 +464,10 @@ class MLPlatformPublicationTest(unittest.TestCase):
         for chapter, filenames in expected.items():
             slug = next(slug for slug, number in self.articles.items() if number == chapter)
             document = self.page_path(f"{SERIES_URL}{slug}/").read_text(encoding="utf-8")
+            if slug in PRACTICE_PAGES:
+                document += self.page_path(
+                    f"{PRACTICE_URL}{PRACTICE_PAGES[slug][0]}/"
+                ).read_text(encoding="utf-8")
             self.assertNotIn("직접 확인할 질문", document)
             self.assertNotIn("한 줄 정리:", document)
             for filename in filenames:
@@ -470,7 +485,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
 
     def test_cluster_instructions_publish_downloads_without_draft_status_messages(self):
         merged = f"{SERIES_URL}04-experiments-features-pipelines/"
-        chapter = self.page_path(merged).read_text(encoding="utf-8")
+        chapter = self.page_path(f"{PRACTICE_URL}ch04-05/").read_text(encoding="utf-8")
         for filename in (
             "Dockerfile", "submit_cluster.py",
             "object-store-patch.yaml", "executor-patch.yaml",
@@ -478,7 +493,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
             url = f"/downloads/ml-platform-engineering/kfp-cluster/{filename}"
             self.assertIn(url, chapter)
             self.assertTrue(self.page_path(url).is_file())
-        for url in (SERIES_URL, merged):
+        for url in (SERIES_URL, merged, f"{PRACTICE_URL}ch04-05/"):
             document = self.page_path(url).read_text(encoding="utf-8")
             self.assertNotIn("6장 이후", document)
             self.assertNotIn("초안입니다", document)
@@ -490,12 +505,15 @@ class MLPlatformPublicationTest(unittest.TestCase):
             document,
             r"<h1\b[^>]*>\s*04~05\. 실험, 피처, 파이프라인 연결하기",
         )
-        self.assertGreaterEqual(PageLinks(document).mermaid_blocks, 5)
+        practice = self.page_path(f"{PRACTICE_URL}ch04-05/").read_text(encoding="utf-8")
+        self.assertGreaterEqual(
+            PageLinks(document).mermaid_blocks + PageLinks(practice).mermaid_blocks, 5
+        )
         for term in (
             "minio-service", "mlflow-artifacts", "inference-datasets",
             "PostgreSQL", "Redis", "SeaweedFS",
         ):
-            self.assertIn(term, document)
+            self.assertIn(term, document + practice)
         for old in ("04-experiments-and-features", "05-ml-pipelines"):
             redirect = self.page_path(f"{SERIES_URL}{old}/").read_text(encoding="utf-8")
             self.assertIn(f"https://johklo.github.io{merged}", redirect)

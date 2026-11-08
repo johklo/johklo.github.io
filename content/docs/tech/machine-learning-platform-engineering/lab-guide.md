@@ -481,7 +481,7 @@ redis-deployment-master-68886f9c8f-mtjxh   1/1     Running   0          89m
 
 **브라우저 C.** `http://127.0.0.1:8080`을 연다. 왼쪽에 Pipelines, Experiments, Runs 메뉴가 보이면 KFP UI가 준비된 것이다. 5장의 실행 그래프가 이 화면에 나타난다. 화면이 비어 있으면 `ml-pipeline` Pod가 `Running`인지 다시 본다.
 
-책 4~5장의 원본 노트북 실습은 [4~5장 환경 설명](/docs/tech/machine-learning-platform-engineering/04-experiments-features-pipelines/#book-lab-sop)을 따른다. 이 가이드는 같은 클러스터에서 독립 구현 파이프라인을 돌린다.
+책 4~5장의 원본 노트북 실습은 [4~5장 환경 설명](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)을 따른다. 이 가이드는 같은 클러스터에서 독립 구현 파이프라인을 돌린다.
 
 **완료 확인**
 
@@ -491,7 +491,7 @@ redis-deployment-master-68886f9c8f-mtjxh   1/1     Running   0          89m
 
 ## 4장. 실험, 평가와 등록을 연결한다 {#chapter-04}
 
-책은 이 장에서 소득 분류 모델을 다룬다. 여기서는 그 대신 작은 추천 데이터로 같은 일을 해 본다. 실험을 기록하고, 평가를 통과한 후보만 등록하고, 피처를 시점에 맞게 꺼내는 일이다. 소득 분류 원본은 [4~5장 실행 참조](/docs/tech/machine-learning-platform-engineering/04-experiments-features-pipelines/#book-lab-sop)에 따로 정리했다.
+책은 이 장에서 소득 분류 모델을 다룬다. 여기서는 그 대신 작은 추천 데이터로 같은 일을 해 본다. 실험을 기록하고, 평가를 통과한 후보만 등록하고, 피처를 시점에 맞게 꺼내는 일이다. 소득 분류 원본은 [4~5장 실행 참조](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)에 따로 정리했다.
 
 ### 4-1. 평점 데이터를 준비한다
 
@@ -2172,7 +2172,7 @@ DeepEval의 의미 평가와 Langfuse 외부 추적은 [별도 연결 절차](/d
 | 준비, 1장 | 도구 버전 확인, uv 환경 4개 `uv sync --locked`, CLI 실행 | winget 설치 명령과 `git clone`은 이미 설치된 도구와 같은 커밋의 기존 사본으로 대신했다 |
 | 2장 | `smoke`의 세 프로젝트 학습, 평가, 등록 | 조직별 책임과 운영 승인 체계 |
 | 3장 | Docker 엔진, kind, kubectl, `bookenv.py check`, `status`, 포트포워딩된 KFP 접속 | `bookenv.py up`은 같은 스크립트로 미리 만든 클러스터를 재사용해 다시 실행하지 않았다. 전체 Kubeflow, Notebooks |
-| 4장 | 추천 학습, 평가, 거절, 등록, MLflow 화면, 실제 Feast 정의 등록, 과거 조회, 적재 전후 온라인 조회 | 책의 소득 분류 노트북(별도 [실행 참조](/docs/tech/machine-learning-platform-engineering/04-experiments-features-pipelines/#book-lab-sop)), Redis 온라인 저장소 |
+| 4장 | 추천 학습, 평가, 거절, 등록, MLflow 화면, 실제 Feast 정의 등록, 과거 조회, 적재 전후 온라인 조회 | 책의 소득 분류 노트북(별도 [실행 참조](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)), Redis 온라인 저장소 |
 | 5장 | KFP 컴파일, 컴포넌트 본문 검사, 이미지 빌드, `kind load`, KFP 2.4.1 클러스터 run 성공과 그래프, 지표, 로그 | 컴포넌트에서 클러스터 MLflow와 S3로 기록하는 구성, GitLab CI와 Argo CD 전체 경로 |
 | 6장 | FastAPI 개인화와 콜드스타트 응답, BentoML 가져오기, Bento 생성, HTTP 응답(포트 3010) | `bentoml containerize`, Yatai 또는 선택 배포 관리자의 클러스터 출시 |
 | 7~9장 | 합성 카드와 MovieLens 가져오기, 색상 기준선, CPU YOLO 10 epoch 학습과 평가, 등록, 비전 재로딩 테스트, 검증 기반 추천 후보 선택과 등록 | 원본 데이터 전체, 책의 학습 알고리즘과 대규모 처리, 표준 mAP 기반 정책 |
