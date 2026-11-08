@@ -2,7 +2,7 @@
 title: "02. Gmail Smart Compose"
 description: "Designing inline email autocomplete in depth: requirements that shape the design, a small decoder-only Transformer, subword tokenization, two-stage training, beam search inside a 100 ms budget, evaluation, and the trigger, generate, filter and rewrite serving path."
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 20
 draft: false
 tags: ["book-club", "genai-system-design", "language-models", "text-generation", "beam-search"]
@@ -12,7 +12,9 @@ Smart Compose is the grey ghost text that appears after the cursor while someone
 
 The central tension is coverage against precision under a hard latency ceiling. Suggest too rarely and nobody notices the feature. Suggest too eagerly and users learn to ignore grey text, or accept something that assumes the wrong gender. Model size, beam width and the confidence threshold are all ways of moving along that curve.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Listing requirements is easy. The useful skill is saying what each one does to the architecture.
 
@@ -32,7 +34,7 @@ Listing requirements is easy. The useful skill is saying what each one does to t
 | No biased assumptions | Rule-based rewrite on outputs plus offline audits |
 | English, body-only first | One subword vocabulary; prompt template with slots for later context |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input: the text typed so far plus allowed context. Output: a short continuation of one to six words, or nothing. This is conditional text generation trained with next-token prediction, learning \(P(x_t \mid x_{<t})\) and decoding a likely continuation.
 
@@ -48,7 +50,7 @@ Recurrent networks (LSTM, GRU) are cheap per generated token because their state
 
 Decoder-only wins because the output is literally the continuation of the input. One subtlety: the model emits subword tokens while the product shows whole words, so decoding must stop on word boundaries.
 
-## Data
+## 3. Data preparation
 
 ### Sources and cleaning
 
@@ -92,7 +94,9 @@ flowchart LR
 
 Pitfalls worth naming: splitting train and test by message rather than by user or thread leaks near-identical text and inflates offline scores; one coarse `<ENTITY>` placeholder teaches nothing about which slot follows "Call me at"; and overly aggressive cleaning deletes the short informal replies you want to learn.
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 A latency-sized decoder: 8 to 12 layers, width 512 to 768, 8 to 12 heads, a 256 to 512 token window. That is 40M to 120M parameters, a few milliseconds per forward pass on one accelerator.
 
@@ -115,7 +119,7 @@ flowchart TB
   LOG --> SM["Softmax: next-token distribution"]
 ```
 
-### Embeddings and positions
+#### Embeddings and positions
 
 Each token ID selects a row of a learned matrix \(E \in \mathbb{R}^{V \times d}\). Tokens used in similar contexts drift toward similar vectors, which is why the model generalizes from "see you Friday" to "see you Thursday".
 
@@ -127,7 +131,7 @@ $$
 
 \(p\) is the position, \(i\) indexes dimension pairs and \(d\) is model width; each position gets a unique pattern and a fixed offset corresponds to a fixed rotation. Fixed encodings add no parameters and exist for any length; learned tables can fit slightly better but have nothing for positions beyond training. Modern models mostly use rotary embeddings ([RoPE](https://arxiv.org/abs/2104.09864)), which rotate queries and keys so scores depend on relative distance. At 256 tokens any of them works; I would pick RoPE because it suits KV caching.
 
-### Causal self-attention
+#### Causal self-attention
 
 $$
 \mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}} + M\right)V
@@ -135,15 +139,15 @@ $$
 
 \(Q\), \(K\), \(V\) are linear projections of the layer input; \(d_k\) is the per-head key size, and dividing by its square root keeps the softmax from saturating. \(M\) is the causal mask, zero for earlier or equal positions and \(-\infty\) for later ones. Multiple heads run in parallel on slices of the width, so different heads can track the greeting name, the tense or an open parenthesis. The mask is also what makes training efficient: one pass over \(T\) tokens yields \(T\) next-token predictions.
 
-### Rest of the block and the knobs
+#### Rest of the block and the knobs
 
 Each position then goes through a two-layer MLP about four times wider than the model (GELU or SwiGLU), which holds most parameters and much of the phrase knowledge. Pre-layer-norm and residual connections keep the stack stable. The output projection reuses the embedding matrix (weight tying), saving \(V \times d\) parameters.
 
 The knobs trade quality against latency in predictable ways. More layers and width improve quality but every decode step gets slower. A longer window lets the model use thread context but raises prefill time and cache memory. A bigger vocabulary shortens sequences but enlarges the softmax and leaves rare tokens undertrained. Fewer key-value heads (grouped-query or multi-query attention) shrink the KV cache, which turns out to be the binding resource in serving.
 
-## Training
+### Training
 
-### Objective
+#### Objective
 
 Both stages minimize the same loss over a sequence \(x_1, \dots, x_T\):
 
@@ -155,7 +159,7 @@ $$
 
 Two alternatives come up. Masked language modeling predicts hidden tokens from both sides; it builds strong representations but not a left-to-right generator. [Multi-token prediction](https://arxiv.org/abs/2404.19737) adds heads that predict several future tokens from one hidden state; it can improve sample efficiency and enables self-speculative decoding, which is attractive for a product emitting a few tokens per call.
 
-### Two stages and the prompt template
+#### Two stages and the prompt template
 
 ```mermaid
 flowchart LR
@@ -182,11 +186,11 @@ To use context beyond the body, each training example becomes one tagged sequenc
 
 Loss is applied only to body tokens, since the model never generates the subject. Optional fields are dropped at random during training so the model copes with drafts that lack a subject or thread. At serving time the same template is filled from the compose window, which is how a name appears after "Hi".
 
-### Efficiency
+#### Efficiency
 
 At this size the model fits on one device, so plain data parallelism with sharded optimizer state (ZeRO style) is enough; tensor and pipeline parallelism are unnecessary. bf16 mixed precision roughly halves memory and doubles matmul throughput without loss scaling. Sequence packing removes padding waste, and fused attention kernels cut memory traffic. Activation checkpointing only becomes worthwhile if the window grows to hold long threads.
 
-### Worked example: training compute
+#### Worked example: training compute
 
 Use the rule of thumb of about \(6ND\) FLOPs, with \(N\) parameters and \(D\) tokens.
 
@@ -197,7 +201,7 @@ Use the rule of thumb of about \(6ND\) FLOPs, with \(N\) parameters and \(D\) to
 
 Training is cheap. Serving is where the money goes, which is why the rest of the design is about inference.
 
-### Failure modes
+#### Failure modes
 
 - Suggestions sound like newsletters: templates survived dedup. Tighten near-duplicate removal and cap per-sender contribution.
 - The model regurgitates rare strings: memorization. Improve scrubbing, run canary extraction tests, consider DP-SGD for finetuning.
@@ -205,7 +209,7 @@ Training is cheap. Serving is where the money goes, which is why the rest of the
 - Good loss but weak suggestions on short drafts: training rarely saw short prefixes or empty fields. Sample short prefixes and use field dropout.
 - Loss spikes: warmup, gradient clipping, bf16, and logging and skipping bad shards.
 
-## Inference and decoding
+### Decoding
 
 The product wants the single most likely short continuation, identical every time for the same text.
 
@@ -231,7 +235,7 @@ The score doubles as confidence. Raw joint probability shrinks with length, so s
 
 For mid-word cursors, mask any first token whose text does not begin with the remaining typed characters, which prevents outputs like "Thank yoyou".
 
-## Evaluation
+## 5. Evaluation
 
 ### Offline
 
@@ -283,7 +287,7 @@ flowchart LR
   NEXT --> NEW
 ```
 
-## Serving system
+## 6. Overall ML system design
 
 Three services surround the model, and much of the product quality lives in them.
 
@@ -371,6 +375,14 @@ The leading 2 counts keys and values, \(L\) is layers, \(h_{kv}\) key-value head
 | Prefix result cache | Instant for common openers | Cheap | Key must include context fields |
 | Cascade: n-gram or tiny model first | Very fast on easy cases | Cheaper | Router must know when to escalate |
 | Cancel stale requests | Frees capacity | Avoids wasted work | None |
+
+## 7. Deployment and monitoring
+
+### Rollout and feedback
+
+A new model, distilled student or threshold ships behind a version flag. It first runs in shadow on a slice of traffic: candidates are generated, filtered and logged but never shown, so latency, filter pass rate and safety-block rate can be compared with production before any user sees a change. It then moves to a canary of about 1 percent of users per locale and widens only if acceptance stays within a point of the control, coverage does not fall, and p99 latency stays inside the 100 ms budget. Thresholds are set per locale at this stage because calibration differs between languages.
+
+Accept, reject and ignore events are the feedback signal, logged with model version and trigger features and with draft text kept only as far as the privacy policy allows. They retrain the trigger classifier and recalibrate the confidence threshold often, since both are cheap. The language model is refreshed on a slower schedule, or sooner when acceptance on recent mail declines for several weeks or perplexity on a fresh held-out slice rises because of new names and topics.
 
 ### Safety and monitoring
 

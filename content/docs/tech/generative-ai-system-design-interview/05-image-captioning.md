@@ -2,7 +2,7 @@
 title: "05. Image Captioning for Asset Names"
 description: "Deep-dive notes on an image captioner that suggests short asset file names: ViT encoder plus pretrained text decoder, CLIP-based data filtering, staged training, beam search with a confidence gate, CIDEr and CLIPScore, and a sized serving path"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 50
 draft: false
 tags: ["book-club", "genai-system-design", "multimodal", "image-captioning", "vision-transformer"]
@@ -11,7 +11,9 @@ The product looks small. A designer drops an image into a shared asset library a
 
 Generating a sentence is not the hard part; any modern vision-language model can do it. The hard part is the tension between specific and safe. A name that mentions object, color and style is far more useful than "image", but each extra word is another chance to be wrong, to describe a person in a biased way, or to be offensive. For a suggestion that appears unasked in someone's file browser, a confident wrong name costs more than no name. So the design has two halves of equal weight: a model that writes short, accurate captions, and a policy layer that decides when to stay quiet.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 **Functional.**
 
@@ -37,7 +39,7 @@ Generating a sentence is not the hard part; any modern vision-language model can
 | No offensive or biased names | Neutral rewriting and blocklist after generation; curated people labels in data |
 | Noisy web pairs | Language ID, dedup, CLIP-score filtering before training |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input is an RGB image, output is a short English token sequence. The model learns a conditional distribution and factorizes it left to right:
 
@@ -60,7 +62,7 @@ A large VLM still earns a place offline, as a caption rewriter and as a distilla
 
 **CNN or ViT.** A CNN builds features from local windows and relates distant regions only after many layers. A [Vision Transformer](https://arxiv.org/abs/2010.11929) cuts the image into patches and lets every patch attend to every other from layer one. CNN locality priors make them data-efficient; ViTs scale better with data and pretraining. With hundreds of millions of pairs and strong pretrained ViTs (CLIP, SigLIP, DINOv2), ViT is the default. A CNN or ConvNeXt hybrid wins on small devices or tiny datasets.
 
-## Data
+## 3. Data preparation
 
 Sources, roughly from noisiest to closest to the target: scraped web pairs (alt text, nearby text), public sets such as COCO and Conceptual Captions (clean, good for validation), names designers typed for their own assets (on-distribution but needs consent, and many are "final_v2_REAL"), and synthetic captions from a large VLM rewritten into file-name style.
 
@@ -118,7 +120,9 @@ CLIP scoring runs on the 163M pairs left after dedup. A ViT-B/16 image forward i
 - Alt text often describes people by appearance or gender. Neutralize it before training rather than relying on the output filter.
 - Captions from one teacher model narrow the vocabulary. Mix in human captions.
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 ```mermaid
 flowchart TB
@@ -137,7 +141,7 @@ flowchart TB
     K --> L["Next token"]
 ```
 
-### Encoder
+#### Encoder
 
 An image of \(224 \times 224\) with patch size \(P = 16\) gives \(N = (224/16)^2 = 196\) patches of \(16 \times 16 \times 3 = 768\) values each. Each flattened patch is projected and tagged with its position:
 
@@ -155,7 +159,7 @@ $$
 
 \(Q, K, V\) are linear projections of the token matrix and \(d_k\) is the head dimension. The encoder uses no mask, so every patch sees every other.
 
-### Bridge and decoder
+#### Bridge and decoder
 
 The encoder and decoder widths differ, so a bridge maps between them. Options: a linear or 2-layer MLP on every patch (LLaVA style, keeps 196 tokens), a resampler or Q-Former where 32 learned queries cross-attend over patches ([BLIP-2](https://arxiv.org/abs/2301.12597), about six times fewer tokens), or a pooled vector mapped to a single prefix token (ClipCap style, cheapest and weakest on detail).
 
@@ -163,7 +167,7 @@ The decoder conditions on the image in one of two ways. **Prefix:** image tokens
 
 Other knobs: raising resolution from 224 to 448 helps small objects and text but quadruples patch count; larger patches do the opposite; ViT-L over ViT-B helps rare objects at about 3x encoder cost; decoder size beyond a few hundred million parameters buys little for 3 to 8 word outputs.
 
-## Training
+### Training
 
 ```mermaid
 flowchart LR
@@ -203,7 +207,7 @@ where \(y^{s}\) is a sampled caption, \(\hat{y}\) the greedy caption and \(r\) t
 
 **Efficiency.** bf16 mixed precision with fp32 master weights; data parallelism with sharded optimizer state (FSDP or ZeRO), since the model is too small to need tensor parallelism; activation checkpointing in the encoder when training at 384 or above; many CPU loader workers per GPU because JPEG decoding is the usual bottleneck.
 
-### Worked example: training compute
+#### Worked example: training compute
 
 ViT-B/16 encoder (86M parameters, 197 tokens) and a 124M decoder seeing 32 image plus 16 text tokens. Using about 6 FLOPs per parameter per token for forward plus backward:
 
@@ -222,7 +226,7 @@ Two epochs over 79M pairs is 158M samples, so \(1.4 \times 10^{11} \times 1.58 \
 | Loss falls, CIDEr flat | Overfitting to teacher style | Mix sources; early stop on CIDEr and CLIPScore |
 | Overconfident wrong names | Poor calibration | Label smoothing; temperature scaling before setting the gate |
 
-## Inference and decoding
+### Sampling and decoding
 
 There is no reference prefix at inference, so the model feeds back its own tokens. Greedy decoding takes the argmax each step and can lock in an early mistake. Beam search keeps the \(B\) best partial sequences and approximates the most probable full caption. Top-k and top-p sampling add variety, which a file name does not want. Diverse beam search adds a dissimilarity penalty between beam groups, useful only if the UI shows alternatives.
 
@@ -244,7 +248,7 @@ $$
 
 Other knobs: max length 16, min length 2, 2-gram blocking against repetition, and forbidden token ids set to \(-\infty\) as a cheap first safety layer.
 
-## Evaluation
+## 5. Evaluation
 
 The offline set has about five human references per image, stratified over photos, illustrations, icons and images of people. One image has many correct names, so a single reference punishes valid answers.
 
@@ -295,7 +299,7 @@ flowchart LR
     H --> A
 ```
 
-## Serving system
+## 6. Overall ML system design
 
 ```mermaid
 flowchart TB
@@ -365,6 +369,12 @@ Fleet at 50M uploads per day: \(50\text{M} / 86{,}400 \approx 580\) QPS average,
 | Small-then-large cascade | Down on average | Down | Two thresholds to calibrate |
 
 Speculative decoding is not worth its complexity for outputs of a dozen tokens.
+
+## 7. Deployment and monitoring
+
+A new captioner ships as a new registry version together with its preprocessing library version and its threshold \(\tau\), since quantization or a new decoder shifts the score scale. Before any user sees it, a fixed canary set of images runs through the serving path and must reproduce the offline captions and scores, which catches preprocessing mismatches. The model then runs in shadow on live uploads, writing names that are logged but not shown, so suppression rate, CLIPScore and blocklist hits can be compared with production. A small share of workspaces then gets its suggestions, and rollout widens if acceptance and rename rates hold. The pHash cache key includes the model version, so a rollback serves the old names without a cache flush.
+
+The feedback signal is what designers do with a shown name: keep it, edit it, or replace it. Kept names become positive pairs, edited names give corrected targets after the same safety and PII filters as the training data, and reports go to human review. A rising edit rate for one asset type, such as screenshots or icons, points to a gap in the training mix and triggers targeted data collection before a finetuning run.
 
 **Monitoring.** Per-stage latency, suppression rate and mean confidence (a sudden shift usually means a preprocessing mismatch or a new upload type), CLIP embedding drift, blocklist hits and reports, plus a kill switch.
 

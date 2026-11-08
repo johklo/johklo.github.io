@@ -2,7 +2,7 @@
 title: "03. Google Translate"
 description: "A translation service built on encoder-decoder Transformers: requirements, cross-lingual BPE, denoising pretraining, bilingual versus multilingual finetuning, beam search, BLEU and its successors, serving estimates and interview questions."
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 30
 draft: false
 tags: ["book-club", "genai-system-design", "machine-translation", "encoder-decoder", "evaluation-metrics"]
@@ -14,7 +14,9 @@ Unlike autocomplete or chat, the whole source is available before any output is 
 
 The core tension is per-pair quality against the cost of owning many models. Every direction wants the best accuracy, but each extra model is another thing to train, evaluate, deploy and monitor. How many languages you support and how much parallel data each pair has decide where you land.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Language count is the biggest lever: four languages give 12 directed pairs, fifty give 2,450. Whether the source is detected matters because detector mistakes become translation mistakes, and streaming would change the encoder entirely. Assumed setup for the rest of this note: English, Spanish, French and Korean; about 300 million aligned pairs; plenty of monolingual text; automatic detection; inputs up to about 1,000 words; cloud serving; no streaming in v1.
 
@@ -28,7 +30,7 @@ Language count is the biggest lever: four languages give 12 directed pairs, fift
 | Deployment | Cloud GPU | Beam search affordable; fp16 or int8 inference |
 | Real time | No | Fully bidirectional encoder, no wait-k policy |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input: source tokens plus a target-language identifier. Output: target tokens whose length is not tied to the input length. This is sequence-to-sequence generation, trained to maximize
 
@@ -48,7 +50,7 @@ where \(x\) is the full source sequence, \(y_t\) the target token at step \(t\),
 
 Attention was invented for translation ([Bahdanau et al., 2014](https://arxiv.org/abs/1409.0473)) so a recurrent decoder would not have to squeeze the source into one vector. The Transformer ([Vaswani et al., 2017](https://arxiv.org/abs/1706.03762)) kept attention, dropped recurrence and made training parallel.
 
-## Data
+## 3. Data preparation
 
 ### Sources
 
@@ -104,7 +106,9 @@ flowchart LR
   SH --> EV[("Held-out eval sets")]
 ```
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 ```mermaid
 flowchart TB
@@ -145,7 +149,7 @@ Blocks add residuals, layer norm and a feed-forward layer; only the decoder has 
 - **Size.** Transformer-base (~65M params) is a solid bilingual baseline; with 300M pairs, a "big" model or a 400-600M pretrained checkpoint is justified.
 - **Length.** 1,000 words is roughly 1,300 to 2,000 subwords, fine for full attention. You still split by sentence to batch efficiently, carrying one or two previous sentences as context.
 
-## Training
+### Training
 
 ```mermaid
 flowchart LR
@@ -164,7 +168,7 @@ flowchart LR
   EVAL --> KD["Distill to serving model"]
 ```
 
-### Stage 1: denoising pretraining
+#### Stage 1: denoising pretraining
 
 Next-token prediction on monolingual text fails for an encoder-decoder: if the encoder sees the sentence the decoder must produce, cross-attention just copies it. So the encoder input is corrupted and the decoder must recover the original. T5 masks spans and predicts only them ([Raffel et al., 2019](https://arxiv.org/abs/1910.10683)); BART and mBART mask spans, shuffle sentences and reconstruct everything ([Lewis et al., 2019](https://arxiv.org/abs/1910.13461); [Liu et al., 2020](https://arxiv.org/abs/2001.08210)).
 
@@ -174,7 +178,7 @@ $$
 
 \(\tilde{x}\) is the corrupted encoder input, \(x_t\) an original token, and \(\mathcal{S}\) the positions the loss counts (masked spans for T5, the whole sequence for BART). Pretraining from scratch costs thousands of GPU-days, so for four languages start from mT5 or mBART-50.
 
-### Stage 2: supervised finetuning
+#### Stage 2: supervised finetuning
 
 The encoder reads the source; the decoder gets the reference shifted right behind a start token (teacher forcing) and predicts every next token in parallel, usually with label smoothing:
 
@@ -184,7 +188,7 @@ $$
 
 \(V\) is the vocabulary, \(y_t\) the reference token and \(\epsilon\) (typically 0.1) the probability mass spread evenly. Smoothing slightly raises perplexity but improves BLEU, because an overconfident model makes beam search worse. The target language is signaled with a tag such as `<2ko>` on the source or as the decoder start token.
 
-### Bilingual or multilingual
+#### Bilingual or multilingual
 
 | Criterion | Bilingual per direction | One multilingual model | English pivot |
 |---|---|---|---|
@@ -201,20 +205,20 @@ Four languages, plenty of data and an accuracy priority justify bilingual models
 
 **Efficiency.** bf16 mixed precision, token-budget batching by length, sharded data parallelism (enough below a billion parameters), gradient checkpointing for long documents, checkpoint averaging.
 
-### Worked example: finetuning compute
+#### Worked example: finetuning compute
 
 A 400M-parameter model, 300M pairs over 12 directions, so 25M pairs per direction at about 65 tokens per pair (30 source, 35 target): \(1.6 \times 10^9\) tokens per epoch.
 
 Using \(6ND\): \(6 \times 4 \times 10^8 \times 1.6 \times 10^9 \approx 3.9 \times 10^{18}\) FLOPs. This overestimates an encoder-decoder, since a source token only passes through the encoder, but serves as an upper bound. An A100 at 40% of 312 TFLOP/s gives \(1.25 \times 10^{14}\) FLOP/s, so one epoch takes about 31,000 s, or 9 GPU-hours. Three epochs for 12 directions is \(9 \times 3 \times 12 \approx 320\) GPU-hours, under two days on one 8-GPU node. Finetuning is cheap; pretraining is what the checkpoint saves you.
 
-### Failure modes
+#### Failure modes
 
 - **Hallucination** (fluent text unrelated to the source) from noisy pairs or out-of-domain input: stricter alignment filtering, copy-style training examples for numbers and code.
 - **Echoing the source** from untranslated pairs: filter identical pairs.
 - **Off-target language** in multilingual models: stronger language tags, more direct non-English data, output language check.
 - **Overfitting small pairs**: early stopping, dropout, more back-translation.
 
-## Decoding
+### Decoding
 
 The encoder runs once; the decoder generates step by step until end-of-sequence or a length cap such as 1.5 times the source length. Translation usually has one right meaning, so the goal is the most probable faithful output.
 
@@ -236,7 +240,7 @@ $$
 
 Constrained decoding forces glossary terms into the beam; a `<formal>` tag controls register.
 
-## Evaluation
+## 5. Evaluation
 
 ### Offline metrics
 
@@ -275,7 +279,7 @@ Launch decisions rest on human judgment: adequacy and fluency scores or MQM-styl
 
 Online, track ratings, suggested edits, copy rate, re-translation rate, retention and per-pair latency. Implicit signals are noisy (people copy bad output they cannot judge), so use them for A/B trends, not ground truth.
 
-## Serving system
+## 6. Overall ML system design
 
 ```mermaid
 flowchart TB
@@ -350,6 +354,14 @@ A small encoder-only Transformer with mean-pooled outputs and a softmax over lan
 ### Worked example: memory for a long input
 
 A 12-layer decoder, width 1,024, fp16: keys plus values per token per layer are \(2 \times 1{,}024 \times 2 = 4{,}096\) bytes, about 49 KB across layers. A 1,500-token source costs \(1{,}500 \times 49\) KB \(\approx 74\) MB of cross-attention cache, shared by beams. A 1,500-token output with beam 4 costs \(4 \times 1{,}500 \times 49\) KB \(\approx 295\) MB. About 370 MB per long document, so thirty concurrent long documents take around 11 GB. Long inputs belong in their own queue so they do not inflate p99 for short ones.
+
+## 7. Deployment and monitoring
+
+### Rollout per language pair
+
+Each pair model has its own version in the registry and its own route, so a release is a routing change for one direction at a time. A candidate first translates mirrored live traffic in shadow; its outputs are compared with production using COMET and a QE model, and a sample of disagreements goes to bilingual raters. It then serves a few percent of users for that pair, and the gate checks re-translation rate, copy rate, suggested edits and p99 latency against the control. Low-resource pairs get a longer canary because their online signals are sparser. Rolling back means pointing the router at the previous version, which leaves the other pairs untouched.
+
+Suggested edits and low-QE requests are the feedback that feeds retraining. Edits enter a review queue as described in the operations questions below; low-scoring sources are sampled into the next round of human translation or back-translation for that domain. A sustained drop in QE score for one pair, or a shift in the detected-language mix, triggers a data refresh for that pair rather than a full retrain.
 
 ### Safety and monitoring
 

@@ -2,7 +2,7 @@
 title: "07. Realistic Face Generation with GANs"
 description: "A deep dive on designing an unconditional 1024px face generator: why a StyleGAN-style GAN fits a sub-second budget, data curation and fairness, adversarial training math and stabilizers, truncation and latent editing, FID and its blind spots, and a serving stack with cost estimates"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 70
 draft: false
 tags: ["book-club", "genai-system-design", "gan", "image-generation", "computer-vision"]
@@ -11,7 +11,9 @@ The product returns a photorealistic 1024x1024 portrait of a person who does not
 
 The tension: the families that train calmly and cover a distribution best (diffusion, autoregressive) need many sequential network passes per image, while the one that renders a megapixel in a single pass (the GAN) trains through an unstable two-player game and drops rare modes, exactly where fairness problems live. This design takes the GAN for speed and its editable latent, then spends its effort on stable training, honest coverage measurement and release gates.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Functionally, the input is just "give me a face", so all variation comes from a random latent, which becomes the real product interface. The domain is aligned faces at 1024x1024, narrow enough for a 30M-parameter generator. Attribute control (age, smile, pose with identity fixed) may follow and needs a latent where directions mean something. The demographic mix of outputs is a requirement in its own right.
 
@@ -26,7 +28,7 @@ Non-functionally: under one second end to end, about 70k licensed and consented 
 | No identity leakage | Deduplication, memorization checks before release |
 | Abuse resistance | Watermark, provenance metadata, rate limits |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input: \( z \in \mathbb{R}^{512} \sim \mathcal{N}(0, I) \), plus optional attribute targets later. Output: a 3x1024x1024 tensor in \([-1, 1]\). The task is unconditional generative modeling: learn \( p_\theta(x) \approx p_{data}(x) \) and sample it cheaply.
 
@@ -55,7 +57,7 @@ An **autoregressive** model tokenizes the image (say, a VQ-VAE 64x64 code grid) 
 
 The GAN wins because one-pass latency and an editable latent both point at it, and the narrow domain blunts its main weakness. VAE output is not photoreal at this resolution, autoregressive decoding is two orders of magnitude too slow, and diffusion would need few-step distillation, which usually borrows adversarial losses anyway. If latency relaxes to several seconds, latent diffusion becomes the better choice for coverage.
 
-## Data
+## 3. Data preparation
 
 ### Sources and consent
 
@@ -95,13 +97,15 @@ flowchart LR
 
 Pitfalls: tag classifiers carry their own bias, so validate them per group; aggressive quality filters quietly remove older photos and darker exposures, which correlates with demographics; and licensing is per image, so one non-commercial subset taints a commercial model.
 
-## Model architecture
+## 4. Model development
 
-### Baseline: a DCGAN-style pair
+### Architecture
+
+#### Baseline: a DCGAN-style pair
 
 The whiteboard baseline reshapes \( z \) into a 4x4 map and doubles resolution eight times with upsampling blocks (transposed convolution, normalization, ReLU), ending in a tanh RGB layer. The discriminator mirrors it with strided convolutions and a one-logit head. This works at 64px, falls apart at 1024px and leaves checkerboard artifacts. Batch norm also couples samples in a batch, handing the discriminator a shortcut, so StyleGAN drops it in favor of style modulation.
 
-### StyleGAN2: the practical reference
+#### StyleGAN2: the practical reference
 
 Three ideas make StyleGAN work at megapixel scale.
 
@@ -148,9 +152,9 @@ flowchart TB
 
 Main knobs: mapping depth (2 layers often suffice on small data), channel width at 512 and 1024px (dominates compute) and discriminator capacity (better feedback, faster overfitting).
 
-## Training
+### Training
 
-### The objective
+#### The objective
 
 The original GAN game:
 
@@ -166,7 +170,7 @@ $$
 
 Early in training, \( D(G(z)) \approx 0 \), where \( \log(1 - D) \) is nearly flat but \( -\log D \) is steep. Same fixed point, far stronger gradients when the generator is losing.
 
-### Regularizers that make it work
+#### Regularizers that make it work
 
 The **Wasserstein** formulation replaces the probability with an unbounded critic \( f \) and estimates earth mover's distance, which gives useful gradients even when supports do not overlap. WGAN-GP enforces the 1-Lipschitz constraint with a gradient penalty:
 
@@ -184,7 +188,7 @@ $$
 
 It flattens the discriminator around real data, damping oscillation; \( \gamma \approx 10 \) suits 1024px faces, and applying it every 16 minibatches ("lazy regularization") saves compute. A **path length regularizer** makes equal steps in \( w \) produce equal image changes, which helps editing. **Spectral normalization** is the other common way to bound the discriminator.
 
-### Schedule and efficiency
+#### Schedule and efficiency
 
 Alternate one \( D \) step (with \( G \) frozen) and one \( G \) step (with \( D \) frozen), Adam with \( \beta_1 = 0 \), \( \beta_2 = 0.99 \), learning rate around 0.002. Serve an **exponential moving average** of generator weights; it beats the raw weights. FP16 is safe only in the high-resolution layers, so restrict it there and clamp activations. Plain data parallelism on 8 GPUs suffices for a model this small. Select the release checkpoint by FID, not by recency.
 
@@ -207,7 +211,7 @@ flowchart TB
   CK --> SEL["Pick best by FID and audits"]
 ```
 
-### Failure modes and fixes
+#### Failure modes and fixes
 
 | Symptom | Likely cause | Fixes |
 |---|---|---|
@@ -219,15 +223,15 @@ flowchart TB
 
 The minibatch standard deviation layer appends the batch's average feature spread as an extra discriminator channel, so a batch of near-identical fakes is easy to flag.
 
-## Inference and sampling
+### Sampling
 
 Only the mapping and synthesis networks run at serving time.
 
-### Random sampling
+#### Random sampling
 
 Draw \( z \sim \mathcal{N}(0, I) \), map, synthesize. This reproduces the full learned distribution, rare attributes and rare broken samples included. Store the seed with every output for debugging and takedowns.
 
-### Truncation
+#### Truncation
 
 Low-density regions of the latent space are poorly trained. The truncation trick pulls each latent toward the average:
 
@@ -237,7 +241,7 @@ $$
 
 \( \bar{w} \) is the mean mapped latent and \( \psi \in [0, 1] \) sets strength (\( \psi = 1 \) means none, \( \psi = 0 \) gives the average face). Around 0.7 removes most artifacts, but rare skin tones, ages and accessories sit far from \( \bar{w} \) and get pulled toward the majority. With a fairness requirement, prefer per-group centers or no truncation plus an artifact classifier that rejects bad samples.
 
-### Attribute editing
+#### Attribute editing
 
 Fit a linear classifier for an attribute in \( \mathcal{W} \) (the InterFaceGAN recipe), take its unit normal \( n \), and shift:
 
@@ -256,7 +260,7 @@ $$
 
 **Worked example: latency budget.** The generator has about 30M parameters but convolves large maps; call it 150 GFLOPs per 1024px image. At a sustained 100 TFLOPS in FP16, that is \( 150 \times 10^9 / 10^{14} = 1.5 \) ms per image, about 25 ms for a batch of 16. PNG encoding costs 30 to 60 ms per image and yields ~1.5 MB; WebP at quality 90 takes ~10 ms and ~200 KB. On a 20 Mbit/s mobile link, 1.5 MB needs 600 ms and 200 KB needs 80 ms. Budget: 15 ms batching wait, 25 ms GPU, 10 ms encode, 10 ms watermark, 80 to 150 ms network, roughly 250 ms total. The output format matters more than GPU tuning.
 
-## Evaluation
+## 5. Evaluation
 
 ### Offline metrics
 
@@ -291,7 +295,7 @@ $$
 
 Pairwise tests ask raters which of two images (models A and B) looks like a real photo; single-image real-or-fake tests count how often raters are fooled, with 50% meaning indistinguishable. Fix viewing time and zoom, because teeth, ears and earrings fail only at full size, and use a diverse rater pool. Online, track success rate, latency percentiles, ratings, immediate-regenerate rate, downloads and abuse reports. None of these see a slow loss of diversity, since users judge one face at a time, so offline audits gate every release.
 
-## Serving system
+## 6. Overall ML system design
 
 The request path is a gateway with quotas, a latent service (seed, truncation, edits), a dynamic batcher in front of a stateless GPU pool running the FP16 EMA generator, and post-processing (artifact check, watermark, C2PA manifest, WebP encode) writing to an object store behind a CDN. Training, evaluation and a model registry sit off the path.
 
@@ -345,9 +349,17 @@ sequenceDiagram
 
 **Worked example: fleet sizing.** Peak 2,000 requests per second. With about 4 ms effective per image (model plus batching overhead and the artifact classifier), one GPU serves ~250 images per second, so \( 2{,}000 / 250 = 8 \) GPUs, about 12 per region with headroom and N+1. Encoding at 10 ms per image needs \( 2{,}000 \times 0.01 = 20 \) busy cores. At an average 500 requests per second, a day is 43 million images, and at 200 KB each that is 8.6 TB per day, so without a retention policy storage soon costs more than GPUs.
 
+## 7. Deployment and monitoring
+
 ### Safety and monitoring
 
 Embed an invisible watermark that survives resizing and recompression, attach C2PA credentials, and rate-limit bulk generation, since fake-profile farms need thousands of faces. Log seed and model version per image. Watch the attribute histogram of served images daily and run the memorization check on production samples. Honor takedowns by retraining without the removed images.
+
+### Rollout and feedback
+
+A new generator checkpoint reaches the pool only after the offline gates pass (FID, precision and recall, per-group histograms, memorization scan). It then serves a 5 percent canary slice for a few days while the old weights stay loaded, so rollback is a registry pointer change. Promote it only if regenerate rate, artifact-filter rejection rate and the served attribute histogram stay within tolerance of the previous version; a drop of more than a few points in any group's share blocks promotion even when ratings improve. Tag pre-generated pool entries with the model version and drain them on rollback.
+
+Ratings and regenerations act as weak labels: a face regenerated within seconds, or rejected by the artifact filter, goes into a review set that tunes the rejection classifier and shows which latent regions to suppress. Retraining is triggered by data changes (takedowns, a new licensed set) or by a sustained shift in served diversity, not by a calendar, since each run costs about 1,800 GPU-hours.
 
 ## Follow-ups and extensions
 

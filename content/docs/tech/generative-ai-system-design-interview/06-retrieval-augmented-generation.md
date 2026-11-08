@@ -2,7 +2,7 @@
 title: "06. Retrieval-Augmented Generation over Company Documents"
 description: "Deep-dive notes on designing a ChatPDF-style assistant for internal documents: why RAG, layout-aware parsing and chunking, dense and hybrid retrieval, ANN indexes, rerankers, prompt design, RAFT, the RAG evaluation triad, serving, sizing and interview practice"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 60
 draft: false
 tags: ["book-club", "genai-system-design", "rag", "vector-search", "llm"]
@@ -11,7 +11,9 @@ The product is an internal assistant. An employee asks "how do I expense a clien
 
 The difficulty is that the system now fails in two places, and the first is invisible to the user. A strong generator given the wrong passages writes an answer that is fluent, cited and wrong. Most of the work therefore sits upstream of the LLM: turning messy PDFs into clean text, cutting it into pieces that embed well, searching tens of millions of vectors in milliseconds, and hiding what the user may not see. One tension runs through every section: **recall versus precision versus latency**. More context makes it likelier the answer is present, but adds noise, tokens and seconds.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Functionally, the assistant answers single-turn questions with citations over mixed-format PDFs that include two-column layouts, tables and diagrams; follow-ups come later by rewriting each turn into a standalone query. Non-functionally: about 5 million pages growing 20% a year, changes measured in days, a few seconds of latency (one rewrite, one retrieval round and a rerank, not multi-hop agentic search), input and output safety filters, and access control. Raise permissions even if the interviewer does not, because they change the index schema and the search call.
 
@@ -25,7 +27,7 @@ Functionally, the assistant answers single-turn questions with citations over mi
 | Per-user permissions | ACL tags on chunks, filter inside the ANN search |
 | Queries with exact IDs | Hybrid search: dense plus BM25 |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input: a question plus the user's identity. Output: an answer with references to supporting chunks. This splits into **retrieval** (rank chunks by relevance, a representation-learning and search problem) and **conditional generation** (next-token prediction given query and chunks).
 
@@ -40,7 +42,7 @@ Three ways exist to give an LLM company knowledge:
 
 Long context does not remove retrieval at this scale. Five million pages at about 400 tokens each is 2 billion tokens; a million-token window holds 0.05% of it, and cost grows with every token. [Lost in the Middle](https://arxiv.org/abs/2307.03172) also showed models use information at the edges of a long context better than in the middle. Plan: RAG first, prompt design second, finetuning only once retrieval is proven right.
 
-## Data: from PDFs to an index
+## 3. Data preparation: from PDFs to an index
 
 ```mermaid
 flowchart LR
@@ -106,7 +108,9 @@ After three years of 20% growth, \(35 \times 1.2^3 \approx 60\text{M}\) vectors,
 
 Pitfalls: stale vectors resurfacing old policy, boilerplate footers that match every query, OCR turning "0" into "O" in codes, and forum answers later corrected.
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 Three model roles: encoders that map queries and chunks into a vector space, a reranker, and the generator.
 
@@ -149,7 +153,7 @@ $$
 
 \(y_t\) is the t-th answer token, \(x\) the prompt with instructions, retrieved chunks \(c_1\dots c_k\) and query \(q\), and \(\theta\) the LLM weights.
 
-## Training
+### Training
 
 Many RAG systems ship untrained; training enters when evaluation points at a specific weakness.
 
@@ -169,7 +173,7 @@ flowchart TB
     EV -- "both fine" --> SHIP[Ship and monitor]
 ```
 
-### Embedding model
+#### Embedding model
 
 Generic encoders do not know that "TPS report" and "weekly status form" are the same thing in your company. Contrastive finetuning teaches it. Each example has a query \(q\) and a positive chunk \(c^+\); other chunks in the batch, plus mined hard negatives, are negatives:
 
@@ -181,7 +185,7 @@ $$
 
 Pairs come from logged queries whose cited chunk got a thumbs-up, forum question titles paired with accepted answers, and synthetic questions an LLM writes for sampled chunks. Hard negatives are top BM25 or index hits that are not the labeled positive. Filter them with a cross-encoder, because some are unlabeled positives, and training against those flattens recall. A new encoder means re-embedding everything into a new index version behind a blue-green switch.
 
-### Generator: RAFT
+#### Generator: RAFT
 
 If the right chunk reaches the prompt and the answer is still poor, the model is reading badly: blending in pretraining knowledge, copying a keyword-matching distractor, or ignoring the citation format. [RAFT](https://arxiv.org/abs/2403.10131) trains under production-like conditions. Each example pairs a question with a document set: the **golden** document plus distractors in a fraction \(P\) of examples, distractors only in the rest. Targets are chain-of-thought answers that quote the supporting span first.
 
@@ -191,9 +195,9 @@ $$
 
 \(d^{*}\) is the golden document, \(d_i^-\) the distractors, and only answer tokens count toward the loss. In practice: LoRA adapters, a few thousand mostly synthetic, human-checked examples, 3 to 5 retrieved distractors to match production top-k, and shuffled document order. Too many refusals after tuning means \(P\) was too low; copying distractors means they were too easy.
 
-## Inference: retrieval, prompting and decoding
+### Retrieval, prompting and decoding
 
-### Query-time retrieval
+#### Query-time retrieval
 
 1. **Rewrite** the query with rules or a small LLM: fix typos, expand acronyms, make follow-ups standalone. [HyDE](https://arxiv.org/abs/2212.10496) goes further and embeds a hypothetical answer, which looks more like a chunk than the question does.
 2. **Hybrid search**: dense ANN and BM25 in parallel, both filtered by the user's ACL, fused with reciprocal rank fusion so incompatible score scales do not matter:
@@ -207,7 +211,7 @@ $$
 3. **Rerank** the fused top 50 with the cross-encoder and keep 5 to 8.
 4. **Expand** kept chunks to neighbors or parent sections, deduplicate, order by score.
 
-### Approximate nearest neighbor search
+#### Approximate nearest neighbor search
 
 Exact search is \(O(Nd)\): about 27 billion multiply-adds per query at 35M vectors and 768 dims, too slow under concurrent load. ANN gives up a little recall for orders of magnitude of speed.
 
@@ -222,13 +226,13 @@ IVF with \(n_\text{list}=16{,}384\) cells and \(n_\text{probe}=32\) scans about 
 
 ACL filters interact with ANN. Post-filtering a top-100 list can leave a narrowly permissioned user with nothing, so filter during traversal or partition the index for large groups.
 
-### Prompt and decoding
+#### Prompt and decoding
 
 The prompt layout: role and rules first (answer only from the context, say so when the context lacks the answer, cite as `[n]`); numbered chunks between clear delimiters, each labeled with title, page and effective date; relevant user context such as country; one or two few-shot examples of citation and refusal; the question last. [Chain-of-thought](https://arxiv.org/abs/2201.11903) helps when a rule in one chunk meets an exception in another, at the cost of output tokens.
 
 For factual answers keep randomness low: temperature around 0.2 with top-p 0.9 is a sensible default, greedy works for short answers, and high temperature invites invention. Top-p keeps the smallest token set whose probability reaches \(p\), adapting to the model's confidence at each step. Beam search and self-consistency voting multiply compute and suit only routed hard queries.
 
-## Evaluation
+## 5. Evaluation
 
 ```mermaid
 flowchart LR
@@ -267,7 +271,7 @@ $$
 
 Build the eval set from forum questions with accepted answers, synthetic questions per chunk, unanswerable questions, and permission cases where the answer depends on who asks. Online, track thumbs rate, citation clicks, in-session reformulation (a strong miss signal) and no-answer rate.
 
-## Serving system
+## 6. Overall ML system design
 
 ```mermaid
 flowchart TB
@@ -332,6 +336,12 @@ sequenceDiagram
 | LLM weight quantization (8/4-bit) | Lower | Fewer GPUs | Small; verify on eval set |
 | Context compression to relevant sentences | Lower prefill | Fewer input tokens | Dropping a needed caveat |
 | PQ for the index | Slight | Much less RAM | Recall loss unless re-scored |
+
+## 7. Deployment and monitoring
+
+Three things change independently in this system: the index (nightly), the retrieval models (encoder and reranker) and the generator with its prompt. Each gets a version in every logged trace. Nightly index updates are released only after a smoke test on a slice of the eval set confirms recall@k and zero-result rate did not drop; otherwise the previous index stays live. An encoder change builds a whole new index beside the old one and switches atomically, as in the freshness question below. A new prompt or LLM runs in shadow on sampled questions, is scored for faithfulness and citation accuracy by the calibrated judge, and then goes to a small share of users before full rollout.
+
+Feedback closes the loop. Thumbs-down answers, in-session reformulations and no-answer cases are sampled for review each week; a reviewer marks whether retrieval missed or generation misused the context, and confirmed cases are added to the eval set. Retrieval misses become hard negatives or positives for the next encoder finetune; generation failures become RAFT examples. A rising share of misses on recently edited pages points to ingestion, not the models, and is checked first.
 
 **Safety and monitoring.** Input filters catch disallowed requests and direct injection. Documents can carry indirect injection ("ignore previous instructions..."), so retrieved text is delimited and declared untrusted, suspicious patterns are flagged at indexing, and the LLM has no tools or data beyond the already-filtered chunks. A citation checker confirms each `[n]` points to a prompt chunk containing the claim's key entities. Monitor index freshness, zero-result rate, embedding drift, a daily faithfulness sample and per-stage latency. Log retrieved IDs, scores and prompt, model and index versions so bad answers can be replayed.
 

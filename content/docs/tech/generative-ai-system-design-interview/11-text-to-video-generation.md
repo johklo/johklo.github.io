@@ -2,7 +2,7 @@
 title: "11. Text-to-Video Generation"
 description: "Extending a text-to-image diffusion model to five-second 720p clips: video VAE compression, spacetime DiT, joint image-video training, cascades, FVD and CLIP metrics, and a queue-based serving stack with sizing math"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 110
 draft: false
 tags: ["book-club", "genai-system-design", "diffusion", "video-generation", "transformers"]
@@ -13,7 +13,9 @@ Time also multiplies cost. Nearly every choice below buys coherent motion withou
 
 The working assumptions: five-second 720p clips at 24 fps, silent, English prompts, minutes of latency at launch, about 100 million captioned videos with noisy captions, a pretrained text-to-image model, about 6,000 H100-class GPUs, and a hard safety requirement.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Read each requirement as a number, because each fixes a tensor dimension or a slice of the budget. 120 frames and 0.92 MP per frame (3.5x a 512x512 image) set the token count; open domain means data and evals must cover people, animals, scenery, animation and camera moves; silent English output keeps version one to a single modality and text encoder.
 
@@ -27,7 +29,7 @@ Read each requirement as a number, because each fixes a tensor dimension or a sl
 | 6,000 GPUs | Roughly 10^24 to 10^25 FLOPs | DiT size in the low tens of billions, resolution curriculum |
 | Safety | Zero tolerance classes | Two classifier gates, filtered training set, watermarking |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 The input is a free-form English prompt; the output is a 5 s, 720p, 24 fps RGB clip judged on frame quality, prompt fidelity and temporal coherence. The task is conditional generative modeling: learn \( p(\text{video} \mid \text{text}) \) well enough to sample from it.
 
@@ -58,7 +60,7 @@ $$
 
 So the compression in raw values is about 96x, while the reduction in positions, which drives attention cost, is 512x.
 
-## Data
+## 3. Data preparation
 
 The sources are the 100M captioned clips (motion), a much larger image-text corpus (rare concepts and visual detail), VLM-written captions, and a small curated high-aesthetic subset for the final finetune.
 
@@ -108,19 +110,21 @@ flowchart LR
     TE --> SH
 ```
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 The model has three parts: a video VAE (trained separately), a frozen text encoder, and a denoiser that does all the generative work in latent space.
 
-### Video VAE
+#### Video VAE
 
 3D (or factorized 2D plus 1D) convolutional blocks downsample time by 4 or 8 and space by 8. Encoding the first frame on its own makes a single image a valid one-frame video, which keeps joint image-video training clean. Training combines reconstruction, LPIPS, a small KL term and usually an adversarial loss. The decoder bounds final quality (fine text, small faces, thin fast objects), so measure its reconstruction PSNR and FVD before building on it.
 
-### Option A: U-Net with temporal layers
+#### Option A: U-Net with temporal layers
 
 Inside each resolution block of the image U-Net, add a temporal convolution (1D along frames at each position: cheap, local smoothing) and temporal attention (each position attends to itself across all frames: longer-range motion, cost quadratic in frame count only). Zero-initialize their residual outputs so step one behaves exactly like the image model applied per frame. This is the [Video LDM](https://arxiv.org/abs/2304.08818), Stable Video Diffusion and Emu Video recipe.
 
-### Option B: diffusion transformer over spacetime patches
+#### Option B: diffusion transformer over spacetime patches
 
 The [DiT](https://arxiv.org/abs/2212.09748) route treats the latent video as a token sequence.
 
@@ -155,19 +159,19 @@ flowchart TB
     UP --> OUT[Predicted noise or velocity]
 ```
 
-### Attention patterns and their cost
+#### Attention patterns and their cost
 
 With 1x2x2 patches the 15x90x160 latent becomes \( 15 \times 45 \times 80 = 54{,}000 \) tokens, and attention over them is the dominant cost. Full 3D attention costs \( O((T'H'W')^2) \) per layer and gives the best object permanence; the strongest current models use it with [FlashAttention](https://arxiv.org/abs/2205.14135). Factorized attention (within each frame, then across frames at each location) costs \( O(T'(H'W')^2 + H'W'\,T'^2) \), far less, but objects that cross the frame have to be tracked through two hops. Windowed or sparse spacetime attention sits in between.
 
-### U-Net or DiT
+#### U-Net or DiT
 
 Given 100M clips, a large image corpus and 6,000 GPUs, the DiT is the better bet: it keeps improving with scale, handles any duration or aspect ratio through token count, and shares the LLM parallelism stack. The U-Net's locality bias and direct image warm start win only at much smaller budgets.
 
 Other knobs: 2x2x2 patches halve tokens and quarter attention cost at some motion fidelity loss; stronger VAE compression trades tokens for a lower quality ceiling; a large T5-style text encoder (often concatenated with CLIP) follows long prompts better; 5 to 15B parameters is a reasonable first build (Movie Gen is about 30B).
 
-## Training
+### Training
 
-### Objective
+#### Objective
 
 Diffusion training corrupts a clean latent \( z_0 \) with Gaussian noise at a random level and teaches the network to undo it. The forward process is
 
@@ -191,7 +195,7 @@ with \( t \in [0,1] \) and \( v_\theta \) the predicted velocity. Straighter pat
 
 Two details matter. Drop the text for about 10 percent of samples so the model learns the unconditional distribution that guidance needs. And shift timesteps toward high noise for large, long inputs: correlated neighboring tokens let coarse structure survive noise that would erase an image, so global layout is never learned unless high-noise steps are oversampled.
 
-### Stages
+#### Stages
 
 Scarce video-text pairs are offset by image data, either jointly (each image is a one-frame video, mixed into every batch, so image knowledge never fades) or sequentially (image pretraining, then video, simpler to debug but prone to forgetting unless images stay in the mix). Large systems effectively do both: start from image weights, train jointly through a resolution and duration curriculum, then finetune on a curated set.
 
@@ -209,7 +213,7 @@ flowchart LR
     EV -.->|regression| FIX[Adjust data mix or LR]
 ```
 
-### Worked example 3: training compute
+#### Worked example 3: training compute
 
 Take a 10B-parameter DiT, 48 layers of width 3,072, at 54,000 tokens per clip. Linear layers cost about \( 2PN \) forward and 3x that for training:
 
@@ -221,7 +225,7 @@ Attention scores and weighted sums per layer, forward: \( 4N^2 d = 4 \times (5.4
 
 Three passes over 100M clips is \( 3\times10^8 \) samples, so roughly \( 2.5\times10^{24} \) FLOPs. 6,000 H100s at about 40 percent utilization of 989 dense bf16 TFLOP/s deliver \( 6000 \times 4\times10^{14} = 2.4\times10^{18} \) FLOP/s, which gives about \( 10^6 \) s, or 12 days. Real schedules spend most steps at low resolution with 10x to 50x fewer tokens, and the budget must also cover image data, ablations and failed runs.
 
-### Efficiency techniques
+#### Efficiency techniques
 
 - Cascades: a base model at low frame rate and resolution plus separate temporal (frame interpolation) and spatial super-resolution models, as in [Imagen Video](https://arxiv.org/abs/2210.02303).
 - Curriculum: short low-resolution clips early, while the model learns layout and coarse motion.
@@ -229,7 +233,7 @@ Three passes over 100M clips is \( 3\times10^8 \) samples, so roughly \( 2.5\tim
 - Parallelism: sharded data parallel for weights and optimizer state, tensor parallel within a node, and sequence parallel to split one sample's tokens across GPUs.
 - Mixture of experts for capacity at fixed per-token compute; sequence packing and aspect-ratio buckets to avoid padding.
 
-## Inference and sampling
+### Sampling
 
 Sampling starts from latent-shaped Gaussian noise. With classifier-free guidance each step runs the model with and without the prompt and extrapolates:
 
@@ -248,11 +252,11 @@ An ODE solver (DDIM, DPM-Solver, or Euler for flow matching) reaches the final l
 | Base frame rate before temporal SR | 8 to 24 fps | Smoother true motion | Tokens grow linearly |
 | Base resolution before spatial SR | 256p to 720p | Real detail instead of hallucinated | Attention cost grows quadratically in tokens |
 
-### Worked example 4: per-clip latency
+#### Worked example 4: per-clip latency
 
 A forward pass of the 10B model on 54k tokens is \( 2PN + 4N^2 d L \approx 1.1\times10^{15} + 1.7\times10^{15} = 2.8\times10^{15} \) FLOPs. Fifty steps with guidance is 100 passes, \( 2.8\times10^{17} \) FLOPs. At 400 TFLOP/s effective, one GPU needs about 700 s, close to 12 minutes. Sequence-parallel across 8 GPUs brings it to roughly 1.5 to 2 minutes after communication overhead. Generating at 12 fps and 640x360, then upsampling, cuts tokens to about 7,400 and the attention term by about 50x, which is why the cascade matters as much for serving as for training. A 4-step distilled student would cut the step count another 10x or more.
 
-## Evaluation
+## 5. Evaluation
 
 Frame quality, motion coherence and prompt match are separate questions with separate metrics. A fixed prompt suite such as [VBench](https://arxiv.org/abs/2311.17982) or Movie Gen Bench makes numbers comparable across checkpoints and covers categories like human actions, animals, camera motion and multiple objects.
 
@@ -297,7 +301,7 @@ Side-by-side preference between two models on identical prompts and seeds, rated
 
 Generation completion rate, regenerate rate on the same prompt (a strong dissatisfaction signal), download and share rate, explicit thumbs, paid conversion, and safety report rate. Read them per prompt category, since a regression in human motion can hide inside a global average.
 
-## Serving system
+## 6. Overall ML system design
 
 Generation takes minutes and ties up several GPUs, so the API is a job system. The client submits a prompt and gets a job ID; it polls or receives a push notification when the clip is ready.
 
@@ -373,9 +377,17 @@ $$
 
 With a 2x peak-to-average ratio and 80 percent target utilization, provision about \( 1390 \times 2 / 0.8 \approx 3{,}500 \) GPUs. Without distillation (700 GPU-seconds) the same traffic needs about 20,000. This is the arithmetic that justifies the distillation project.
 
+## 7. Deployment and monitoring
+
 ### Safety and monitoring
 
 The prompt classifier runs before any GPU time, tuned for recall on high-severity classes and precision elsewhere. The output classifier checks sampled frames, because innocent prompts can still yield unsafe frames. Prompts naming private individuals are blocked, outputs carry an invisible watermark and C2PA metadata. Monitor queue wait, GPU utilization, per-stage latency, refusal rate by category and regenerate rate; a jump in regenerations for one category usually means a model or prompt-enhancer regression.
+
+### Rollout and feedback
+
+A new base checkpoint, distilled student or super-resolution stage first runs offline on the fixed prompt suite, then on a small slice of free-tier traffic, where minutes of latency make side-by-side comparison cheap. Each cascade stage carries its own version, and every job records all of them so a bad clip can be traced to the stage that produced it. Promotion waits for regenerate rate, per-category human preference and output block rate to hold; rollback swaps the worker image while queued jobs keep their assigned versions.
+
+Regenerations, downloads and safety reports are logged per prompt category. Categories with high regenerate rates, often human motion or hands, decide which clips to add or recaption in the next fine-tuning round, and false positives from the output classifier become labeled data for recalibration. A full retrain is rare at this compute scale; most fixes arrive as targeted fine-tuning or a new distilled student.
 
 ## Follow-ups and extensions
 

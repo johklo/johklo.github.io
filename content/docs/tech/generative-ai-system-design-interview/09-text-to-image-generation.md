@@ -2,7 +2,7 @@
 title: "09. Text-to-Image Generation with Diffusion"
 description: "A detailed study of a text-conditioned diffusion system: caption repair, latent U-Net and DiT denoisers, noise-prediction training, guidance and fast samplers, alignment metrics, GPU sizing, and a safety-wrapped serving pipeline"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 90
 draft: false
 tags: ["book-club", "genai-system-design", "diffusion-models", "text-to-image", "ai-safety"]
@@ -11,7 +11,9 @@ A user types up to about 128 words describing a scene and, within roughly ten se
 
 The core tension is a triangle. **Fidelity** (realism plus prompt adherence) pulls toward bigger models, more steps and stronger guidance. **Latency and cost** pull toward fewer steps, distilled models and smaller tensors. **Safety and fairness** add classifiers before and after generation and constrain the training data. Most decisions below move a point inside that triangle; a good answer names which corner each one gives up.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Functional: English prompts up to 128 words (about 160 to 200 tokens), other languages later; one to four 1024px images per request across photos, portraits, illustration and abstract art; training on roughly 500M user-asset images whose captions vary in quality; no sexual, violent or hateful imagery; outputs audited for skew in age, gender and skin tone when the prompt leaves them unspecified.
 
@@ -27,7 +29,7 @@ Non-functional: about 10 seconds at p95 for the batch; bounded GPU-seconds per i
 | Fairness on three attributes | Attribute stats in data and eval; diversify unspecified attributes | Outputs mirror the web's skew |
 | Disallowed content | Data filters, prompt classifier, output classifier, watermark | An internal tool might keep only output checks |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 The task is conditional generation: learn \( p(x \mid c) \) for image \(x\) and prompt \(c\), then sample from it. Input is a string, output a pixel tensor, and there is no single correct answer. Training uses image-caption pairs as samples from the joint distribution.
 
@@ -40,7 +42,7 @@ The task is conditional generation: learn \( p(x \mid c) \) for image \(x\) and 
 
 I would pick latent diffusion. It wins on visible detail, and its step count is a dial on one set of weights: the same model can serve a two-second draft and a ten-second final. Autoregressive models train more efficiently (every token is supervised per pass, while diffusion supervises one noise level per sample) and reuse LLM infrastructure, a strong argument for a unified chat-and-draw assistant but not for a dedicated service with a hard latency target. GANs are fastest but scale poorly on compositional prompts, and distillation lets diffusion recover most of that speed anyway.
 
-## Data
+## 3. Data preparation
 
 ### Sources and consent
 
@@ -86,7 +88,9 @@ flowchart LR
 
 Pitfalls: over-aggressive face filtering degrades portraits, aesthetic filters skew toward one look, and a hallucinating captioner spreads its errors everywhere.
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 Four parts: a frozen text encoder, a frozen autoencoder between pixels and latents, a trainable denoiser in latent space, and optionally an upscaler.
 
@@ -94,7 +98,7 @@ Four parts: a frozen text encoder, a frozen autoencoder between pixels and laten
 
 **Autoencoder.** A convolutional VAE maps \(1024 \times 1024 \times 3\) to \(128 \times 128 \times c\), \(c\) of 4 or 16. The input to every denoising step shrinks by \(3{,}145{,}728 / 65{,}536 = 48\) times, the largest single saving in the design. Latent channels cap fine detail; small text and faces need 16.
 
-### U-Net denoiser
+#### U-Net denoiser
 
 The U-Net halves spatial size and widens channels per level on the way down, mirrors that on the way up, and passes skip connections across so high-frequency detail survives. Each level stacks residual conv blocks; lower levels add self-attention and cross-attention to text.
 
@@ -129,15 +133,15 @@ $$
 
 The timestep is embedded with sinusoids and an MLP, then scales and shifts normalized activations in each residual block. Without it the network cannot tell light noise from near-total noise, and the correct action differs a lot. Group or layer norm is preferred over batch norm because per-sample statistics behave better with small per-GPU batches whose noise levels vary.
 
-### DiT alternative
+#### DiT alternative
 
 A Diffusion Transformer patchifies the latent (patch 2 turns \(128 \times 128\) into 4,096 tokens), adds 2D position embeddings, runs a Transformer stack, and unpatchifies back to a noise map. Timestep and pooled text modulate each block via adaptive layer norm; the full text enters by cross-attention or, in Stable Diffusion 3's MM-DiT, by joint attention over concatenated text and image tokens. DiTs scale predictably with compute ([Peebles and Xie](https://arxiv.org/abs/2212.09748)), reuse LLM kernels and parallelism, and treat aspect ratios as variable token counts; U-Nets converge faster on small budgets. Patch 1 instead of 2 means 4x the tokens and about 16x the attention cost. For a new large build I would choose DiT.
 
 **Upscaling.** Pixel systems like Imagen chain 64 to 256 to 1024 diffusion upsamplers, trained on deliberately corrupted low-resolution inputs so they repair artifacts instead of enlarging them. A latent system decodes at 1024px directly.
 
-## Training
+### Training
 
-### Forward process and objective
+#### Forward process and objective
 
 With a variance schedule \(\beta_1, \dots, \beta_T\), \(T = 1000\), one noising step is
 
@@ -180,7 +184,7 @@ flowchart LR
   OPT --> EMA["EMA weights for eval and serving"]
 ```
 
-### Stages
+#### Stages
 
 1. Autoencoder: reconstruction, perceptual and light adversarial losses; then frozen.
 2. Low-resolution pretraining at 256px on the full set, where most concepts are learned at a sixteenth of the 1024px token cost.
@@ -189,7 +193,7 @@ flowchart LR
 5. Preference tuning with Diffusion-DPO or reward-weighted fine-tuning on pairwise judgments, fed by logged thumbs and rerolls.
 6. Distillation for serving (next section).
 
-### Efficiency
+#### Efficiency
 
 bf16 compute with fp32 master weights. FSDP or ZeRO-3 to shard parameters, gradients and optimizer state: a 3B denoiser with AdamW needs about \(3\text{B} \times 16\) bytes \(= 48\) GB before activations. Activation checkpointing in attention blocks costs about a third more compute and frees memory for larger batches. Keep an EMA of weights (decay near 0.9999) for evaluation and serving; it samples noticeably cleaner.
 
@@ -201,7 +205,7 @@ $$
 
 300M samples at 1024px is \(1.5 \times 10^{22}\) FLOPs. An H100 at 40 percent of about \(10^{15}\) bf16 FLOP/s does \(4 \times 10^{14}\) per second, giving \(3.7 \times 10^{7}\) GPU-seconds: about 10,000 GPU-hours, or five days on 1,024 GPUs before attention overhead. At 256px there are 256 tokens, 16x cheaper per sample, which is why the bulk of samples are seen at low resolution.
 
-### Failure modes
+#### Failure modes
 
 - **Flat loss, improving samples.** Diffusion loss is dominated by the noise level; track FID and alignment on a fixed prompt set instead.
 - **Attribute leakage** ("red cube, blue sphere" both red). Denser captions, a stronger text encoder, compositional data.
@@ -209,7 +213,7 @@ $$
 - **Memorization.** Stricter dedup; compare outputs to training embeddings.
 - **Loss spikes.** QK normalization, gradient clipping, lower learning rate, restart from a good checkpoint.
 
-## Inference and sampling
+### Sampling
 
 Sampling starts from \(x_T \sim \mathcal{N}(0, I)\) and walks backward. The DDPM step is
 
@@ -238,7 +242,7 @@ $$
 | Consistency or adversarial distillation | 1 to 4 steps | Good, less variety | 5 to 20x faster | Long compositional prompts |
 | Four seeds per prompt | 4 | Covers interpretations | Batched, about 1.5 to 2x one | Rerolls if all miss |
 
-## Evaluation
+## 5. Evaluation
 
 ### Offline
 
@@ -277,7 +281,7 @@ $$
 
 Engagement: save or download rate, shares, click-through on results, thumbs. Friction: reroll rate (same prompt, new seed), immediate prompt edits, abandonment while waiting. Business: paid conversion and GPU cost per active user per month. System: per-stage p50 and p95 latency, throughput, GPU utilization, refusal rate by category. Reroll rate deserves its own dashboard because it is a quality signal and a cost multiplier at once.
 
-## Serving system
+## 6. Overall ML system design
 
 ```mermaid
 flowchart TB
@@ -353,7 +357,13 @@ sequenceDiagram
 | Dynamic batching by resolution bucket | Small queue wait | Much higher throughput | None |
 | Router: small model for easy prompts | Lower average | Lower | Low if router is accurate |
 
+## 7. Deployment and monitoring
+
 **Safety and monitoring.** Layers: filtered data, prompt classifier, output classifier, watermark, per-account rate limits, and a human review queue for appeals. Watch refusal rate by category (spikes mean a regression or a new jailbreak), output block rate (generator or enhancer drift), per-stage latency, and attribute distributions on a canary prompt set after each deploy. Ship behind a traffic split and compare save and reroll rates first.
+
+**Rollout.** Every candidate passes the offline eval gate, then the distilled and quantized build is compared with its full-precision parent on a fixed prompt set, because optimization can quietly break text rendering and faces. Start with 1 to 5 percent of traffic, keep the old denoiser warm, and widen only when save, reroll and refusal rates hold. Version the enhancer and safety classifiers separately from the denoiser, since a prompt-rewrite change can shift outputs as much as a new model.
+
+**Feedback and retraining.** Logged prompts show what users actually ask for; prompts with high reroll rates become an adherence test set and candidates for recaptioned training data. Saves and side-by-side choices supply preference pairs for reward modeling. Blocked outputs and newly found jailbreaks return to the safety classifiers' training sets on a shorter cycle than the generator, which retrains only when audits or adherence metrics show a gap worth a new stage.
 
 ## Follow-ups and extensions
 

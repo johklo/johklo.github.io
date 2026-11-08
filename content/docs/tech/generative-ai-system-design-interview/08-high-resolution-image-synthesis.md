@@ -2,7 +2,7 @@
 title: "08. High-Resolution Image Synthesis with Visual Tokens"
 description: "A deep-dive on generating 1024px and 2048px scenery with a VQGAN tokenizer and a decoder-only Transformer: token budgets, tokenizer losses, sampling knobs, metrics, and a three-stage serving path with super-resolution"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 80
 draft: false
 tags: ["book-club", "genai-system-design", "autoregressive-models", "vqgan", "image-generation"]
@@ -11,7 +11,9 @@ The product is a button that returns a fresh, photorealistic picture of a mounta
 
 The core tension is how hard to compress. Every halving of the token grid side cuts generation work by four or more, but whatever detail the tokenizer drops at encode time can never come back. A good answer in an interview spends most of its time on that dial and on the system pieces that let you turn it without rebuilding everything.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Functional: scenery only (forgiving, since foliage and water hide small errors and no identity must be preserved), unconditional now with text prompts later, two output sizes a factor of 4 apart in area, and about 5 million curated scenes plus unlabeled public images. Non-functional: about five seconds per image with a user watching a spinner, low GPU cost per image for a consumer feature, real diversity (ten presses should give ten different scenes, so mode collapse is a product bug), and safety and provenance, since even scenery models can memorize copyrighted photos.
 
@@ -24,7 +26,7 @@ Functional: scenery only (forgiving, since foliage and water hide small errors a
 | 5M curated images, more unlabeled | Train the tokenizer on the large unlabeled pool, the generator on the curated set |
 | Diversity matters | Sample stochastically with top-p and temperature; monitor code usage and FID |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input: a request, optionally carrying a seed and a size. Output: an RGB image. The ML category is unconditional generative modeling: learn \( p(x) \) over scene images and sample from it.
 
@@ -72,7 +74,7 @@ flowchart LR
 
 The token count is \( L = (H/f) \times (W/f) \) for downsampling factor \( f \). At 1024px, \( f = 16 \) gives a 64 x 64 grid (4,096 tokens), \( f = 32 \) gives 1,024 tokens and \( f = 64 \) gives 256; each count quadruples at 2048px. VQGAN used \( f = 16 \) at 256px. Holding 256 tokens at 1024px means each code stands for a 64x64 block, about 12,000 numbers in one integer, which only works because a GAN-trained decoder invents plausible texture. Fine for scenery, bad for text-in-image.
 
-## Data
+## 3. Data preparation
 
 ### Sources
 
@@ -120,9 +122,11 @@ flowchart TB
 - **Ordering trap.** The token cache depends on the tokenizer weights; retraining the tokenizer invalidates every cached sequence and generator checkpoint. Version them together.
 - **Crop skew.** If training used center crops and the FID reference set uses full frames, FID shifts for reasons unrelated to the model.
 
-## Model architecture
+## 4. Model development
 
-### Tokenizer: encoder, quantizer, decoder
+### Architecture
+
+#### Tokenizer: encoder, quantizer, decoder
 
 The **encoder** is a convolutional network (residual blocks with downsampling, often with one self-attention block at the lowest resolution) that maps an image \( x \in \mathbb{R}^{H \times W \times 3} \) to a grid of vectors \( z_e \in \mathbb{R}^{h \times w \times d} \), with \( h = H/f \).
 
@@ -138,7 +142,7 @@ Discretization buys two things: the decoder sees only one of \( K \) vectors per
 
 The **decoder** mirrors the encoder with upsampling blocks and is the only tokenizer part deployed for serving.
 
-### Generator: decoder-only Transformer
+#### Generator: decoder-only Transformer
 
 The generator reads codes in raster order and predicts the next one: code embedding, projection to \( d_{\text{model}} \), position information, \( N \) pre-norm causal blocks of attention plus MLP, and a linear head over \( K \) codes. A 1D learned position works for a fixed grid, but row-plus-column embeddings or 2D rotary embeddings tell the model that token \( t \) and token \( t + w \) are vertical neighbors. Each attention head computes
 
@@ -173,11 +177,11 @@ flowchart LR
   NEXT -. full grid .-> LK
 ```
 
-### Design knobs
+#### Design knobs
 
 Raising \( f \) cuts tokens but makes the decoder hallucinate more. A larger codebook \( K \) is more expressive but leaves more dead entries and a harder softmax. Lower code dimension \( d \) (ViT-VQGAN uses 32 or less) often improves usage. A deeper generator fixes global layout first, at a per-step latency cost, and a bigger decoder sharpens texture from the same codes. Rule of thumb: take the largest \( f \) whose reconstruction FID (rFID) is well below the target generation FID, since the generator can never beat its decoder.
 
-## Training
+### Training
 
 Training runs in two stages that share nothing but the code format.
 
@@ -203,7 +207,7 @@ flowchart TB
   end
 ```
 
-### Stage 1: tokenizer objectives
+#### Stage 1: tokenizer objectives
 
 The loss is a weighted sum of four parts.
 
@@ -255,7 +259,7 @@ $$
 
 The \( \lambda \) values are tuned. VQGAN sets \( \lambda_{\text{adv}} \) adaptively from the ratio of reconstruction and adversarial gradient norms at the decoder's last layer, and the discriminator is usually switched on only after tens of thousands of steps, since an early critic wins too easily.
 
-### Stage 2: generator objective
+#### Stage 2: generator objective
 
 The image distribution is factored over the raster-ordered code sequence \( s = (s_1, \dots, s_L) \):
 
@@ -265,7 +269,7 @@ $$
 
 where \( s_t \) is the code at position \( t \), \( s_{<t} \) all earlier codes, and \( \theta \) the Transformer weights. Teacher forcing scores all \( L \) positions in one forward pass. Prepend a learned start token so the first code is modeled too, and once text arrives, drop the caption about 10 percent of the time to enable classifier-free guidance.
 
-### Efficiency techniques
+#### Efficiency techniques
 
 - **bf16 mixed precision**, but keep codebook distances in fp32, where underflow flips assignments.
 - **FSDP or ZeRO** sharding for a 0.5 to 3B generator; tensor parallelism only above that.
@@ -280,7 +284,7 @@ $$
 
 An H100 at about 990 TFLOP/s dense bf16 peak and 40 percent utilization delivers about \( 4 \times 10^{14} \) FLOP/s, so this is \( 3.8 \times 10^{5} \) GPU-seconds, about 105 GPU-hours, or under a day on 8 GPUs. The tokenizer is the heavier job, since its convolutions run at full resolution over possibly hundreds of millions of web images. Twenty epochs is also a lot of repetition, so watch validation loss for memorization.
 
-### Failure modes and fixes
+#### Failure modes and fixes
 
 - **Codebook collapse** (few codes used, flat perplexity): EMA updates, restart dead codes from encoder outputs, normalized low-dimensional codes.
 - **Smeared reconstructions**: perceptual and patch adversarial losses were missing or too weak.
@@ -288,7 +292,7 @@ An H100 at about 990 TFLOP/s dense bf16 peak and 40 percent utilization delivers
 - **Broken global layout**: generator too shallow or missing 2D positions.
 - **Copied training images**: duplicates or too many epochs; deduplicate, stop early, audit with nearest-neighbor search.
 
-## Inference and sampling
+### Sampling
 
 Start from a start token, then for \( t = 1 \dots L \) run the Transformer on the prefix, adjust the logits, sample one code and append it. Reshape the result to \( h \times w \) and run the decoder once. Temperature rescales logits \( z \):
 
@@ -319,7 +323,7 @@ The 256-token grid fits the 5-second target with headroom for queueing; the 1,02
 
 **Worked example: KV cache size.** For a model with 24 layers and width 2048, each token stores a key and a value per layer: \( 2 \times 24 \times 2048 \times 2 \) bytes = 196,608 bytes, about 0.19 MB. A 256-token image needs about 50 MB of cache; a 1,024-token image about 200 MB. On an 80 GB GPU with 2 GB of weights you could hold a few hundred concurrent 1,024-token sequences, so batch size is limited by latency targets, not memory.
 
-## Evaluation
+## 5. Evaluation
 
 ### Offline metrics
 
@@ -365,7 +369,7 @@ Raters see randomized side-by-side pairs and pick the more photographic and the 
 
 Regeneration rate (an immediate second press signals disappointment), downloads and shares, thumbs up or down, subscription conversion, churn, and p50 and p95 latency. They lag and are noisy, so they confirm launches rather than diagnose regressions.
 
-## Serving system
+## 6. Overall ML system design
 
 Three stages with different hardware profiles sit behind one API. The **generation service** runs the Transformer: sequential, memory-bandwidth bound, latency linear in token count, throughput from batching. The **decoding service** runs one compute-bound convolutional pass in a fraction of a second; the encoder is never deployed. The **super-resolution service** runs a 2x upscaler (Real-ESRGAN style or a small diffusion upscaler) only for 2048 requests. Separate services pick their own GPU types, autoscale on their own queues and ship independently. The hop between them is cheap: a code grid is 512 bytes.
 
@@ -406,12 +410,20 @@ Because there is no prompt, any image answers any request, so off-peak capacity 
 
 **Worked example: fleet sizing.** 2 million images a day is 2,000,000 / 86,400 = 23 per second, about 70 at a 3x peak. One H100 batching 32 sequences of 256 tokens at 6 ms per step finishes 32 images every \( 256 \times 6 \) ms = 1.5 s, about 21 per second, so peak needs 4 generator GPUs (plan 6 to 8). The decoder at 32 images per 0.5 s batch needs 2 GPUs. If 30 percent ask for 2048, the upscaler sees 21 per second; at about 20 per second per GPU that is 2 to 3 GPUs. Roughly a dozen GPUs, dominated by the generator.
 
+## 7. Deployment and monitoring
+
 ### Safety and monitoring
 
 - Output NSFW and violence classifiers before return; log and drop failures.
 - Memorization check against an embedding index of the training set for a sampled fraction of outputs.
 - Invisible watermark plus C2PA content credentials so images are labeled as AI-generated.
 - Dashboards per stage: queue depth, p95 latency, GPU utilization, error rate. Model health: rolling FID on a daily sample, code-usage histogram of generated grids (a shift signals a bad deploy), safety-filter hit rate.
+
+### Rollout and feedback
+
+Ship the tokenizer, its token cache and the generator as one versioned bundle, and route each request to a single bundle end to end, since codes from one tokenizer mean nothing to another decoder. A new bundle first runs in shadow on a copy of traffic to compare latency and the code-usage histogram, then takes a small canary share. Promotion requires rolling FID on daily samples and the regeneration rate to hold within a set margin of the current version. The previous bundle stays warm for rollback, and the pre-generated pool is refilled from the new bundle only after promotion.
+
+Regenerate presses, downloads and thumbs feed a preference log. Frequently downloaded images can seed a small curated fine-tuning set, and repeated regenerations on one kind of scene point to gaps in the curated data. A retrain is triggered when rolling FID drifts upward for several days or when the curated set has grown enough to matter.
 
 ## Follow-ups and extensions
 

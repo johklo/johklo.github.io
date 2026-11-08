@@ -2,7 +2,7 @@
 title: "04. A ChatGPT-Style Personal Assistant"
 description: "Deep-dive notes on designing a general-purpose chatbot: web data cleaning, decoder-only Transformers with RoPE, pretraining, SFT, reward modeling, PPO and DPO, sampling, layered evaluation, and a guarded, cost-aware serving stack"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 40
 draft: false
 tags: ["book-club", "genai-system-design", "llm", "rlhf", "chatbot"]
@@ -11,7 +11,9 @@ A general-purpose assistant accepts free-form text, answers questions, explains 
 
 The core tension is that every capability gain also makes harmful or confidently wrong output easier. Tune only for helpfulness and the model explains dangerous things; tune only for harmlessness and it refuses ordinary questions. Most of the interview is about where you place the controls between those forces and how you measure them.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Pin down scope first. These are the assumptions I would make for a first version.
 
@@ -26,7 +28,7 @@ Pin down scope first. These are the assumptions I would make for a first version
 | Cost per conversation | KV cache, GQA, quantization, continuous batching, model routing | Serving bill grows linearly with every new user |
 | Frozen knowledge | Clear cutoff messaging, later RAG extension | Confident answers about events the model never saw |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input is the system prompt, earlier turns and the new message; output is a reply generated one token at a time from a learned conditional distribution:
 
@@ -47,7 +49,7 @@ This is autoregressive text generation, and the family is a decoder-only Transfo
 
 All three training phases then operate on the same model through the same token interface.
 
-## Data
+## 3. Data preparation
 
 Three very different datasets feed the three training phases, and their sizes differ by orders of magnitude.
 
@@ -97,7 +99,9 @@ Demonstrations cover answering, explaining, summarizing, coding, refusing polite
 - Toxicity filters disproportionately remove dialects and minority-group discussions, which surfaces later as bias.
 - Long, hedged demonstrations teach verbosity, and reward models amplify it.
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 The model is a stack of identical decoder blocks between an embedding layer and a prediction head.
 
@@ -121,7 +125,7 @@ flowchart TB
     H --> P[Softmax next-token probs]
 ```
 
-### Attention
+#### Attention
 
 Each head computes scaled dot-product attention with a causal mask so a position can only attend to itself and earlier positions:
 
@@ -133,7 +137,7 @@ $$
 
 Grouped-query attention (GQA) lets several query heads share one key/value head. Quality barely moves and the KV cache shrinks by the group factor, which matters more for serving than any other architecture choice.
 
-### Positional information
+#### Positional information
 
 Attention is permutation invariant, so position must be injected. Absolute sinusoidal or learned embeddings are simple but extrapolate poorly past the training length. Relative schemes (T5 bias buckets, ALiBi) encode distance directly; ALiBi extrapolates well but hard-codes a recency bias. [Rotary position embedding (RoPE)](https://arxiv.org/abs/2104.09864) rotates each two-dimensional slice of the query and key vectors by an angle proportional to position.
 
@@ -147,11 +151,11 @@ $$
 
 \(m\) and \(n\) are the positions of the query and key, \(\omega_i = 10000^{-2i/d}\) is the frequency for slice \(i\) of a \(d\)-dimensional head, and \(g\) says the attention score depends only on the offset \(m-n\), not on absolute positions. You get relative behavior while keeping ordinary dot-product attention, so FlashAttention kernels and KV caching work unchanged. Context can later be extended by rescaling the frequencies (position interpolation, NTK scaling, YaRN) with a short finetune.
 
-### Other components and knobs
+#### Other components and knobs
 
 Pre-normalization with RMSNorm stabilizes deep stacks; SwiGLU feed-forward layers (hidden size about \(\tfrac{8}{3}\) of model width) beat ReLU MLPs at equal compute; the output head is a linear map to the vocabulary. Depth adds reasoning but raises latency linearly. Longer context grows the KV cache linearly and prefill attention quadratically. Chinchilla suggests about 20 training tokens per parameter for compute-optimal training, but production models usually train far longer because a smaller model is cheaper to serve.
 
-## Training
+### Training
 
 Training happens in three phases. Each fixes a gap the previous one leaves.
 
@@ -175,7 +179,7 @@ flowchart LR
     DPO --> FINAL
 ```
 
-### Phase 1: pretraining
+#### Phase 1: pretraining
 
 The objective is next-token cross-entropy on the token stream:
 
@@ -193,7 +197,7 @@ The result is a base model with broad knowledge but no assistant behavior; asked
 
 **Failure modes.** Loss spikes from bad batches or overflow (gradient clipping, lower learning rate, skipping the batch, QK-norm, logit z-loss), data loader bugs that repeat shards, and silent hardware faults. Watch gradient norm and per-source loss continuously.
 
-### Phase 2: supervised finetuning
+#### Phase 2: supervised finetuning
 
 SFT keeps the same loss but trains on prompt and ideal-response pairs wrapped in a chat template, masking the loss to the response:
 
@@ -205,7 +209,7 @@ $$
 
 SFT takes hours, not weeks, and teaches format, tone and when to refuse or ask back. Its structural limit is one demonstration per prompt: the model learns a plausible answer but never which of several is better, and every example needs an expert to write a full response.
 
-### Phase 3a: reward modeling
+#### Phase 3a: reward modeling
 
 The reward model \(r_\phi\) is usually the SFT model with a scalar head on the final token. A ranking of \(k\) responses expands into \(\binom{k}{2}\) (preferred, rejected) pairs, trained with a Bradley-Terry loss:
 
@@ -215,7 +219,7 @@ $$
 
 \(y_w\) is the preferred response, \(y_l\) the rejected one, and \(\sigma\) is the logistic function; only the score gap matters. A margin ranking loss \(\max(0, m - (r_w - r_l))\) is a common alternative. Held-out pair accuracy of 65 to 75% is typical and mostly reflects annotator disagreement.
 
-### Phase 3b: policy optimization
+#### Phase 3b: policy optimization
 
 The policy \(\pi_\theta\), initialized from SFT, answers fresh prompts, the reward model scores them, and PPO updates the policy under a KL leash:
 
@@ -237,7 +241,7 @@ The implicit reward is the \(\beta\)-scaled log-ratio between policy and referen
 
 **Worked example: labeling cost.** 40,000 prompts with 4 responses each, ranked at about 4 minutes per prompt, is 160,000 minutes or about 2,670 annotator-hours (roughly 80,000 USD at 30 USD per hour) and yields 6 pairs per prompt, 240,000 pairs in total. Writing 40,000 demonstrations at 15 minutes each would take 10,000 hours, nearly four times as much. Comparisons are the cheaper signal.
 
-## Inference and decoding
+### Sampling and decoding
 
 At each step the model outputs logits \(z\) over the vocabulary. Temperature rescales them before softmax:
 
@@ -265,7 +269,7 @@ Sampling renormalizes over \(V^{(p)}\), so the pool is tiny when the model is co
 
 Typical temperatures: 0 to 0.3 for code and extraction, 0.6 to 0.8 for chat, near 1 for brainstorming. Repetition and frequency penalties catch loops that sampling alone misses, and the end-of-turn token from the chat template stops generation.
 
-## Evaluation
+## 5. Evaluation
 
 No single number describes a chatbot; each evaluation layer has a blind spot. Perplexity measures fit to held-out text:
 
@@ -287,7 +291,7 @@ Pairwise human or arena votes are summarized as Elo ratings, where a 100-point g
 
 Use the layers as a gated funnel: benchmarks choose checkpoints cheaply, safety suites and human side-by-side gate a release, and a 1 to 5% online A/B picks between candidates already known to be safe. Flagged chats and losing prompts flow back into new eval sets and training data. An online win never overrides a safety gate.
 
-## Serving system
+## 6. Overall ML system design
 
 Most of the safety, cost and latency engineering happens around the model.
 
@@ -366,6 +370,12 @@ sequenceDiagram
 
 **Latency budget for TTFT under one second.** Gateway 20 ms, input guard 30 ms, history fetch 20 ms, context build 10 ms, peak queueing up to 200 ms, prefill of 2,000 tokens 150 to 300 ms, first output check 30 ms. A few hundred milliseconds of headroom remain, which an LLM-based prompt rewriter could consume on its own.
 
+## 7. Deployment and monitoring
+
+### Release and rollback
+
+The policy model, the reward-trained checkpoint behind it, the system prompt, the guard classifiers and the router thresholds are versioned separately, because any one of them can change behavior. A new policy first passes the offline gates from step 5, then replays a sample of logged prompts in shadow so its refusal rate, answer length and judge scores can be compared with production. It reaches users through a 1 to 5% canary that is stopped automatically if guard trigger rates, over-refusals or TTFT p95 move past preset limits. Rollback swaps the model pool behind the router; guard and system-prompt changes roll back on their own and faster.
+
 ### Monitoring
 
 Track TTFT and inter-token latency percentiles, KV cache occupancy and queue depth; thumbs ratio, regeneration rate and judge scores; guard trigger rates split into correct refusals and over-refusals; and topic drift. Logged chats used for training must follow consent and retention rules and pass the same PII scrubbing as pretraining data.
@@ -436,14 +446,14 @@ Add the pattern to the guard classifiers and redeploy within days, since that is
 
 ## A 45-minute walkthrough
 
-1. **0-5 min, scope.** Modalities, tools, languages, session length, scale, safety, latency; write assumptions down.
-2. **5-9, framing.** Next-token factorization, decoder-only, why encoder-decoder loses.
-3. **9-15, data.** Draw the cleaning funnel; three datasets for three phases.
+1. **0-5 min, clarifying requirements.** Modalities, tools, languages, session length, scale, safety, latency; write assumptions down.
+2. **5-9, framing the problem as an ML task.** Next-token factorization, decoder-only, why encoder-decoder loses.
+3. **9-15, data preparation.** Draw the cleaning funnel; three datasets for three phases.
 4. **15-20, architecture.** One decoder block with causal attention, RoPE and GQA.
 5. **20-28, training.** Three-phase diagram; LM, reward and KL-regularized losses; DPO; 6ND estimate.
 6. **28-31, decoding.** Temperature plus top-p with per-use-case defaults.
 7. **31-36, evaluation.** Layer table and gating order.
-8. **36-43, serving.** Guarded pipeline, KV cache and fleet estimates, batching, quantization, speculative decoding, routing.
+8. **36-43, overall ML system design, deployment and monitoring.** Guarded pipeline, KV cache and fleet estimates, batching, quantization, speculative decoding, routing.
 9. **43-45, extensions.** RAG, tools, memory, multilingual, day-one dashboards.
 
 ## Review questions

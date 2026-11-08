@@ -2,7 +2,7 @@
 title: "10. Personalized Headshot Generation"
 description: "Turning 10 to 20 selfies into professional headshots: per-user DreamBooth finetuning of a latent diffusion model, prior preservation, identity-gated sampling, face-embedding evaluation, and the batch system around it"
 date: 2026-11-08T18:00:00+09:00
-lastmod: 2026-11-08T21:00:00+09:00
+lastmod: 2026-11-08T21:30:00+09:00
 weight: 100
 draft: false
 tags: ["book-club", "genai-system-design", "diffusion", "personalization", "dreambooth"]
@@ -11,7 +11,9 @@ A user uploads a dozen phone photos and later receives fifty studio-style headsh
 
 The core tension: train hard enough to reproduce the exact jawline and eye spacing, and the model forgets how to draw anything else. Every "person" turns into the customer, poses freeze into the selfies, and text control over the scene fades. Hold back and you get a well-lit stranger who resembles the customer the way a sibling does, which customers spot instantly. The design is about where that line sits, which personalization method reaches it inside the time and cost budget, and how every output gets checked before a human sees it.
 
-## Requirements that change the design
+The notes follow the book's seven-step framework, then add follow-ups, interview questions, a 45-minute walkthrough and review questions.
+
+## 1. Clarifying requirements
 
 Outputs go on LinkedIn, so the scene vocabulary is small. What I'd settle first:
 
@@ -34,7 +36,7 @@ Outputs go on LinkedIn, so the scene vocabulary is small. What I'd settle first:
 | Reject bad uploads | Validation service: face detection, blur, identity clustering |
 | Biometric data | Encryption, short TTL, uploader verification, watermarking |
 
-## Framing as an ML task
+## 2. Framing the problem as an ML task
 
 Input: photos \( \{x_1,\dots,x_n\} \) of one person, \( n\approx 10\text{–}20 \). Output: 50 images that are photorealistic, match a professional scene description, depict the same person, and differ in pose, lighting and setting. It is conditional image generation with one condition, identity, that text cannot express.
 
@@ -63,7 +65,7 @@ I'd pick full DreamBooth. Identity is the product, an hour fits a 15 minute fine
 
 Prompts need a word for the subject. A common word ("john") already has meaning that leaks into images. A random string ("x7qzp9") gets split by the BPE tokenizer into pieces that each carry associations. A token that is a single vocabulary unit but was rare in pretraining ("sks" in CLIP's tokenizer is the community default) has a weak prior and behaves like an empty slot. Pairing it with a class noun ("a photo of sks man") lets the model reuse what it knows about the class and learn only the difference.
 
-## Data
+## 3. Data preparation
 
 There is no corpus to curate. The data work is gatekeeping uploads, building a class prior set, and keeping an evaluation panel.
 
@@ -105,7 +107,9 @@ flowchart LR
 
 Pitfalls: an accessory in every photo becomes part of the identity, and a face detector that is weaker on darker skin or older faces rejects those users more often, so track acceptance by subgroup.
 
-## Model architecture
+## 4. Model development
+
+### Architecture
 
 The base is latent diffusion with three parts:
 
@@ -154,7 +158,7 @@ flowchart TB
 
 Knobs: training the text encoder too (tighter binding, faster overfitting, needs a lower LR), LoRA rank and targets (rank 4 to 8 on attention misses detail; 32 to 64 plus convs nears full finetuning), and above all the base model, since one that draws teeth badly still does after DreamBooth.
 
-## Training
+### Training
 
 Each order runs a short finetune with the standard diffusion objective. A clean latent is noised in closed form:
 
@@ -192,7 +196,7 @@ flowchart LR
     CHK -- yes --> VAL["Probe: identity score and class drift"]
 ```
 
-### Settings and efficiency
+#### Settings and efficiency
 
 - **Steps:** overfitting starts within a few hundred steps at 15 images. A common heuristic is around 80 to 100 steps per image at batch 1 to 2, then a fixed budget tuned on held-out users, plus a cheap end-of-run probe (4 samples, identity score, one class prompt).
 - **Learning rate:** about 1e-6 to 5e-6 for full U-Net, around 1e-4 for LoRA, lower still for the text encoder.
@@ -203,7 +207,7 @@ flowchart LR
 
 Symptoms and fixes: copied selfies (fewer steps, higher \( \lambda \)); a face like a relative (more steps, train the text encoder); a hoodie in every output (caption it); burnt colors (lower LR and guidance).
 
-## Inference and sampling
+### Sampling
 
 Users don't write prompts. A versioned library of about fifty templates fixes scene, lighting, attire, expression and head angle, each containing the identifier ("professional headshot of sks man, charcoal suit, soft window light, slight smile, blurred office"). Templates are the main lever for diversity and the first place to fix systematic defects: if outdoor templates keep warping ears, rewrite or drop them.
 
@@ -228,7 +232,7 @@ Each candidate then passes a **quality gate**: one face at reasonable pose, iden
 
 **Worked example: sampling time per order.** On an A100 an SDXL-class U-Net at 1024px takes about 60 to 80 ms per step with CFG batched as two. At 30 steps that is about 2 to 2.5 s per image plus 0.3 s VAE decode. Fifty images take about 2 minutes; with 20% regenerations, about 2.5 minutes. Batching four prompts per forward pass adds 20 to 40% throughput.
 
-## Evaluation
+## 5. Evaluation
 
 Personalization adds an axis that generic metrics ignore. I score four properties separately because they trade off: prompt alignment, image quality, identity, and diversity.
 
@@ -264,7 +268,7 @@ $$
 
 For human evaluation, consenting panelists rate "this is me" while other raters judge quality; side-by-side comparisons beat absolute scores. Online, ratings skew toward unhappy users, so pair them with downloads per order, refund and regeneration-request rates, and trial-to-paid conversion.
 
-## Serving system
+## 6. Overall ML system design
 
 Three asynchronous stages joined by a queue: intake and validation, per-user training, then generation and delivery. It is a throughput and cost problem with a one-hour SLA, not a millisecond latency problem.
 
@@ -320,9 +324,15 @@ Cost levers in order of payoff: cached class and VAE latents (free), batching pr
 
 **Worked example: fleet and storage.** Training 15 min plus sampling and overhead 3 min is 0.3 GPU-hours per order, about \$0.60 at \$2 per GPU-hour. At 20,000 orders per day that is \( 20{,}000\times0.3=6{,}000 \) GPU-hours, or 250 GPUs if load were flat. With a peak-to-average ratio near 2 and jobs needing to start quickly, plan for 400 to 500 at peak. Storage per order is about 15 uploads x 3 MB plus 50 outputs x 1.5 MB, roughly 120 MB, so a 7 to 30 day retention keeps tens of TB live. Keeping full checkpoints would add 5 GB x 20,000 = 100 TB per day, which is why "discard after delivery" carries so much weight.
 
+## 7. Deployment and monitoring
+
 **Safety and privacy.** Match a live selfie against the upload cluster to stop impersonation, block public figures and minors, run a safety classifier on outputs, and add a watermark plus C2PA credentials. Encrypt at rest, never train shared models on customer photos without opt-in, and log deletions.
 
 **Monitoring.** SLA attainment, rejection rate by reason and subgroup, identity score and regenerations per order, queue age, and safety hit rate.
+
+**Rollout.** A base-model, template or hyperparameter change goes to a small share of orders first and is compared with the current version on identity score, regenerations per order, gate rejection rate by subgroup and refund requests. Each order trains its own model, so a rollback affects only new orders; orders in flight finish on the version they leased, which keeps results reproducible for support cases.
+
+**Feedback.** Downloads per image and support tickets show which templates work, and templates with low download rates are rewritten or retired. Customer photos never enter shared training without opt-in, so feedback improves templates, thresholds and the validator rather than the base model. Recalibrate the identity threshold whenever the base or face recognition model changes, and page on-call when SLA attainment stays below target for an hour.
 
 ## Follow-ups and extensions
 
