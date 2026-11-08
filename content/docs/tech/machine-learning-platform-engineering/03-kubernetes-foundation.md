@@ -2,487 +2,91 @@
 title: "03. Kubernetes 위에 ML 애플리케이션의 기반 놓기"
 description: "Docker, Kubernetes 객체, CI/CD와 모니터링을 하나의 배포 흐름으로 연결하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-08T15:00:00+09:00
+lastmod: 2026-11-08T19:00:00+09:00
 weight: 30
 tags: ["book-club", "ml-platform-engineering", "kubernetes", "devops"]
 ---
 
-3장에서는 모델보다 모델을 올릴 실행 환경을 먼저 다룬다. Docker로 앱을 포장해 Kubernetes에서 실행하고, 그 위에 CI/CD와 모니터링을 붙인다. 도구 기능보다는 **앱이 로컬에서 클러스터로 옮겨 갈 때 무엇이 달라지는지**, 요청이 실패하면 어디부터 볼지를 따라갔다.
+3장은 모델보다 모델을 올릴 실행 환경을 먼저 다룬다. 노트북에서 돌던 앱을 클러스터에 올리면 실패할 수 있는 곳이 이미지, 배치, 네트워크, 배포 경로로 나뉜다. 이 층을 구분해 두어야 뒤 장에서 모델 서비스가 실패했을 때 어디부터 볼지 정할 수 있다.
 
-## 3.1 컨테이너와 도구
-
-책은 모델 없는 간단한 FastAPI 앱 하나로 포장, 실행, 배포, 관측을 보여 준다.
-
-| 책임 | 책에서 사용하는 도구 | 확인할 결과 |
-| --- | --- | --- |
-| 실행 환경 포장 | Docker | 같은 식별자의 이미지를 가져와 실행 |
-| 배치, 복제본 관리 | Kubernetes | 원하는 워크로드 상태 유지 |
-| 검사, 빌드 | GitLab CI | 변경을 검사하고 이미지, 배포 설정 연결 |
-| 선언된 상태 배포 | Argo CD | Git 선언과 실제 상태 비교, 동기화 |
-| 운영 수치 관측 | Prometheus, Grafana | 지연, 오류, 트래픽, 자원 확인 |
+책은 모델 없는 작은 FastAPI 앱 하나로 포장, 실행, 배포, 관측의 흐름을 보여 준다.
 
 ```mermaid
 flowchart TD
     accTitle: 코드에서 Kubernetes 배포까지의 흐름
-    accDescr: 코드를 CI에서 검사하고 이미지를 빌드해 레지스트리에 저장한다. Git의 배포 설정을 Argo CD로 동기화하고 Kubernetes가 지정 이미지를 가져와 실행한다.
-    A["코드 + 의존성 + Dockerfile"] --> B["CI, 검사와 이미지 빌드"]
+    accDescr: 코드를 CI에서 검사하고 이미지를 빌드해 레지스트리에 저장한다. Git의 배포 설정을 Argo CD로 동기화하고 Kubernetes가 지정 이미지를 가져와 실행하며, Prometheus와 Grafana가 상태를 관측한다.
+    A["코드와 Dockerfile"] --> B["CI, 검사와 이미지 빌드"]
     B --> C["컨테이너 레지스트리"]
-    B --> D["Git의 배포 설정에 이미지 버전 반영"]
-    D --> E["Argo CD, 상태 비교와 동기화"]
+    B --> D["Git의 배포 설정"]
+    D --> E["Argo CD 동기화"]
     E --> F["Kubernetes, Pod 실행"]
     C -->|"이미지 가져오기"| F
-    F --> G["Prometheus와 Grafana, 상태 관측"]
+    F --> G["Prometheus와 Grafana"]
 ```
 
-이미지 빌드, 이미지 pull, Pod 실행, Service 포트는 각각 따로 고장 나는 지점이다.
+## 이미지는 실행 환경을 고정하지만 모델까지 특정하지는 않는다
 
-## 3.2 Docker
+Dockerfile은 이미지를 정의하고, 이미지는 배포 단위이며, 컨테이너는 그 이미지의 실행 인스턴스다. 레지스트리는 이미지를 보관했다가 배포 환경에 내어 준다. `RUN`은 이미지를 만드는 동안 실행되고 `CMD`나 `ENTRYPOINT`는 컨테이너가 시작될 때 실행되므로, 빌드가 성공해도 API가 제대로 뜨는지는 띄워서 요청을 보내 봐야 안다.
 
-Dockerfile은 이미지를 정의하고, 이미지는 배포 단위, 컨테이너는 그 실행 인스턴스다. 레지스트리는 이미지를 보관해 배포 환경에 내어 준다.
+태그는 다른 이미지에 다시 붙일 수 있는 이름이고, digest는 이미지 내용을 가리키는 해시다. 실제로 배포한 것을 추적하려면 커밋과 digest를 함께 남긴다. 모델을 실행 시점에 외부 저장소에서 읽는다면 이미지 버전만으로는 어떤 모델이 돌고 있는지 알 수 없으니 모델 버전도 따로 기록한다.
 
-이미지 하나로 컨테이너를 여러 개 띄워도 메모리와 실행 상태는 컨테이너마다 따로다. 모델은 이미지에 넣어도 되고 실행할 때 외부 저장소에서 읽어도 된다. 외부에서 읽는다면 이미지 버전만으로는 실제 모델을 특정할 수 없으니 모델 버전을 따로 남긴다.
+컨테이너가 환경 차이를 모두 없애 주지는 않는다. CPU 아키텍처, GPU 드라이버, 외부 서비스, 런타임 설정은 여전히 결과에 영향을 준다. 포트도 프로세스가 실제로 듣는 포트, 이미지의 포트 선언, 호스트 쪽 매핑이 각각 다른 설정이다.
 
-### 3.2.1 애플리케이션 코드 작성
+## Kubernetes는 선언한 상태를 계속 맞춘다
 
-책의 예제는 요청을 받아 응답을 돌려주는 FastAPI 서비스다. 입력 경로와 응답 형식, 의존성을 로컬에서 확인한 뒤 컨테이너로 옮긴다.
-
-실행 명령, 환경 변수, 포트는 코드 밖에서도 보여야 한다. 프로세스가 루프백 주소에만 바인딩되어 있으면 포트를 매핑해도 바깥 요청이 닿지 않을 수 있다.
-
-앱의 오류와 실행 환경의 오류는 나눠서 본다. 같은 요청이 로컬에서도 실패하면 앱의 입력 처리와 의존성을 먼저 의심한다. 컨테이너에서만 실패한다면 파일 경로, 설치된 패키지, 실행 명령, 환경 변수 중 무엇이 달라졌는지 찾는다.
-
-### 3.2.2 Dockerfile 작성
-
-| 주요 지시어 | 의미 | 점검할 사항 |
-| --- | --- | --- |
-| `FROM` | 기반 이미지 선택 | 버전, 아키텍처, 보안 업데이트 |
-| `WORKDIR` | 작업 경로 지정 | 코드와 상대 경로의 일관성 |
-| `COPY` | 빌드 문맥의 파일 복사 | 비밀, 불필요한 데이터 제외 |
-| `RUN` | 빌드 중 명령 실행 | 시스템, Python 의존성의 재현성 |
-| `ARG` / `ENV` | 빌드 인자 / 환경 변수 | 자격 증명을 이미지에 남기지 않기 |
-| `ENTRYPOINT` / `CMD` | 기본 실행 방식 | 정상 기동, 종료와 인자 전달 |
-
-Python 패키지를 설치했다고 OS 라이브러리나 GPU 런타임까지 따라오지는 않는다. 호스트와 이미지의 역할을 나누고, 환경별 비밀은 실행 시점에 승인된 비밀 관리 방식으로 넘긴다.
-
-`RUN`은 이미지를 만드는 동안 실행된다. `ENTRYPOINT`와 `CMD`는 컨테이너가 시작될 때 무엇을 실행할지 정한다. 빌드가 성공해도 API가 제대로 뜨는지는 이미지를 띄워 요청을 보내 봐야 안다.
-
-의존성 파일을 먼저 복사해 설치하고 앱 코드를 나중에 복사하면 코드만 바뀐 빌드에서 설치 계층을 재사용할 수 있다. 비밀 파일이나 대용량 학습 데이터를 무심코 복사하면 이미지가 커지고 배포 속도와 보안에도 영향을 준다.
-
-### 3.2.3 이미지 빌드와 푸시
-
-순서는 로컬 빌드, 로컬 컨테이너 실행 확인, 레지스트리 푸시, 배포 환경에서 가져오기다. 단계를 나눠 두면 앱, 포트 전달, 레지스트리 인증 중 어디가 잘못됐는지 가려낼 수 있다.
-
-이미지 태그는 다른 이미지에 다시 붙일 수 있다. 그래서 실제 빌드와 배포에 쓴 커밋, 불변 digest를 함께 남긴다. [Kubernetes 이미지 문서](https://kubernetes.io/docs/concepts/containers/images/)도 tag는 옮겨 붙일 수 있는 이름, digest는 이미지 내용을 식별하는 해시로 구분한다. `latest`라는 이름은 실제로 배포한 내용을 말해 주지 않는다.
-
-컨테이너가 환경 차이를 전부 없애 주지는 않는다. CPU 아키텍처, GPU 드라이버, 외부 서비스, 런타임 설정은 여전히 영향을 준다.
-
-포트도 호스트 쪽과 컨테이너 쪽을 나눠 본다. 컨테이너 안의 앱이 8083 포트에서 듣고 있고 호스트의 8081을 그 포트에 연결했다면, 브라우저는 호스트의 8081로 요청한다. 이미지의 포트 선언, 프로세스가 실제로 듣는 포트, 바깥 포트 연결은 각각 다른 설정이다.
-
-## 3.3 Kubernetes
-
-Kubernetes는 컨테이너를 어디에 놓을지 정하고, 선언한 상태가 유지되도록 계속 조정한다. `docker run`을 반복하는 것보다 관리 범위가 넓다.
-
-### 3.3.1 Kubernetes 아키텍처
-
-컨트롤 플레인에는 API server, etcd, scheduler, controller 등이 있고 클러스터의 상태와 배치, 조정을 맡는다. 실제 워크로드는 워커 노드의 kubelet과 컨테이너 런타임이 실행한다.
+컨트롤 플레인의 API server, etcd, Scheduler, Controller가 클러스터 상태와 배치를 맡고, 워커 노드의 kubelet과 컨테이너 런타임이 실제 컨테이너를 실행한다. 구성 요소들은 API server를 거쳐 상태를 읽고 쓰며, etcd는 그 상태를 저장한다. 워커는 containerd 같은 런타임을 CRI로 쓰므로 Docker로 빌드했다고 노드도 Docker Engine으로 돈다는 뜻은 아니다.
 
 ![API server, etcd, Scheduler와 Controller를 가진 관리 노드와 kubelet 및 컨테이너 런타임으로 컨테이너를 실행하는 워커 노드의 구분.](/images/ml-platform-engineering/figure-3-04.png?v=2)
 
 그림 3.4. Kubernetes 구성 요소. 출처: Machine Learning Platform Engineering, 3장.
 
-그림의 Master node는 지금의 컨트롤 플레인이다. 박스는 책임을 나눈 것이지 워커가 etcd에 직접 요청한다는 뜻이 아니다. 각 구성 요소는 API server를 거쳐 상태를 읽고 갱신하며, etcd는 그 클러스터 상태를 저장한다.
-
-| 구성 요소 | 맡는 일 | 맡지 않는 일 |
-| --- | --- | --- |
-| API server | 자원 생성과 조회 요청을 받고 API 제공 | 앱의 추론 요청을 대신 처리하지 않음 |
-| etcd | 클러스터의 선언과 상태 저장 | 학습 이미지와 모델 가중치 보관소가 아님 |
-| Scheduler | 배치되지 않은 Pod에 적합한 노드 선택 | 컨테이너 프로세스를 직접 실행하지 않음 |
-| Controller | 원하는 상태와 현재 상태의 차이 조정 | 모든 장애의 업무상 원인을 판단하지 않음 |
-| kubelet | 자기 노드의 Pod 실행 상태 관리 | 클러스터 전체의 배치 결정을 하지 않음 |
-| 컨테이너 런타임 | 이미지에서 컨테이너를 실행하고 관리 | 어떤 모델을 출시할지 결정하지 않음 |
-
-Deployment를 제출하면 API server가 선언을 받아 저장한다. Controller가 Pod를 만들고 Scheduler가 노드를 정하면, 그 노드의 kubelet이 런타임으로 컨테이너를 띄운다. 그래서 자원이 모자라 배치되지 못한 문제와 실행 뒤 프로세스가 죽는 문제는 조사할 곳이 다르다.
-
-[Kubernetes 아키텍처 문서](https://kubernetes.io/docs/concepts/architecture/)를 보면 런타임으로는 containerd, CRI-O 등이 쓰이고 kubelet은 CRI(Container Runtime Interface)로 런타임과 연결된다. Docker로 이미지를 빌드했다고 워커도 Docker Engine으로 돌아가는 것은 아니다. GPU 드라이버와 런타임의 호환 조건도 따로 확인한다.
-
-### 3.3.2 kubectl
-
-`kubectl`은 API server와 주고받는 명령행 도구다. context는 어느 클러스터에 어떤 인증 정보와 기본 Namespace로 붙을지 고르는 설정이다. 대상이 맞는지부터 확인하고 상태, 이벤트, 로그 순으로 보면 안전하다.
-
-아래는 상태를 볼 때 쓰는 명령이다. `<namespace>`와 `<pod-name>`은 환경에 맞게 바꾼다.
-
-```shell
-kubectl config current-context
-kubectl get nodes
-kubectl get pods -n <namespace> -o wide
-kubectl describe pod <pod-name> -n <namespace>
-kubectl logs <pod-name> -n <namespace> --previous
-kubectl get services,endpointslices -n <namespace>
-```
-
-`--previous`는 이전에 종료된 컨테이너의 로그를 볼 때 쓰고, 컨테이너가 여럿인 Pod라면 대상 컨테이너도 지정한다. `Pending`이면 배치, 볼륨, 자원을, `ImagePullBackOff`면 이미지 경로와 접근 권한을, 반복 재시작이면 프로세스, 설정, probe를 먼저 본다. EndpointSlice는 Service 뒤에 붙은 접속 대상과 그 준비 상태를 담는 자원이다.
-
-### 3.3.3 Kubernetes 객체
-
-| 객체 | 쉬운 역할 | 혼동하지 말아야 할 점 |
-| --- | --- | --- |
-| Pod | 함께 실행되는 컨테이너의 최소 배치 단위 | 영구적인 서버 주소나 데이터 보관함이 아님 |
-| ReplicaSet | 정해진 수의 Pod 복제본 유지 | 보통 Deployment를 통해 관리 |
-| Deployment | 버전 교체와 복제본의 선언적 관리 | 애플리케이션 상태를 선언할 뿐 모델 품질은 보장하지 않음 |
+Deployment를 제출하면 API server가 선언을 저장하고, Controller가 Pod를 만들고, Scheduler가 노드를 고르고, 그 노드의 kubelet이 컨테이너를 띄운다. 그래서 자원이 모자라 `Pending`에 머무는 문제, 이미지를 못 가져오는 `ImagePullBackOff`, 실행 뒤 프로세스가 죽는 반복 재시작은 조사할 곳이 서로 다르다.
 
 ![Deployment가 ReplicaSet을 관리하고 ReplicaSet이 Pod의 수를 유지하며 Pod 안에서 컨테이너가 실행되는 포함 관계.](/images/ml-platform-engineering/figure-3-05.png?v=2)
 
 그림 3.5. Deployment, ReplicaSet, Pod와 Container의 관계. 출처: Machine Learning Platform Engineering, 3장.
 
-Deployment가 ReplicaSet을, ReplicaSet이 Pod를 관리하므로 Pod를 손으로 지워도 다시 생긴다. 선언이 틀렸다면 몇 번을 재시작해도 고쳐지지 않는다.
+Deployment가 ReplicaSet을, ReplicaSet이 Pod 수를 관리한다. Controller는 원하는 상태와 관측한 상태의 차이를 반복해서 줄이는 조정 루프(reconciliation)로 움직이므로, Pod를 손으로 지워도 다시 생기고 선언이 틀렸다면 몇 번을 재시작해도 고쳐지지 않는다. 실패한 Pod는 새 Pod로 대체되며, 컨테이너 재시작과 Pod 교체와 모델 버전 롤백은 서로 다른 복구다. 복제본이 여러 개여도 같은 노드나 저장소에 기대면 함께 장애를 겪는다.
 
-Deployment는 새 버전의 Pod 템플릿과 ReplicaSet을 관리한다. 이미지를 바꾸면 기존 Pod의 프로세스를 손보는 대신 새 템플릿대로 Pod를 새로 만든다. 서비스 주소를 특정 Pod에 고정하지 않는 것도 이 때문이다.
+## Service는 바뀌는 Pod 앞에 고정된 입구를 만든다
 
-Pod 안의 컨테이너는 네트워크 공간을 공유하므로, 꼭 함께 있어야 하는 컨테이너는 한 Pod로 묶는다. API 복제본 세 개를 한 Pod에 넣는다고 가용성이 생기지는 않는다. 독립적으로 배치할 복제본은 별도 Pod로 둔다.
+Pod는 주소와 수명이 계속 바뀐다. Service는 label selector로 대상 Pod를 고르고, 자기 `port`로 받은 요청을 Pod의 `targetPort`로 넘긴다. selector가 Pod label과 어긋나거나 `targetPort`가 앱이 실제로 듣는 포트와 다르면 Pod가 Running이어도 요청은 실패한다. Service 객체가 생겼다고 요청 경로까지 정상인 것은 아니어서 selector, EndpointSlice의 대상, 포트를 차례로 본다.
 
-[Controller 문서](https://kubernetes.io/docs/concepts/architecture/controller/)의 중심 개념은 reconciliation이다. 원하는 상태와 관측된 상태의 차이를 반복해서 줄이는 조정 루프로, 온도조절기가 설정 온도와 실제 온도를 비교하는 것과 비슷하다.
-
-```mermaid
-flowchart TD
-    accTitle: 선언한 상태와 관측한 상태의 조정 루프
-    accDescr: 세 개의 Pod를 원하지만 두 개만 관측되면 Controller가 API를 통해 새 Pod를 요청한다. 스케줄러와 kubelet이 실행을 담당하고, 새 관측 결과로 다시 비교한다.
-    D["원하는 상태, 복제본 3개"] --> C["Controller, 차이 비교"]
-    O["관측한 현재 상태<br/>예: Pod 2개"] --> C
-    C --> F{"차이가 있는가?"}
-    F -->|"부족함"| A["API에 부족한 Pod 생성 요청"]
-    F -->|"일치"| O
-    A --> R["Scheduler, kubelet, 런타임의 배치와 실행"]
-    R --> O
-```
-
-실패한 Pod는 다른 노드로 그대로 옮겨 가지 않고 새 UID를 가진 Pod로 대체될 수 있다. 컨테이너 재시작, Pod 교체, 모델 버전 롤백은 서로 다른 복구다. 자세한 차이는 [Pod 생애주기](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/) 문서에 있다.
-
-복제본이 여러 개라도 같은 노드나 저장소, 외부 서비스에 기대면 함께 장애를 겪는다. 복제본 수와 장애 격리는 별개다.
-
-### 3.3.4 네트워크와 Service
-
-주소와 수명이 계속 바뀌는 Pod 앞에서 Service가 안정적인 접근 지점이 된다. 대상은 selector, 곧 label 조건으로 고른다. Service의 `port`와 실제 프로세스가 받는 `targetPort`도 맞물려야 한다.
-
-Service가 `app: detector` label이 붙은 Pod를 대상으로 `port: 80`, `targetPort: 8083`으로 설정되어 있다고 하자. 요청은 Service의 80으로 들어와 Pod 안의 8083으로 간다. 앱이 실제로는 8000에서 떠 있다면 Pod가 Running이어도 요청은 실패한다.
-
-이럴 때는 selector와 Pod label, EndpointSlice의 대상, 대상 포트를 차례로 본다. Service 객체가 만들어졌다고 요청 경로까지 정상인 것은 아니다.
-
-| 유형 | 기본 사용 범위 | 운영 시 확인할 것 |
-| --- | --- | --- |
-| ClusterIP | 클러스터 내부의 안정적 접근 | DNS, selector, 준비된 대상 Pod |
-| NodePort | 노드 포트를 통한 노출 | 방화벽, 노드 접근, 노출 범위 |
-| LoadBalancer | 제공자 또는 구현체의 외부 로드밸런서 연계 | 지원 환경, 외부 주소, 비용, 접근 정책 |
-
-`port-forward`는 점검용이지 사용자가 들어오는 경로가 아니다. Service가 인증, TLS, 외부 접근 정책을 갖춰 주지도 않는다. TLS는 통신 구간을 보호하는 계층이고, 사용자 권한 판정은 그와 별개다.
-
-### 3.3.5 기타 객체
-
-| 객체 | 역할 | 운영상 주의 |
-| --- | --- | --- |
-| Namespace | 이름과 자원의 관리 범위 | RBAC, 네트워크 정책, 쿼터가 별도로 필요 |
-| ConfigMap | 일반 설정을 코드와 분리 | 변경이 실행 중 프로세스에 언제 반영되는지 확인 |
-| Secret | 민감한 설정 전달 | 인코딩을 암호화로 오해하지 않고 접근, 저장 보호 |
-
-RBAC는 역할에 따라 API 자원 접근을 허용하는 권한 관리 방식이다. 네트워크 정책은 워크로드 사이의 통신을, 쿼터는 자원 사용 범위를 제한한다. Namespace만 나눠서는 이것들이 해결되지 않는다.
-
-설정과 비밀을 분리해도 계정 권한, 로그 노출, 보존은 따로 관리해야 한다. 환경 변수로 넣은 설정은 객체만 바꿔서는 이미 떠 있는 프로세스에 바로 반영되지 않는다.
-
-### 3.3.6 Helm 차트
-
-서비스 하나에도 Deployment, Service, 설정 같은 객체가 여럿 필요하다. Helm은 이 묶음을 템플릿과 `values`로 이루어진 차트로 패키징한다.
-
-템플릿은 공통 구조이고 values는 환경마다 바꿀 값이다. 개발과 운영에서 복제본 수나 자원 요청만 다르게 줄 때 쓴다. 다만 values 안에 모델 참조나 전처리 설정이 섞여 있으면 차트 버전이 같아도 서비스 동작은 달라질 수 있다.
-
-그래서 차트 버전과 환경별 값, 이미지, 모델 버전을 함께 연결하고 렌더링된 명세를 직접 검토한다. 차트가 문법상 유효해도 잘못된 selector나 지나친 자원 요구 같은 의미상의 오류는 그대로 남는다.
-
-### 3.3.7 정리
-
-이제 Docker로 포장한 앱을 Kubernetes가 실행하고 Service로 연결하며 Helm으로 선언을 관리할 수 있다. 그래도 배포를 사람이 하는 동안에는 반복 작업과 실수, 권한 문제가 남는다. 다음 절은 이 변경 경로의 자동화다.
-
-## 3.4 지속적 통합과 배포
-
-CI는 바뀐 코드를 검사하고 이미지를 만든다. CD는 검증한 변경을 전달하고 배포하며, 운영까지 자동 출시할지는 별도 정책이다. 두 책임을 나눠 두어야 운영 중인 버전이 어떤 검사를 통과했는지 설명할 수 있다.
-
-### 3.4.1 GitLab CI
-
-책은 GitLab CI로 변경마다 돌릴 작업을 정의한다. 볼 것은 UI보다 커밋에서 검사, 이미지 식별자, 배포 설정 변경으로 이어지는 연결이다.
-
-코드 커밋 A로 만든 이미지의 digest를 배포 설정에 적고 그 설정도 커밋해 두면, 실제 서비스에서 원래 코드까지 거슬러 올라갈 수 있다. 같은 `latest` 태그만 덮어쓰면 Git의 설정은 그대로인데 이미지 내용만 바뀐다.
-
-레지스트리 인증과 배포 권한은 CI의 승인된 비밀 저장소와 최소 권한 계정으로 관리한다. 테스트가 실패하면 운영 참조 갱신도 멈추는지, 빌드한 것과 배포하는 것이 같은지도 본다.
-
-CD는 CI가 만든 결과를 운영 환경에 연결한다. CI 계정에 클러스터 관리자 권한을 주는 것과 Git의 배포 선언만 갱신하게 하는 것은 권한 범위가 전혀 다르다.
-
-### 3.4.2 Argo CD
-
-GitOps는 Git에서 버전 관리하는 선언을 기준으로 실제 운영 상태를 맞추는 방식이다. Argo CD는 Git의 선언과 클러스터 상태를 비교한다. 커밋과 이미지 버전, 배포 설정이 이어져 있으면 "누가 서버에서 무엇을 바꿨나" 대신 "어떤 변경이 배포되었나"를 추적할 수 있다.
-
-차이가 보인다고 항상 자동으로 덮어쓰지는 않는다. [Argo CD 자동 동기화 정책](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)에서 auto-sync, self-heal, prune은 각각 다른 설정이다. 새 선언 자동 반영, 수동 변경 되돌리기, Git에서 사라진 자원 삭제가 각각 따로 켜진다.
-
-긴급하게 손으로 고친 내용은 다음 동기화 때 덮어써질 수 있으니, 긴급 변경을 Git에 반영하고 승인하거나 되돌리는 방법을 미리 정해 둔다.
-
-`Synced`는 관측한 자원 명세가 Git의 선언과 맞는지를, `Healthy`는 자원 종류별 상태 판단이 정상인지를 나타낸다. 둘 다 ML 품질 승인과는 무관하다. 틀린 모델 버전을 Git에 적어 둬도 동기화는 성공하므로 모델의 업무상 품질 검증은 따로 가져가야 한다.
-
-## 3.5 Prometheus와 Grafana
-
-Prometheus는 애플리케이션이 노출한 메트릭 엔드포인트에서 수치를 수집해 저장한다. 이 수집을 scrape라고 한다. Grafana는 그 데이터를 질의해 시각화하고, Alertmanager는 알림을 그룹화해 라우팅한다.
-
-| 메트릭 유형 | 의미와 예시 | 해석 주의 |
-| --- | --- | --- |
-| Counter | 요청, 오류처럼 누적되는 횟수 | 재시작에 따른 초기화를 고려해 변화율 해석 |
-| Gauge | 현재 메모리, 대기 작업처럼 오르내리는 값 | 한 시점과 장기 추세를 구분 |
-| Histogram | 지연 등 관측값의 구간별 분포 | 버킷 설계와 표본 수, 집계 방식 확인 |
-| Summary | 관측값의 개수, 합과 설정한 분위수 | 인스턴스별 분위수를 단순 합산할 수 없음 |
-
-[Prometheus 메트릭 유형 문서](https://prometheus.io/docs/concepts/metric_types/)도 Counter, Gauge, Histogram, Summary를 구분한다. 표의 버킷 설명은 classic histogram 기준이다. Native histogram은 구조가 달라서 계측 라이브러리와 서버 버전을 함께 확인해야 한다.
-
-대시보드가 비었다고 요청이 없었던 것은 아니다. 메트릭 노출, 수집 대상 발견, scrape 성공, 질의 결과를 순서대로 본다.
-
-요청 수 Counter가 10,000이라고 지금 부하가 높은 것은 아니다. 프로세스가 언제 시작했느냐에 따라 의미가 달라진다. 현재 초당 요청량은 일정 구간의 증가율로 봐야 한다.
-
-평균 지연만 보면 일부 사용자의 느린 요청을 놓친다. p95는 관측한 요청의 약 95%가 그 시간 이하였다는 뜻이다. Histogram에서 계산한 분위수는 버킷 경계와 표본에 영향을 받는다. "p95가 낮다"는 말에는 어떤 구간과 트래픽을 집계했는지가 따라붙어야 한다.
-
-요청 수, 오류율, 응답 시간, 자원 사용량이 정상이어도 ML 예측이 맞는다는 보장은 없다. 데이터 변화와 실제 예측 품질은 따로 관측한다.
-
-사용자 ID나 요청 ID를 메트릭 label로 무제한 붙이면 시계열 수가 폭증할 수 있다. label 조합이 만들어 내는 시계열의 수를 카디널리티(cardinality)라고 한다. 개별 요청의 맥락은 로그와 트레이스에 맡기고, 알림에는 담당자와 대응 절차를 붙인다. label 설계는 [Prometheus 이름, label 지침](https://prometheus.io/docs/practices/naming/)을 참고했다.
-
-## 실습: API 배포와 요청 경로 연결
-
-책의 FastAPI 예제 대신 모델 없는 작은 앱을 쓴다. 모델을 넣기 전에 이미지와 네트워크 문제부터 떼어 보려는 것이다.
-
-Python 3.12, 실행 가능한 Docker Engine, 개인 학습용 Kubernetes 클러스터가 필요하다. Windows에서는 Docker를 Linux 컨테이너 모드로 쓴다. 아래 클러스터 명령은 이미 준비된 Minikube를 전제로 하며, 이 글을 쓰면서 클러스터 실행까지 확인한 예제는 아니다. 운영 클러스터에는 적용하지 않는다.
-
-### 1. 앱의 주소와 포트 고정하기
-
-빈 실습 폴더에 `app.py`를 만든다.
-
-```python
-from fastapi import FastAPI
-
-app = FastAPI()
-
-
-@app.get("/")
-def index():
-    return {"service": "ml-book-study", "version": "v1"}
-
-
-@app.get("/health")
-def health():
-    return {"status": "alive"}
-
-
-@app.get("/ready")
-def ready():
-    return {"status": "ready"}
-```
-
-이 예제의 readiness는 항상 성공한다. 실제 모델 서비스라면 모델 로딩과 필수 초기화가 끝났을 때만 성공하게 바꿔야 한다. 외부 시스템이 느리다고 liveness까지 실패시키면 재시작이 부하를 더 키울 수 있다.
-
-`requirements.txt`에는 학습용 버전을 고정한다.
-
-```text
-fastapi==0.115.5
-uvicorn==0.32.1
-```
-
-같은 폴더에 `Dockerfile`을 둔다.
-
-```dockerfile
-FROM python:3.12-slim-bookworm
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-`COPY . .` 대신 필요한 두 파일만 복사한다. 폴더에 토큰 파일이 있어도 이미지에 들어가지 않는다. 기반 이미지는 읽기 쉬운 태그로 적었지만 실제 출시에서는 검증한 digest까지 고정한다.
-
-```powershell
-docker build -t income-api:study-v1 .
-docker run --rm --name ml-book-api -p 127.0.0.1:18000:8000 income-api:study-v1
-```
-
-두 번째 명령은 터미널을 점유한다. 다른 터미널에서 `curl.exe http://127.0.0.1:18000/`로 확인하고, 끝낼 때는 실행 중인 터미널에서 Ctrl+C를 누른다. `18000`은 PC의 포트, `8000`은 컨테이너 안의 앱 포트다.
-
-### API를 실행하고 요청 보내기
-
-Docker와 Kubernetes 없이 앱만 먼저 띄워 본다. 위 패키지가 설치된 가상환경에서 같은 `app.py`를 실행한다.
-
-```powershell
-python -m uvicorn app:app --host 127.0.0.1 --port 15300
-```
-
-`http://127.0.0.1:15300/docs`에서 `GET /ready`를 펼치고 **Try it out → Execute**를 누른다. Swagger UI에서는 Execute를 눌러야 실제 요청이 나간다.
+Running과 Ready도 다르다. readiness probe가 실패한 Pod는 Service 트래픽 대상에서 빠지고, liveness나 startup probe가 실패하면 컨테이너가 재시작된다. 모델 서비스라면 readiness는 모델 로딩과 초기화가 끝났을 때만 성공해야 한다.
 
 ![FastAPI의 Swagger UI에서 GET ready를 호출해 HTTP 200과 status ready 응답을 받은 화면.](/images/ml-platform-engineering/study-ch03-api-ready.png)
 
-위쪽의 Request URL, 아래 Server response의 `200`, Response body의 `"status": "ready"`를 함께 본다. 그 아래 Example Value는 문서용 예시다. 여기서 문제가 생기면 앱 로직과 컨테이너, 네트워크 설정을 나눠서 조사한다.
+모델 없는 연습용 앱의 `/ready`가 200을 돌려준 화면이다. 이 앱의 readiness는 항상 성공하므로 이 응답이 모델 준비 완료를 뜻하지는 않는다. Namespace, ConfigMap, Secret으로 범위와 설정을 나누고 Helm 차트로 객체 묶음을 패키징해도, 권한과 비밀 보호와 values에 섞인 모델 참조는 따로 관리해야 한다.
 
-이 앱에는 모델이 없으므로 `/ready`의 200 응답이 모델 준비 완료를 뜻하지 않는다. 실제 서비스라면 로딩한 모델 버전과 초기화 상태를 readiness에 반영해야 한다.
+## CI/CD는 운영 중인 버전을 커밋까지 거슬러 올라가게 한다
 
-### 세 포트를 택배 경로처럼 읽기
+CI는 변경을 검사하고 이미지를 만든다. CD는 검증한 결과를 배포 환경에 연결한다. 커밋 A로 만든 이미지의 digest를 배포 설정에 적고 그 설정도 커밋하면 실행 중인 서비스에서 원래 코드까지 추적할 수 있다. `latest` 태그만 덮어쓰면 Git의 설정은 그대로인데 이미지 내용만 바뀐다.
 
-호스트 포트를 건물 출입구, Service 포트를 안내 창구, `targetPort`를 실제 작업실 문이라고 생각하면 쉽다. 창구가 있다고 작업실이 생기지는 않는다. 앱은 8000번 문에서 기다리는데 안내가 8001번으로 되어 있으면 요청은 도착하지 못한다.
+GitOps는 Git의 선언을 기준으로 클러스터를 맞추는 방식이고, Argo CD가 그 비교와 동기화를 맡는다. [자동 동기화 정책](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)에서 새 선언 반영(auto-sync), 수동 변경 되돌리기(self-heal), 사라진 자원 삭제(prune)는 각각 따로 켜는 설정이다. 손으로 고친 긴급 변경은 다음 동기화에 덮어써질 수 있다.
 
-```mermaid
-flowchart LR
-    accTitle: 개발 PC에서 API 프로세스까지의 포트 연결
-    accDescr: 로컬 Docker 실행의 18000에서 컨테이너 8000으로 가는 경로와, Kubernetes 점검 시 18080에서 Service 80을 거쳐 Pod 8000으로 가는 경로를 구별한다.
-    A["PC 18000"] -->|"docker -p"| B["컨테이너 앱 8000"]
-    C["PC 18080"] -->|"port-forward"| D["Service 80"]
-    D -->|"targetPort"| E["Pod 안 앱 8000"]
-```
+`Synced`는 클러스터가 Git 선언과 맞는다는 뜻이고 `Healthy`는 자원 상태가 정상이라는 뜻이다. 틀린 모델 버전을 Git에 적어도 동기화는 성공하므로, 모델 품질 검증은 배포 도구 밖에서 따로 해야 한다.
 
-`0.0.0.0`은 앱이 컨테이너 안의 모든 네트워크 인터페이스에서 요청을 받겠다는 바인딩 설정이다. 브라우저에 입력할 주소가 아니다. 로컬에서 접속할 때는 위 명령에 적은 호스트 주소 `127.0.0.1`을 쓴다.
+## 3.5 Prometheus와 Grafana
 
-### 2. Deployment와 Service의 연결 만들기
+Prometheus는 앱이 노출한 메트릭 엔드포인트를 주기적으로 가져가(scrape) 저장하고, Grafana는 그 데이터를 질의해 그린다. 메트릭 유형마다 읽는 법이 다르다.
 
-다음 내용을 `deployment.yaml`로 저장한다.
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: income-api
-  namespace: ml-book-study
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: income-api
-  template:
-    metadata:
-      labels:
-        app: income-api
-    spec:
-      containers:
-        - name: api
-          image: income-api:study-v1
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8000
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8000
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: income-api
-  namespace: ml-book-study
-spec:
-  selector:
-    app: income-api
-  ports:
-    - port: 80
-      targetPort: 8000
-```
-
-맞물려야 하는 곳은 세 군데다. Deployment의 selector와 Pod template의 label이 같아야 하고, Service의 selector도 그 label을 골라야 한다. 그리고 `targetPort: 8000`이 프로세스가 실제로 듣는 포트와 일치해야 한다. `containerPort`를 선언한다고 포트가 열리지는 않는다.
-
-적용하기 전에 context가 개인 Minikube를 가리키는지 확인한다. `minikube image load`는 로컬 이미지를 그 클러스터가 쓸 수 있게 옮겨 주는 단계다. 다른 클러스터라면 접근 가능한 레지스트리에 푸시한 이미지 주소와 인증을 쓴다.
-
-```powershell
-kubectl config current-context
-minikube image load income-api:study-v1
-kubectl create namespace ml-book-study
-kubectl apply -f deployment.yaml
-kubectl rollout status deployment/income-api -n ml-book-study --timeout=120s
-kubectl get pods -n ml-book-study -o wide
-kubectl get endpointslices -n ml-book-study
-kubectl port-forward service/income-api -n ml-book-study 18080:80
-```
-
-마지막 명령을 띄워 둔 채 다른 터미널에서 `curl.exe http://127.0.0.1:18080/`를 보내 `v1` 응답이 오는지 본다. Service가 고른 Pod에 붙어 보는 점검이라 부하 분산이나 외부 네트워크 경로까지 검증하지는 못한다.
-
-### 3. 성공 화면 대신 실패의 차이를 관찰하기
-
-한 번에 한 곳만 바꾸고, 테스트가 끝나면 YAML을 원래 값으로 되돌려 다시 적용한다. 여러 곳을 한꺼번에 바꾸면 원인을 가를 수 없다.
-
-| 바꿀 곳 | 예상 증상 | 확인할 증거 |
+| 메트릭 유형 | 예시 | 해석할 때 |
 | --- | --- | --- |
-| 이미지 태그를 존재하지 않는 값으로 변경 | 새 Pod에서 이미지 pull 실패 | `kubectl describe pod`의 Events |
-| Service selector를 `app: missing`으로 변경 | 준비된 앱이 있어도 대상이 없음 | Service와 EndpointSlice의 대상 |
-| readiness 경로를 `/not-found`로 변경 | 앱 프로세스는 살아도 Ready가 아님 | Pod의 Ready 조건과 probe 실패 이벤트 |
-| `targetPort`를 8001로 변경 | 일반 Service 접속은 앱 포트에 도달하지 못함 | 앱의 수신 포트와 Service 설정 비교 |
+| Counter | 요청 수, 오류 수 | 누적값이므로 구간 증가율(`rate`)로 읽는다 |
+| Gauge | 현재 메모리, 대기 작업 | 한 시점 값과 추세를 구분한다 |
+| Histogram | 지연 분포 | 분위수는 버킷 경계와 표본에 영향을 받는다 |
+| Summary | 개수, 합, 설정한 분위수 | 인스턴스별 분위수를 합산할 수 없다 |
 
-Pod가 Running인데 Ready가 아닐 수 있다. 롤링 업데이트 중에는 이전 버전 Pod가 계속 응답하면서 새 버전의 실패를 가리기도 한다. 응답만 보지 말고 rollout 상태와 실행 중인 이미지도 확인한다.
+요청 수 Counter가 10,000이라는 값은 프로세스가 언제 시작했는지에 따라 의미가 달라진다. 평균 지연만 보면 느린 일부 요청을 놓치므로 p95 같은 분위수를 보되 어떤 구간과 트래픽을 집계했는지 함께 적는다. 오류율을 계산할 때 요청이 없는 구간을 0%로 읽으면 수집 실패를 놓친다.
 
-점검이 끝나면 port-forward를 Ctrl+C로 멈추고 `kubectl delete -f deployment.yaml`로 이 예제의 Deployment와 Service만 지운다. Namespace나 클러스터 전체를 지울 필요는 없다.
+사용자 ID나 요청 ID를 label로 붙이면 시계열 수(카디널리티)가 폭증한다. 개별 요청의 맥락은 로그와 트레이스에 맡긴다. 요청 수, 오류율, 지연, 자원 사용량이 모두 정상이어도 예측이 맞는다는 보장은 없다. 데이터 변화와 예측 품질은 따로 관측해야 한다.
 
-## 메트릭을 요청 수로 직접 읽어 보기
+## 배포가 정상이어도 모델은 틀릴 수 있다
 
-Prometheus가 `http_requests_total`이라는 Counter를 수집한다고 해 보자. 다음 질의는 최근 5분 동안의 평균 초당 요청 수다. 실제 메트릭과 label 이름은 쓰는 계측 라이브러리에 맞춰 확인한다.
+컨테이너와 Kubernetes는 지정한 이미지를 실행하고 선언한 상태를 유지할 뿐, 모델의 품질을 판단하지 않는다. 이미지 생성, Pod 실행, 요청 연결, 예측 품질은 성공 조건이 서로 다르고 각각 증거가 필요하다. 같은 이미지라도 데이터, 외부 피처, 모델 파일이 같다는 보장은 없어서, 4장부터 MLflow와 Feast로 그 빈 곳을 기록하고 연결한다.
 
-```promql
-sum(rate(http_requests_total{job="income-api"}[5m]))
-```
+## 실습 {#ch03-practice}
 
-오류율은 5xx 요청의 증가율을 전체 요청의 증가율로 나눠 구한다. 전체 요청이 없는 구간을 정상 0%로 읽으면 안 된다. 트래픽이 없었던 것인지, 수집이 실패한 것인지 가려야 한다.
-
-```promql
-sum(rate(http_requests_total{job="income-api",status=~"5.."}[5m]))
-/
-sum(rate(http_requests_total{job="income-api"}[5m]))
-```
-
-두 질의가 정상이어도 모델의 분류는 틀릴 수 있다. 메트릭 수집 성공, HTTP 요청 성공, 예측의 정답 여부는 서로 다른 층이다. 다음 장에서 MLflow와 Feast를 붙이는 이유도 여기에 있다.
-
-## 운영에서 확인할 부분
-
-앱이 실행된다고 운영팀이 넘겨받을 수 있는 상태가 되지는 않는다.
-
-| 영역 | 설계할 것 | 증거로 확인할 것 |
-| --- | --- | --- |
-| 자원 | CPU, 메모리 requests/limits, GPU와 스케줄링 | 대표 부하에서 사용량, 대기, OOM 여부 |
-| 시작과 상태 | 초기화 시간, startup, readiness, liveness의 의미 | 느린 모델 로딩 때 불필요한 재시작이 없는지 |
-| 권한과 네트워크 | 최소 권한 ServiceAccount, RBAC, 통신 경계 | 허용, 거부되어야 할 접근의 실제 결과 |
-| 비밀과 이미지 | Secret 전달, 불변 이미지 식별, 취약점 점검 | 이미지에 자격 증명이 없고 출처를 추적하는지 |
-| 배포와 복구 | 변경 승인, 롤아웃, 이전 버전 복구 | 배포 실패 때 트래픽, 모델 버전을 되돌리는지 |
-
-Probe는 컨테이너 상태 검사다. startup은 초기화, readiness는 트래픽을 받을 준비, liveness는 실행 중 복구 필요 여부를 판단한다. requests/limits는 자원 요청량과 상한이고, OOM은 메모리가 부족해 실행이 중단되는 경우다.
-
-[Probe 공식 문서](https://kubernetes.io/docs/concepts/workloads/pods/probes/)에서 눈여겨볼 차이는 실패한 뒤의 동작이다. readiness가 실패하면 일반 Service 트래픽 대상에서 빠진다. liveness나 startup이 실패하면 설정된 조건과 재시작 정책에 따라 컨테이너가 재시작된다.
-
-Pod 자동 재시작이 모델이나 설정의 올바른 복구를 뜻하지는 않는다. 복제본 수, 노드 분산, 외부 저장소와 레지스트리 장애도 함께 봐야 한다. 비용 면에서는 모델 로딩과 대기로 GPU가 묶이는 시간, 이미지 전송, 유휴 자원을 본다.
-
-## 장애 확인 순서
-
-테스트 환경에서 Deployment가 관리하는 Pod를 지우면 새 Pod가 만들어지는 과정을 볼 수 있다. 기존 Pod의 재시작과 새 Pod의 생성은 구분해서 본다.
-
-증상은 꼬리를 물고 이어진다. 이미지 주소가 틀리면 Pod가 뜨지 않고, 그러면 Service에도 정상 대상이 없다. 이미지 가져오기, 프로세스 기동, Service 연결을 나눠 보면 원인을 좁히기 쉽다.
-
-## 배포 상태와 서비스 준비 조건
-
-### 동일 이미지와 예측 재현성
-
-이미지가 같아도 데이터, 외부 피처, 모델 파일, 런타임 설정까지 같다는 보장은 없다. 이미지 재현성과 ML 실험 재현성은 나눠서 봐야 한다.
-
-### Kubernetes 도입의 판단 기준
-
-여러 워크로드를 공통으로 운영할 필요와 클러스터 유지 비용을 견줘 본다. 책은 뒤에 나올 플랫폼 기능들을 연결할 기반으로 Kubernetes를 골랐다.
-
-복제본 수를 늘린다고 모델 초기화, GPU와 스토리지 제약, 잘못된 입력 문제가 풀리지는 않는다.
-
-## 마치며
-
-컨테이너와 Kubernetes는 지정한 이미지를 실행하고 선언한 상태를 유지한다. 모델의 품질까지 판단해 주지는 않는다. 잘못된 모델을 선언해도 배포 자체는 정상으로 보일 수 있다.
-
-그래서 배포 상태와 모델의 평가 결과는 따로 확인한 다음 연결해야 한다. 이미지 생성, Pod 실행, 요청 연결, 예측 품질은 성공 조건이 서로 다르고 증거도 각각 필요하다. 다음 장부터 ML 도구를 붙일 때도 기존 실행 기반과 모델 고유의 검증이 어디서 만나는지를 계속 보게 된다.
+이미지를 만들어 API를 Kubernetes에 올리고 요청 경로와 지표를 확인하는 과정은 [3장 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/ch03/)에 따로 모았다.
 
 [이전: 02. MLOps란 무엇인가](../02-what-is-mlops/), [시리즈 목차](../), [다음: 04~05. 실험, 피처, 파이프라인](../04-experiments-features-pipelines/)

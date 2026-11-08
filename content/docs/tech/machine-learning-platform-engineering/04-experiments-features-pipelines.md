@@ -2,7 +2,7 @@
 title: "04~05. 실험, 피처, 파이프라인 연결하기"
 description: "책 4~5장의 환경 설치와 실습을 따라가며 MLflow, Feast, Kubeflow Pipelines의 역할과 연결 구조 이해하기"
 date: 2026-10-18T21:30:00+09:00
-lastmod: 2026-11-08T18:00:00+09:00
+lastmod: 2026-11-08T19:00:00+09:00
 weight: 40
 draft: false
 tags: ["book-club", "ml-platform-engineering", "mlflow", "feature-store", "kubeflow"]
@@ -13,9 +13,7 @@ aliases:
 
 소득 분류 모델의 테스트 점수가 좋다고 해서 내일 같은 조건으로 예측을 만들 수 있는 것은 아니다. 어떤 데이터와 전처리로 학습했는지 알아야 하고, 추론할 사용자의 피처를 어느 시점 기준으로 가져올지도 정해야 한다. 다른 환경에서 같은 작업을 다시 돌릴 수 있느냐는 문제도 남는다. 4~5장은 이 틈을 MLflow, Feast, Kubeflow Pipelines로 메우는 과정이다.
 
-4장은 모델을 고르고 입력을 준비한다. 5장은 그 둘을 반복해서 실행할 수 있게 엮는다. 5장 예제는 새 모델을 학습하지 않고 4장에서 등록한 모델로 배치 추론만 한다. 그래서 설치 순서보다 각 도구가 다음 단계에 무엇을 넘기는지 따라가는 편이 이해하기 쉽다.
-
-책은 클러스터가 이미 있다고 보고 버킷 생성이나 설정 변경을 짧게 넘어간다. 그 빈 곳을 채우려고 [ml-platform-book-env](https://github.com/johklo/ml-platform-book-env)를 만들었고, 뒤의 [실습 순서](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/#book-lab-sop)에서 이 저장소로 책의 노트북과 파이프라인을 화면과 함께 실행한다.
+4장은 모델을 고르고 입력을 준비하고, 5장은 그 둘을 반복 실행할 수 있게 엮는다. 5장 예제는 새 모델을 학습하지 않고 4장에서 등록한 모델로 배치 추론만 하므로, 설치 순서보다 각 도구가 다음 단계에 무엇을 넘기는지가 중요하다.
 
 ## 실험 기록은 선택한 모델의 근거를 남긴다
 
@@ -35,9 +33,9 @@ MLflow가 재현에 필요한 조건을 모두 알아서 보관해 주지는 않
 
 그래서 정의를 등록하는 `feast apply`와 값을 Redis에 적재하는 `materialize`가 따로 있다. 과거 이력은 Offline store에서 읽고, 지연이 짧아야 하는 최신값은 Online store에서 읽는다. 정의는 하나이고, 목적에 따라 읽는 곳이 다르다.
 
-5장의 배치 추론은 온라인 최신값을 쓰지 않는다. 입력 파일에 사용자 ID와 기준 시각이 들어 있고, 그 시점에 맞는 피처를 조회한다. 6장의 API는 요청이 올 때 온라인 저장소에서 피처를 읽는다. 배치와 온라인은 데이터 건수만 다른 게 아니라 언제의 값으로 예측하느냐가 다르다.
+5장의 배치 추론은 온라인 최신값을 쓰지 않는다. 입력 파일에 사용자 ID와 기준 시각이 들어 있고, 그 시점에 맞는 피처를 조회한다. 6장의 API는 요청이 올 때 온라인 저장소에서 피처를 읽는다. 배치와 온라인은 데이터 건수와 함께 어느 시점의 값으로 예측하느냐가 다르다.
 
-피처 이름이 같다고 학습과 추론이 일치하지도 않는다. 책의 학습 노트북은 CSV를 직접 읽고, Feast는 따로 준비한다. 학습 데이터의 의미와 피처 정의, 인코딩을 서로 맞춰 보고, 필요하면 FeatureService와 데이터 스냅샷을 모델 기록에 연결해야 한다. 글 끝의 보충 예제가 이 빠진 연결을 직접 만들어 보는 연습이다.
+피처 이름이 같다고 학습과 추론이 일치하지도 않는다. 책의 학습 노트북은 CSV를 직접 읽고, Feast는 따로 준비한다. 학습 데이터의 의미와 피처 정의, 인코딩을 서로 맞춰 보고, 필요하면 FeatureService와 데이터 스냅샷을 모델 기록에 연결해야 한다. 책 코드에는 이 연결이 빠져 있어서 실습 기록에 따로 보충했다.
 
 ![Feast의 Registry, Offline store, Online store와 피처 조회 구조.](/images/ml-platform-engineering/figure-4-10.png "그림 4.10. Feast 피처 스토어 설계. 출처: Machine Learning Platform Engineering, 4장.")
 
@@ -64,4 +62,4 @@ KFP run ID는 실행을 구분할 뿐 예측 대상을 가리키지 않는다. �
 
 ## 실습 {#book-lab-sop}
 
-책 코드로 직접 실행한 순서와 결과 화면은 [4~5장 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)에 따로 모았다.
+책은 클러스터가 이미 있다고 보고 버킷 생성이나 설정 변경을 짧게 넘어간다. 그 빈 곳을 채운 환경 저장소 [ml-platform-book-env](https://github.com/johklo/ml-platform-book-env)로 책 코드를 실행한 순서와 결과 화면은 [4~5장 실습 기록](/docs/tech/machine-learning-platform-engineering/practice/ch04-05/)에 따로 모았다.

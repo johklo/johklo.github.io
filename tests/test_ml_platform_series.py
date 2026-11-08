@@ -24,6 +24,7 @@ PRACTICE_PAGES = {
     "12-llm-powered-systems": ("ch12", "book-ch12-sop"),
     "13-production-llm-systems": ("ch13", "book-ch13-sop"),
 }
+PRACTICE_EXTRA = ("ch03",)
 
 
 class PageLinks(HTMLParser):
@@ -148,7 +149,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
                 f"{SERIES_URL}{slug}/" for slug in self.visible
             } | {
                 f"{PRACTICE_URL}{page}/" for page, _ in PRACTICE_PAGES.values()
-            },
+            } | {f"{PRACTICE_URL}{page}/" for page in PRACTICE_EXTRA},
         )
 
     def test_chapters_explain_tools_within_the_sop_and_keep_legacy_redirects(self):
@@ -191,7 +192,9 @@ class MLPlatformPublicationTest(unittest.TestCase):
     def test_published_series_links_and_section_anchors_resolve(self):
         pages = [SERIES_URL, PRACTICE_URL] + [
             f"{SERIES_URL}{slug}/" for slug in sorted(self.visible)
-        ] + [f"{PRACTICE_URL}{page}/" for page, _ in PRACTICE_PAGES.values()]
+        ] + [f"{PRACTICE_URL}{page}/" for page, _ in PRACTICE_PAGES.values()] + [
+            f"{PRACTICE_URL}{page}/" for page in PRACTICE_EXTRA
+        ]
         for url in pages:
             document = self.page_path(url).read_text(encoding="utf-8")
             for href in PageLinks(document).links:
