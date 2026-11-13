@@ -1,17 +1,17 @@
 ---
 title: "Thinking Tools"
-description: "untools.co의 사고 도구 25개를 시스템 사고, 의사결정, 문제 해결, 커뮤니케이션 네 갈래로 정리"
+description: "untools.co의 사고 도구 25개를 시스템 사고, 의사결정, 문제 해결, 커뮤니케이션 네 갈래로 정리하고 이어 쓰는 사례를 더함"
 weight: 1
 sidebar:
   open: true
 ---
-[untools.co](https://untools.co/)가 모아 둔 사고 도구를 한국어로 다시 정리한 시리즈다. 원문을 옮기지 않고 도구마다 쓰임새, 쓰는 순서, 한계를 적고 IT 프로젝트와 클라우드 컨설팅 상황에 맞춘 예시를 하나씩 붙였다. 분류는 untools가 붙인 네 범주를 그대로 따르고, 범주마다 문서 하나로 묶었다.
+[untools.co](https://untools.co/)가 모아 둔 사고 도구를 한국어로 다시 정리한 시리즈다. 원문을 옮기지 않고 도구마다 쓰임새, 쓰는 순서, 한계를 적고, 누구나 겪을 만한 일상 업무 상황으로 단계별 예시와 그림을 붙였다. 분류는 untools가 붙인 네 범주를 그대로 따르고 범주마다 문서 하나로 묶었으며, 도구를 여러 개 이어 실제 문제를 푸는 흐름은 [05. 사고 도구를 이어 쓰는 모델 기반 접근](/docs/business/thinking-tools/05-model-based-approach/)에 사례 세 개로 정리했다.
 
 | 도구 | 분류 | 언제 쓰나 | 문서 링크 |
 | --- | --- | --- | --- |
 | Iceberg Model(빙산 모델) | 시스템 사고 | 같은 사고가 반복되어 근본 구조를 찾을 때 | [01. 시스템 사고](/docs/business/thinking-tools/01-systems-thinking/#iceberg-model) |
 | Connection circles(연결 원) | 시스템 사고 | 요소 사이 인과와 순환 고리를 그려 볼 때 | [01. 시스템 사고](/docs/business/thinking-tools/01-systems-thinking/#connection-circles) |
-| Concept map(개념 지도) | 시스템 사고 | 낯선 시스템이나 개념을 구조로 이해할 때 | [01. 시스템 사고](/docs/business/thinking-tools/01-systems-thinking/#concept-map) |
+| Concept map(개념 지도) | 시스템 사고 | 낯선 업무나 개념을 구조로 이해할 때 | [01. 시스템 사고](/docs/business/thinking-tools/01-systems-thinking/#concept-map) |
 | Reinforcing feedback loop(강화 피드백 루프) | 시스템 사고 | 문제가 눈덩이처럼 커지는 이유를 설명할 때 | [01. 시스템 사고](/docs/business/thinking-tools/01-systems-thinking/#reinforcing-feedback-loop) |
 | Balancing feedback loop(균형 피드백 루프) | 시스템 사고 | 변화가 일정 수준에서 멈추거나 되돌아올 때 | [01. 시스템 사고](/docs/business/thinking-tools/01-systems-thinking/#balancing-feedback-loop) |
 | Six Thinking Hats(여섯 색깔 모자) | 의사결정 | 회의에서 관점이 한쪽으로 쏠릴 때 | [02. 의사결정](/docs/business/thinking-tools/02-decision-making/#six-thinking-hats) |
@@ -34,5 +34,6 @@ sidebar:
 | Productive Thinking Model(생산적 사고 모델) | 문제 해결 | 정의된 문제를 실행 계획까지 끌고 갈 때 | [03. 문제 해결](/docs/business/thinking-tools/03-problem-solving/#productive-thinking-model) |
 | Minto Pyramid(민토 피라미드) | 커뮤니케이션 | 보고와 메일을 결론부터 쓸 때 | [04. 커뮤니케이션](/docs/business/thinking-tools/04-communication/#minto-pyramid) |
 | Situation-Behavior-Impact(SBI) | 커뮤니케이션 | 판단을 빼고 피드백을 전할 때 | [04. 커뮤니케이션](/docs/business/thinking-tools/04-communication/#situation-behavior-impact) |
+| 여러 도구를 이어 쓰기 | 사례 | 원인 분석, 의사결정, 기획을 처음부터 끝까지 풀 때 | [05. 모델 기반 접근](/docs/business/thinking-tools/05-model-based-approach/) |
 
 {{< section-list >}}
