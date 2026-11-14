@@ -81,7 +81,7 @@ aliases:
 
 - [x] [Getting Things Done](/docs/book/gtd/)
 - [x] [달리기를 말할 때 내가 하고 싶은 이야기](/docs/book/murakami-run/)
-- [ ] [Four Thousand Weeks - Time Management for portals]
+- [ ] Four Thousand Weeks - Time Management for portals
 
 ## 독서 기록
 
