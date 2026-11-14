@@ -1,6 +1,6 @@
 ---
-title: "Book"
-description: "읽은 책과 독서 기록"
+title: Book
+description: 읽은 책과 독서 기록
 weight: 4
 sidebar:
   open: true
@@ -12,7 +12,6 @@ aliases:
   - /docs/book/ai-reading-plan/
   - /wiki/book/ai-reading-plan/
 ---
-
 ## Consulting
 
 - [ ] The Secrets of Consulting: A Guide to Giving and Getting Advice Successfully
@@ -82,6 +81,7 @@ aliases:
 
 - [x] [Getting Things Done](/docs/book/gtd/)
 - [x] [달리기를 말할 때 내가 하고 싶은 이야기](/docs/book/murakami-run/)
+- [ ] [Four Thousand Weeks - Time Management for portals]
 
 ## 독서 기록
 
