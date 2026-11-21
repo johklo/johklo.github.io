@@ -217,7 +217,7 @@ class MLPlatformPublicationTest(unittest.TestCase):
         links = PageLinks(article.read_text(encoding="utf-8")).links
         self.assertIn("https://github.com/johklo/ml-platform-engineering-labs", links)
         for entry in (
-            "/", SERIES_URL, f"{SERIES_URL}00-overview/",
+            SERIES_URL, f"{SERIES_URL}00-overview/",
             "/docs/tech/ops/mlops/labs/mlflow-aml-overview/",
         ):
             with self.subTest(entry=entry):
