@@ -2,8 +2,8 @@ baseURL: "https://johklo.github.io/"
 title: "John Kim · Cloud, Tech, AI & Business"
 theme: hextra
 
-locale: ko
-defaultContentLanguage: ko
+locale: en
+defaultContentLanguage: en
 hasCJKLanguage: true
 enableRobotsTXT: false  # static/robots.txt is used as-is
 enableGitInfo: true

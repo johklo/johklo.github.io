@@ -1,18 +1,18 @@
 ---
-title: "[책] Machine Learning Platform Engineering"
-description: ML 플랫폼의 기초부터 모델 운영, RAG와 LLMOps까지 다루는 독서노트
+title: "[Book] Machine Learning Platform Engineering"
+description: "Reading notes from ML platform basics through model operations, RAG and LLMOps"
 weight: 1
 sidebar:
   open: false
 ---
 Benjamin Tan Wei Hao, Shanoop Padmanabhan, Varun Mallya.
 
-모델 학습부터 서비스 운영까지 실험 추적, 데이터 준비, 배포, 모니터링, LLM 운영을 다룬다.
+The book covers experiment tracking, data preparation, deployment, monitoring and LLM operations, from model training to running a service.
 
-각 장은 개념과 예제, 실패 원인을 정리한다.
+Each chapter note covers the concepts, the examples and what tends to break. The notes are written in Korean.
 
-책의 흐름을 실행하는 [통합 실습 가이드](/docs/tech/ops/mlops/labs/)에서는 영화 추천, 합성 카드 탐지, RAG를 별도 저장소의 코드로 실습한다.
+The [integrated labs](/docs/tech/ops/mlops/labs/) follow the book with movie recommendations, synthetic card fraud detection and RAG, using code from a separate repository.
 
-도구와 운영 책임은 가상 서점 Bookway의 [MLOps](/docs/tech/ops/mlops/), [LLMOps](/docs/tech/ops/llmops/) 가이드에서 실무 흐름으로 연결한다.
+Tooling and operational ownership carry over to the [MLOps](/docs/tech/ops/mlops/) and [LLMOps](/docs/tech/ops/llmops/) guides for the fictional Bookway bookstore.
 
 {{< section-list >}}

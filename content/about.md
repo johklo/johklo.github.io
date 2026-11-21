@@ -5,16 +5,16 @@ title: About
 
 ## Motto
 
-> 약간은 손해보는 마음으로 살자.
+> Live willing to come out a little behind.
 
 ## About Me
 
-- 인생을 의미있게 보내고 싶습니다.
+- I want to spend my life on things that matter.
 
 ## Life
 
-- 야외 활동과 운동을 즐겨합니다.
-- 자유로운 정신으로 살고자 합니다.
-- 신변잡기에 관심이 많습니다.
-- 하루의 점 하나를 남기고자 블로그를 합니다.
+- I enjoy the outdoors and exercise.
+- I try to live with a free spirit.
+- I am curious about the small things of everyday life.
+- I blog to leave one dot for each day.
 

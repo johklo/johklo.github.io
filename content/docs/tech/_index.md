@@ -1,6 +1,6 @@
 ---
 title: "Tech"
-description: "개발, 인프라, 클라우드 등 기술 관련 내용 정리"
+description: "Notes on software, infrastructure and cloud"
 weight: 1
 sidebar:
   open: true

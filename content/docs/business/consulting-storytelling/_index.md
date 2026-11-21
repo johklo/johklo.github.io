@@ -1,6 +1,6 @@
 ---
-title: "컨설팅 스토리텔링 원칙"
-description: "피라미드 원칙, SCQA, 수평·수직 논리, Sparkline, ABT, SUCCESs, tell-tell-tell을 고쳐 쓰기 예시와 함께 나눠 정리한 시리즈"
+title: "Consulting Storytelling Principles"
+description: "A series on the Pyramid Principle, SCQA, horizontal and vertical logic, Sparkline, ABT, SUCCESs and tell-tell-tell, each with rewrite examples"
 date: 2026-11-14T08:00:00+09:00
 lastmod: 2026-11-14T08:40:00+09:00
 tags: ["business", "storytelling", "presentation", "consulting"]

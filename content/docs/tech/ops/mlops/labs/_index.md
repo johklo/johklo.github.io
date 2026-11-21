@@ -1,6 +1,6 @@
 ---
-title: "MLOps 실습: MLflow, Azure ML과 ML 플랫폼 통합"
-description: "Wine 분류의 MLflow와 Azure ML 실습 01~06편, 영화 추천, 합성 카드 탐지, RAG를 잇는 ML 플랫폼 실습 00~10편"
+title: "MLOps Labs: MLflow, Azure ML and ML Platform Integration"
+description: "MLflow and Azure ML labs 01-06 on Wine classification, and ML platform labs 00-10 covering movie recommendations, synthetic card fraud detection and RAG"
 date: 2026-10-21T09:55:00+09:00
 lastmod: 2026-10-25T19:40:00+09:00
 weight: 2

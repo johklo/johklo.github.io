@@ -1,6 +1,6 @@
 ---
 title: Book
-description: 읽은 책과 독서 기록
+description: Books I have read and my reading notes
 weight: 4
 sidebar:
   open: true
@@ -83,6 +83,6 @@ aliases:
 - [x] [달리기를 말할 때 내가 하고 싶은 이야기](/docs/book/murakami-run/)
 - [ ] Four Thousand Weeks - Time Management for Mortals
 
-## 독서 기록
+## Reading log
 
 {{< section-list >}}

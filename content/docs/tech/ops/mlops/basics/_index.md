@@ -1,6 +1,6 @@
 ---
-title: "도구 기초 가이드"
-description: "MLflow, Feast, Kubeflow Pipelines, BentoML의 설치와 실무 활용 가이드"
+title: "Tool Basics"
+description: "Installing and using MLflow, Feast, Kubeflow Pipelines and BentoML in practice"
 date: 2026-10-25T19:30:00+09:00
 weight: 1
 tags: ["mlops", "mlflow", "feast", "kubeflow", "bentoml", "hands-on"]

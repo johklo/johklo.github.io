@@ -1,5 +1,5 @@
 ---
-title: "[책] Generative AI System Design Interview"
+title: "[Book] Generative AI System Design Interview"
 description: "English study notes on designing GenAI systems: requirements, ML framing, data, models, evaluation, serving and interview questions"
 weight: 4
 sidebar:

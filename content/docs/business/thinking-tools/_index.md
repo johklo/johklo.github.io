@@ -1,6 +1,6 @@
 ---
 title: "Thinking Tools"
-description: "untools.co의 사고 도구 25개를 시스템 사고, 의사결정, 문제 해결, 커뮤니케이션 네 갈래로 정리하고 이어 쓰는 사례를 더함"
+description: "The 25 thinking tools from untools.co, grouped into systems thinking, decision making, problem solving and communication, with worked examples that chain them"
 weight: 1
 sidebar:
   open: true

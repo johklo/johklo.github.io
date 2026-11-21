@@ -1,6 +1,6 @@
 ---
 title: "Insight"
-description: "생각, 배움, 영감을 남긴 글"
+description: "Thoughts, lessons and things that inspired me"
 weight: 5
 sidebar:
   open: true

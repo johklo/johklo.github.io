@@ -34,11 +34,11 @@
   {{- end }}
   <p class="doc-actions">
     {{- with $edit }}
-      <a href="{{ . | safeURL }}" target="_blank" rel="noopener">✎ 이 문서 수정하기</a>
+      <a href="{{ . | safeURL }}" target="_blank" rel="noopener">✎ Edit this page</a>
     {{- end }}
     {{- with $new }}
-      <a href="{{ . | safeURL }}" target="_blank" rel="noopener">+ 이 카테고리에 새 문서 만들기</a>
+      <a href="{{ . | safeURL }}" target="_blank" rel="noopener">+ New page in this section</a>
     {{- end }}
-    <a class="doc-actions__alt" href="https://github.com/johklo/johklo.github.io/edit/master/content/{{ $path }}" target="_blank" rel="noopener">GitHub에서 수정</a>
+    <a class="doc-actions__alt" href="https://github.com/johklo/johklo.github.io/edit/master/content/{{ $path }}" target="_blank" rel="noopener">Edit on GitHub</a>
   </p>
 {{- end -}}

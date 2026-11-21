@@ -1,6 +1,6 @@
 ---
 title: "MLOps"
-description: "가상 서점 Bookway의 추천 모델로 연결한 데이터, 학습, 피처, 평가, 배포와 관측"
+description: "Data, training, features, evaluation, deployment and observability, tied together through the Bookway bookstore recommender"
 date: 2026-10-25T08:43:00+09:00
 weight: 1
 tags: ["mlops", "platform-engineering"]

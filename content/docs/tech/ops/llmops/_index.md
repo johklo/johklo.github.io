@@ -1,6 +1,6 @@
 ---
 title: "LLMOps"
-description: "Bookway 안내 도우미의 문서 준비, 검색, 생성, 도구 실행, 평가, 배포와 운영"
+description: "Document prep, retrieval, generation, tool calls, evaluation, deployment and operations for the Bookway help assistant"
 date: 2026-04-12T00:00:00+09:00
 lastmod: 2026-10-25T08:43:00+09:00
 weight: 2
