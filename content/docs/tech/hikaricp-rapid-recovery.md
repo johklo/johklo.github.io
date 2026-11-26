@@ -175,6 +175,195 @@ flowchart LR
 | 4. 정합성 | 멱등 키, 상태 기록 후 외부 호출, 대사 | 끊긴 쓰기가 중복되거나 어긋나도 바로잡는다 | 설계 변경이 필요하다. 대기 시간은 줄이지 않는다 |
 | 4. 정합성 | DB 재실행 기능(Oracle Application Continuity) | 조건이 맞으면 끊긴 작업을 DB가 다시 실행한다 | 지원 데이터 소스와 연결 상태 초기화 조건이 필요하다 |
 
+아래는 방안별 세부 내용이다.
+
+### 5.1 빨리 감지하기
+
+#### 드라이버 socket timeout
+
+쿼리를 보내고 응답을 기다리는 동안 연결이 끊기면, 이 값이 대기를 끝내는 유일한 장치다. 운영체제의 TCP 재전송 한도(리눅스 `tcp_retries2=15`, 15분 이상)를 기다리지 않게 한다.
+
+```properties
+# Oracle(ojdbc). 단위 ms
+oracle.jdbc.ReadTimeout=15000
+oracle.net.CONNECT_TIMEOUT=5000
+```
+
+```java
+HikariConfig c = new HikariConfig();
+c.addDataSourceProperty("oracle.jdbc.ReadTimeout", "15000");
+c.addDataSourceProperty("oracle.net.CONNECT_TIMEOUT", "5000");
+```
+
+- 값은 "가장 긴 정상 쿼리보다 충분히 길게, 복구 목표보다 짧게"로 정한다. HikariCP는 가장 긴 트랜잭션의 2~3배 또는 30초 중 큰 값을 출발점으로 제시한다.
+- 배치나 보고서처럼 긴 쿼리가 섞이면 전체 값을 늘리지 말고, 긴 쿼리만 `Statement.setQueryTimeout()`이나 별도 풀로 분리한다.
+- 이 timeout이 나면 Oracle은 `ORA-18730`(소켓 읽기 timeout)을 던지고, HikariCP는 그 연결을 버린다.
+
+#### validationTimeout
+
+연결을 꺼내 줄 때 `isValid()` 검사에 쓰는 최대 시간이다. 검사는 마지막 사용 뒤 500ms가 지난 연결에만 한다.
+
+```java
+c.setConnectionTimeout(5000);   // 연결을 얻기까지 기다리는 최대 시간
+c.setValidationTimeout(1000);   // 검사 한 번의 최대 시간. connectionTimeout보다 작게
+```
+
+- 죽은 연결 하나를 걸러 내는 데 최대 `validationTimeout`이 걸린다. 풀에 죽은 연결이 N개면 최악의 경우 N × `validationTimeout`이 걸려 `connectionTimeout`을 넘는다. 3초에서 1초로 줄이면 같은 시간 안에 세 배 많은 연결을 걸러 낸다.
+- 너무 짧으면(250ms 근처) 순간적인 지연에도 정상 연결을 버린다. 네트워크 왕복 시간의 수십 배 이상으로 둔다.
+
+#### keepaliveTime
+
+풀에서 쉬는 연결을 주기적으로 꺼내 `isValid()`로 확인한다. 사용자가 꺼내기 전에 죽은 연결을 걸러 내므로, 장애 뒤 첫 요청들이 검사 시간을 떠안지 않는다.
+
+```java
+c.setKeepaliveTime(60_000);    // 최소 30초. maxLifetime보다 작게
+c.setMaxLifetime(1_500_000);
+```
+
+- 쓰는 중인 연결에는 효과가 없다.
+- 주기가 짧을수록 빨리 걸러 내지만 DB에 검사 쿼리가 늘어난다. 연결 수 × (1 / 주기)만큼 늘어난다.
+
+#### OS TCP keepalive
+
+쉬는 연결에 운영체제가 작은 검사 패킷을 보내 상대가 살아 있는지 확인한다. HikariCP README는 풀이 0으로 줄어 회복하지 못하는 경우를 막으려면 켜라고 안내한다.
+
+```properties
+# 드라이버에서 keepalive 사용
+oracle.net.KEEPALIVE=true
+# ojdbc 21c 이상은 소켓별 주기를 지정할 수 있다(버전별 지원 여부 확인)
+oracle.net.TCP_KEEPIDLE=60
+oracle.net.TCP_KEEPINTERVAL=10
+oracle.net.TCP_KEEPCOUNT=3
+```
+
+```yaml
+# Kubernetes: Pod 단위로 OS 값을 낮춘다(1.29부터 safe sysctl)
+securityContext:
+  sysctls:
+    - { name: net.ipv4.tcp_keepalive_time,   value: "60" }
+    - { name: net.ipv4.tcp_keepalive_intvl,  value: "10" }
+    - { name: net.ipv4.tcp_keepalive_probes, value: "3" }
+```
+
+- 리눅스 기본값은 7,200초 뒤 첫 검사라, 켜기만 하고 주기를 줄이지 않으면 효과가 거의 없다.
+- 위 값이면 쉬는 연결이 끊긴 뒤 약 60 + 10 × 3 = 90초 안에 감지한다.
+- 보낼 데이터가 남아 있는 연결(쿼리 중)에는 keepalive가 아니라 재전송 한도와 socket timeout이 적용된다.
+
+#### 네트워크 장비의 유휴 timeout
+
+LB, NAT 게이트웨이, 방화벽은 일정 시간 트래픽이 없는 연결 상태를 지운다. 많은 장비가 이때 RST를 보내지 않아, 다음 쿼리가 응답 없이 멈춘다. 예를 들어 Azure Standard Load Balancer는 기본 4분 유휴 뒤 흐름을 조용히 버린다.
+
+- 경로에 있는 장비의 유휴 timeout을 모두 찾고, `keepaliveTime`과 OS keepalive 주기를 그중 가장 짧은 값보다 짧게 둔다.
+- 장비가 지원하면 유휴 종료 때 RST를 보내도록 켠다(Azure LB의 TCP reset). 그러면 애플리케이션이 바로 오류를 받는다.
+- `maxLifetime`도 장비와 DB의 연결 시간 제한보다 몇 초 짧게 둔다.
+
+### 5.2 빨리 회복하기
+
+#### 첫 네트워크 오류에서 풀 전체 교체
+
+네트워크 단절은 같은 경로의 연결을 한꺼번에 죽인다. HikariCP는 오류가 난 연결 하나만 버리므로, 나머지 죽은 연결은 각자 검사나 timeout을 거쳐야 정리된다. 첫 오류를 신호로 풀 전체를 교체하면 이 대기가 사라진다.
+
+```java
+// 연결 오류(SQLRecoverableException 등)를 잡는 공통 위치에서 호출
+private final AtomicLong lastEvict = new AtomicLong();
+
+void onConnectionFailure(HikariDataSource ds, SQLException e) {
+    if (!(e instanceof SQLRecoverableException)) return;   // 연결 계열 오류만
+    long now = System.currentTimeMillis();
+    long prev = lastEvict.get();
+    if (now - prev > 10_000 && lastEvict.compareAndSet(prev, now)) {   // 10초에 한 번만
+        ds.getHikariPoolMXBean().softEvictConnections();   // 쉬는 연결은 즉시, 쓰는 중인 연결은 반납 때 교체
+    }
+}
+```
+
+- `softEvictConnections()`는 쓰는 중인 연결을 강제로 끊지 않는다. 진행 중인 쿼리는 자기 timeout까지 간다.
+- 정상 연결까지 다시 맺으므로, 짧은 시간에 여러 번 호출되지 않게 간격을 둔다.
+- 어떤 예외에서 연결을 버릴지 바꾸려면 `exceptionOverrideClassName`에 `SQLExceptionOverride` 구현을 지정한다.
+
+#### maxLifetime
+
+연결을 일정 시간마다 새로 맺는다. 장비나 DB가 오래된 연결을 끊기 전에 먼저 교체해, 끊긴 연결을 쓸 확률을 줄인다.
+
+- 경로의 가장 짧은 연결 시간 제한보다 몇 초 짧게 둔다. 기본값 30분.
+- 쓰는 중인 연결은 반납될 때 교체된다. HikariCP는 연결마다 약간씩 다르게 적용해 한꺼번에 끊기지 않게 한다.
+
+#### JVM DNS 캐시 TTL
+
+장애 조치 때 DB 주소(DNS)가 새 노드로 바뀌는 구조라면, JVM이 옛 주소를 캐시해 회복이 늦어질 수 있다.
+
+```java
+// 애플리케이션 시작 시 가장 먼저(첫 이름 조회 전에)
+java.security.Security.setProperty("networkaddress.cache.ttl", "30");
+```
+
+- 주소가 바뀌지 않는 구조(고정 IP, 같은 이름의 VIP)라면 효과가 없다.
+
+#### 장애 조치를 아는 드라이버와 프록시
+
+DB 서비스가 노드 구성 정보를 제공하면, 드라이버가 DNS 전파나 timeout을 기다리지 않고 새 기본 노드로 바로 연결한다.
+
+- AWS Advanced JDBC Wrapper: Aurora 클러스터 구성 정보로 새 writer를 찾는다. HikariCP와 함께 쓸 수 있다.
+- Amazon RDS Proxy: 애플리케이션과 DB 사이에서 연결을 유지하고, 장애 조치 때 대상만 바꾼다.
+- 특정 DB 서비스에 종속되며, 진행 중인 트랜잭션은 보통 실패한다.
+
+#### DB 쪽 장애 알림(Oracle FAN, UCP)
+
+Oracle RAC는 노드나 서비스 상태가 바뀌면 FAN(Fast Application Notification) 이벤트를 보낸다. Oracle UCP의 Fast Connection Failover는 이 이벤트를 받아 해당 노드의 연결을 바로 버린다. 풀이 timeout으로 알아챌 때까지 기다리지 않는다.
+
+- RAC와 ONS(알림 서비스) 구성이 필요하다. 서드파티 풀은 Oracle이 안내하는 방식으로 FAN을 연동해야 한다.
+- 단일 인스턴스 DB나 네트워크 경로만 끊기는 경우(DB는 정상)에는 이벤트가 나지 않는다.
+
+### 5.3 영향 범위 줄이기
+
+#### 용도별 풀 분리(벌크헤드)
+
+한 풀이 죽은 연결을 기다리는 동안 그 풀을 쓰는 모든 기능이 함께 멈춘다. 결제 승인, 조회, 배치처럼 중요도와 쿼리 성격이 다른 경로는 풀을 나눈다.
+
+```java
+HikariDataSource paymentPool = new HikariDataSource(paymentConfig); // 짧은 timeout, 작은 풀
+HikariDataSource queryPool   = new HikariDataSource(queryConfig);   // 조회용
+HikariDataSource batchPool   = new HikariDataSource(batchConfig);   // 긴 쿼리용, 긴 timeout
+```
+
+- 경로마다 timeout을 다르게 줄 수 있어, 짧은 timeout과 긴 쿼리의 충돌도 함께 해결된다.
+- 전체 연결 수가 늘어나므로 DB의 최대 연결 수를 함께 본다.
+
+#### 서킷 브레이커와 짧은 connectionTimeout
+
+장애 중에는 요청마다 `connectionTimeout`만큼 기다렸다 실패한다. 그동안 스레드와 요청이 쌓여 애플리케이션 전체가 느려진다. 서킷 브레이커는 실패가 이어지면 일정 시간 바로 실패시키고, 가끔 시험 요청으로 회복을 확인한다.
+
+```java
+CircuitBreaker db = CircuitBreaker.of("db", CircuitBreakerConfig.custom()
+    .failureRateThreshold(50)
+    .slowCallDurationThreshold(Duration.ofSeconds(3))
+    .waitDurationInOpenState(Duration.ofSeconds(10))
+    .build());   // Resilience4j
+```
+
+- 실패를 빨리 돌려주므로 상위(클라이언트, Gateway)가 재시도나 다른 경로를 고를 수 있다.
+- 바로 실패한 요청에 대한 처리(재시도 여부, 사용자 안내)가 상위에 있어야 한다.
+
+### 5.4 끊긴 거래 바로잡기
+
+#### 멱등 키, 상태 기록, 대사
+
+위 방안은 기다리는 시간을 줄일 뿐, 끊긴 순간 처리 중이던 쓰기의 결과는 알 수 없다. 쓰기는 결과가 불명확해도 정합성이 맞도록 설계한다.
+
+```sql
+-- 외부 호출 전에 먼저 기록하고, 결과로 확정한다
+INSERT INTO payment (tx_id, status) VALUES (:txId, 'PENDING');   -- tx_id는 멱등 키(UNIQUE)
+-- 외부 승인 호출(같은 tx_id를 멱등 키로 전달)
+UPDATE payment SET status = 'APPROVED' WHERE tx_id = :txId;
+```
+
+- 같은 요청이 다시 오면 `tx_id` 중복으로 한 번만 처리된다.
+- `PENDING`으로 남은 거래는 다시 결제하지 않고, 외부 시스템 상태 조회와 정기 대사로 확정한다.
+
+#### DB 재실행(Oracle Application Continuity)
+
+Oracle Application Continuity는 연결이 끊기면 DB가 그 요청의 작업을 다시 실행해, 애플리케이션이 오류를 보지 않게 한다. UCP 같은 지원 데이터 소스와 요청 경계 표시, 재실행 가능한 연결 상태 같은 조건이 맞아야 한다. 외부 시스템 호출은 재실행 대상이 아니므로, 결제처럼 DB 밖 부작용이 있는 흐름에는 멱등 키 설계가 여전히 필요하다.
+
 모든 값은 장애 주입 시험으로 확인한 뒤 정한다. 이 글의 3장처럼 DB 쪽에서 패킷을 버리면(DROP) RST 없는 끊김을 재현할 수 있다. AWS도 Aurora 빠른 장애 조치 가이드에서 같은 방식(패킷 차단 시험)을 권한다.
 
 ## 6. 한계
