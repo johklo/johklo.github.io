@@ -5,6 +5,7 @@ date: 2026-11-26T08:00:00+09:00
 tags: ["llm-inference", "gpu", "kubernetes", "vllm", "dynamo", "architecture"]
 math: false
 draft: false
+aliases: ["/docs/tech/token-factory-architecture/"]
 ---
 
 A **token factory** is an inference platform whose product is generated tokens. Raw inputs are power, GPUs, and model weights. The output is a stream of tokens sold or consumed at a target latency and cost. The term describes a shift in how inference platforms are designed: instead of "hosting a model", the goal is to maximize **useful tokens per second per dollar** while meeting latency targets for every tenant.
