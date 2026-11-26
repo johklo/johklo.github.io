@@ -1,7 +1,7 @@
 ---
 title: "HikariCP 연결 복구: 끊긴 연결이 풀에 남을 때"
 description: "네트워크가 RST 없이 끊겼을 때 HikariCP가 어디까지 복구하고 어디서 기다리는지, 설정별 감지 지점과 실험 결과로 정리"
-date: 2026-11-26T09:40:00+09:00
+date: 2026-11-26T08:00:00+09:00
 tags: ["hikaricp", "jdbc", "oracle", "tcp", "resilience"]
 math: false
 draft: false
