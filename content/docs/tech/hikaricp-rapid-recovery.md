@@ -145,7 +145,39 @@ sequenceDiagram
 | 일괄 사망 대응 | `softEvictConnections()` 또는 `SQLExceptionOverride` | 네트워크 오류를 처음 잡았을 때 풀 전체 교체 |
 | 주소 변경 대응 | JVM DNS 캐시 TTL | DB 주소가 바뀔 수 있으면 `networkaddress.cache.ttl`을 짧게 |
 
-## 5. 한계
+## 5. 극복 방안
+
+연결이 소리 없이 끊기는 것 자체는 애플리케이션이 막을 수 없다. 할 수 있는 것은 **빨리 알아채기, 빨리 회복하기, 영향 범위 줄이기, 끊긴 거래 바로잡기** 네 가지다. 위로 갈수록 설정만으로 되고, 아래로 갈수록 구조나 코드 변경이 필요하다.
+
+```mermaid
+flowchart LR
+    accTitle: 조용한 연결 끊김 대응 단계
+    accDescr: 끊김이 생기면 먼저 timeout과 검사로 빨리 감지하고, 풀 비우기와 장애 조치 인식 드라이버로 빨리 회복하며, 풀 분리와 서킷 브레이커로 영향 범위를 줄이고, 멱등 키와 대사로 끊긴 거래를 바로잡는다.
+    E["연결이 RST 없이 끊김"] --> D["1. 빨리 감지<br/>socket timeout, 검사, keepalive"]
+    D --> R["2. 빨리 회복<br/>풀 비우기, 장애 조치 인식 드라이버, DNS TTL"]
+    R --> L["3. 영향 범위 축소<br/>풀 분리, 서킷 브레이커, 쿼리별 timeout"]
+    L --> C["4. 정합성 복구<br/>멱등 키, 대사"]
+```
+
+| 단계 | 방안 | 효과 | 비용·주의 |
+| --- | --- | --- | --- |
+| 1. 감지 | 드라이버 socket timeout을 복구 목표에 맞춤 | 쿼리 중 끊김의 최대 대기 시간을 정한다 | 정상인 긴 쿼리도 끊긴다. 긴 쿼리는 쿼리별 timeout으로 분리 |
+| 1. 감지 | `validationTimeout` 단축(1~3초) | 꺼낼 때 죽은 연결 하나당 대기를 줄인다 | 죽은 연결이 많으면 `connectionTimeout`에 걸릴 수 있다 |
+| 1. 감지 | `keepaliveTime`과 OS TCP keepalive 단축 | 쉬는 연결을 사용자보다 먼저 걸러 낸다 | 쓰는 중인 연결에는 효과 없음 |
+| 1. 감지 | 네트워크 장비의 유휴 timeout 확인(LB, NAT, 방화벽) | 장비가 연결을 조용히 버리는 것을 막거나 RST를 받게 한다 | keepalive 주기를 장비 timeout보다 짧게. Azure LB는 TCP reset 옵션 제공 |
+| 2. 회복 | 첫 네트워크 오류에서 풀 전체 교체(`softEvictConnections`, `SQLExceptionOverride`) | 같은 시각에 함께 죽은 연결을 한 번에 정리한다 | 정상 연결도 다시 맺는다. 짧은 시간에 연결이 몰리지 않게 조절 |
+| 2. 회복 | `maxLifetime`을 DB·인프라 제한보다 짧게 | 오래된 연결이 장비 timeout에 걸리기 전에 교체한다 | 쓰는 중인 연결은 반납 뒤에 교체된다 |
+| 2. 회복 | JVM DNS 캐시 TTL 단축 | 장애 조치 뒤 새 주소로 빨리 붙는다 | DB 엔드포인트가 DNS로 바뀌는 구조에서만 의미 |
+| 2. 회복 | 장애 조치를 아는 드라이버·프록시 | DNS 전파나 timeout을 기다리지 않고 새 대상을 찾는다 | AWS Advanced JDBC Wrapper, RDS Proxy처럼 DB 서비스에 종속된다 |
+| 2. 회복 | DB 쪽 장애 알림(Oracle FAN, UCP Fast Connection Failover) | DB가 노드 상태 변화를 풀에 알려 죽은 연결을 바로 버린다 | Oracle RAC와 UCP(또는 FAN 연동) 구성이 필요하다 |
+| 3. 범위 | 용도별 풀 분리(벌크헤드) | 한 경로의 장애가 다른 기능의 연결까지 막지 않게 한다 | 전체 연결 수가 늘어난다 |
+| 3. 범위 | 서킷 브레이커, 짧은 `connectionTimeout` | 장애 중 스레드가 쌓이는 것을 막고 빨리 실패한다 | 실패 응답에 대한 상위 처리 필요 |
+| 4. 정합성 | 멱등 키, 상태 기록 후 외부 호출, 대사 | 끊긴 쓰기가 중복되거나 어긋나도 바로잡는다 | 설계 변경이 필요하다. 대기 시간은 줄이지 않는다 |
+| 4. 정합성 | DB 재실행 기능(Oracle Application Continuity) | 조건이 맞으면 끊긴 작업을 DB가 다시 실행한다 | 지원 데이터 소스와 연결 상태 초기화 조건이 필요하다 |
+
+모든 값은 장애 주입 시험으로 확인한 뒤 정한다. 이 글의 3장처럼 DB 쪽에서 패킷을 버리면(DROP) RST 없는 끊김을 재현할 수 있다. AWS도 Aurora 빠른 장애 조치 가이드에서 같은 방식(패킷 차단 시험)을 권한다.
+
+## 6. 한계
 
 - 쓰는 중인 연결은 socket timeout까지 기다릴 수밖에 없다. 연결이 소리 없이 사라지면 애플리케이션이 알 수 있는 것은 "응답이 없다"는 사실뿐이고, 이를 판단하는 방법은 시간밖에 없다.
 - timeout을 줄이면 복구는 빨라지지만 정상인 느린 요청도 끊긴다. 값은 장애 주입 시험으로 확인한 뒤 정한다.
@@ -158,3 +190,19 @@ sequenceDiagram
 - [HikariCP Wiki: Setting Driver or OS TCP Keepalive](https://github.com/brettwooldridge/HikariCP/wiki/Setting-Driver-or-OS-TCP-Keepalive)
 - [HikariCP Wiki: Bad Behavior: Handling Database Down](https://github.com/brettwooldridge/HikariCP/wiki/Bad-Behavior:-Handling-Database-Down)
 - [AWS Builders' Library: Timeouts, retries, and backoff with jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/)
+
+### 관련 사례와 문서
+
+- [Red Hat: Configure HikariCP for Spring Boot on OpenShift 4](https://developers.redhat.com/articles/2026/11/20/configure-hikaricp-spring-boot-red-hat-openshift-4): 장애 뒤 연결 추가 스레드가 소켓 읽기에서 멈춘 사례와 keepalive·수명 설정
+- [우아한형제들: 절대적 Rule을 지켜 – Config Checker 개발기](https://techblog.woowahan.com/7242/): 설정 원인 장애를 검토한 뒤 Hikari `maxLifetime`을 RDS `wait_timeout`보다 짧게 두도록 설정 검사기를 만든 사례
+- [AWS: Fast failover with Amazon Aurora PostgreSQL](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/AuroraPostgreSQL.BestPractices.FastFailover.html): 패킷 차단 시험, TCP keepalive, JDBC `socketTimeout`/`connectTimeout`, JVM DNS TTL 권장
+- [AWS China: 从分钟到秒级 — Amazon Advanced JDBC Wrapper 插件最佳实践](https://aws.amazon.com/cn/blogs/china/amazon-advanced-jdbc-wrapper-plugin-best-practices/): HikariCP와 Aurora 시험에서 장애 조치 플러그인 유무에 따른 회복 시간 비교
+- [AWS: Unlock Amazon Aurora's Advanced Features with Standard JDBC Driver using AWS Advanced JDBC Wrapper](https://aws.amazon.com/blogs/database/unlock-amazon-auroras-advanced-features-with-standard-jdbc-driver-using-aws-advanced-jdbc-wrapper/): HikariCP와 함께 쓰는 장애 조치 인식 드라이버
+- [AWS: Improving application availability with Amazon RDS Proxy](https://aws.amazon.com/blogs/database/improving-application-availability-with-amazon-rds-proxy/): 장애 조치 때 응답 없는 TCP 연결 문제와 프록시로 쉬는 연결을 유지하는 방식
+- [AWS: Using RDS Proxy with Amazon RDS Multi-AZ to improve planned failover time](https://aws.amazon.com/blogs/database/using-rds-proxy-with-amazon-rds-multi-az-db-instance-deployment-to-improve-planned-failover-time/): OS 업그레이드 같은 계획된 유지보수 중 장애 조치 시간 측정
+- [Microsoft: Load Balancer TCP Reset and idle timeout](https://learn.microsoft.com/azure/load-balancer/load-balancer-tcp-reset): Azure Standard Load Balancer가 유휴 흐름을 기본 4분 뒤 조용히 버리는 동작과 TCP reset 옵션
+- [Microsoft: Connection resiliency, JDBC Driver for SQL Server](https://learn.microsoft.com/sql/connect/jdbc/connection-resiliency): 끊긴 쉬는 연결을 드라이버가 복원하는 기능과 그 범위(열린 트랜잭션은 재실행하지 않음)
+- [Microsoft: Handle transient connectivity errors, Azure Database for PostgreSQL](https://learn.microsoft.com/azure/postgresql/troubleshoot/concepts-connectivity): 재시도와 지수 백오프, 커밋 결과가 불명확한 쓰기의 처리
+- [Oracle: Configuring FAN for Specific Drivers and Pools](https://docs.oracle.com/en/database/oracle/oracle-database/26/haovw/configuring-fan-specific-drivers-and-pools.html): RAC 노드 상태 변화를 풀에 알리는 FAN과 UCP Fast Connection Failover
+- [Oracle: Ensuring Application Continuity](https://docs.oracle.com/en/database/oracle/oracle-database/26/jjucp/application-continuity-using-ucp.html): UCP와 Application Continuity로 끊긴 작업을 재실행하는 조건
+- [CYBERTEC: TCP keepalive for a better PostgreSQL experience](https://www.cybertec-postgresql.com/en/tcp-keepalive-for-a-better-postgresql-experience/): HikariCP README가 안내하는 OS 수준 keepalive 설정
