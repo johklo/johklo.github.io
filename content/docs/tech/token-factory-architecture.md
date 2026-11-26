@@ -1,6 +1,6 @@
 ---
 title: "Token Factory: A Reference Architecture for LLM Inference at Scale"
-description: "The layers, technology stack, request flow, and control loops of a platform that turns GPUs into tokens, the NVIDIA DGX SuperPOD blueprint, and how to build the equivalent on Azure"
+description: "The layers, technology stack, request flow, control loops, and model release pipeline of a platform that turns GPUs into tokens, the NVIDIA DGX SuperPOD blueprint, and how to build the equivalent on Azure"
 date: 2026-11-26T08:00:00+09:00
 tags: ["llm-inference", "gpu", "kubernetes", "vllm", "dynamo", "architecture"]
 math: false
@@ -206,7 +206,51 @@ flowchart TB
 - **Placement:** a multi-GPU replica must start all of its pods together (gang scheduling) on GPUs connected by NVLink. Partial placement wastes GPUs.
 - **Cold start:** loading weights is often the slowest part of scaling. Node-local caches, streaming loaders, and keeping a warm pool decide how fast the factory can absorb a burst.
 
-## 7. Metering and multi-tenancy
+## 7. Model pipeline: from weights to a production endpoint
+
+The control loops keep a running model healthy. A separate pipeline decides **what** runs: it turns a new model, a new quantization, or a new engine version into a production endpoint without breaking latency targets or output quality. In a token factory this pipeline runs often, because each new model, engine release, or GPU generation changes cost per token.
+
+```mermaid
+flowchart LR
+    accTitle: Model release pipeline of a token factory
+    accDescr: A model moves through intake, optimization, engine build, quality evaluation, performance profiling, packaging, weight staging, and progressive rollout. Quality and performance gates can send it back to optimization. Production telemetry feeds the next iteration. Rollback returns traffic to the previous version.
+    IN["1. Intake<br/>weights, license, provenance"] --> OPT["2. Optimize<br/>quantize FP8/FP4, prune, draft model"]
+    OPT --> BLD["3. Build<br/>engine per GPU type and parallelism"]
+    BLD --> EV["4. Quality gate<br/>accuracy, safety, regression evals"]
+    EV -- "fails" --> OPT
+    EV --> PF["5. Performance gate<br/>goodput sweep, pick serving config"]
+    PF -- "misses target" --> OPT
+    PF --> PK["6. Package and register<br/>image, weights, config, model card"]
+    PK --> ST["7. Stage weights<br/>object store to cache to node NVMe"]
+    ST --> RO["8. Progressive rollout<br/>shadow, canary, full"]
+    RO -- "SLO or quality regression" --> RB["Rollback to previous version"]
+    RO --> PR["Production"]
+    PR -. "telemetry, traffic mix" .-> PF
+```
+
+| Stage | What happens | Typical tools | Exit criterion |
+| --- | --- | --- | --- |
+| 1. Intake | Pull weights and tokenizer, check license and provenance, scan artifacts, pin an exact revision | Hugging Face Hub, internal model registry, artifact scanning | Weights are reproducible from a pinned source |
+| 2. Optimize | Quantize (FP8, FP4, INT4 weight-only), optionally prune or distill, train or select a draft model for speculative decoding | NVIDIA TensorRT Model Optimizer, llm-compressor, AutoAWQ, GPTQ tooling | Smaller memory footprint with acceptable accuracy loss |
+| 3. Build | Compile or configure the engine for each target GPU type and parallelism layout (TP, PP, EP). Engines and kernels are GPU-generation specific | TensorRT-LLM engine build, vLLM and SGLang configs, NIM profiles | One artifact per GPU type and layout |
+| 4. Quality gate | Run task benchmarks and the tenant's own golden sets, safety and refusal tests, compare against the current production version | lm-evaluation-harness, custom eval sets, safety evals | No regression beyond the agreed threshold |
+| 5. Performance gate | Sweep concurrency and input/output lengths that match real traffic. Measure TTFT, ITL, throughput, goodput. Choose batch size, TP width, aggregated versus disaggregated, prefill:decode ratio | GenAI-Perf / AIPerf, vLLM benchmark scripts, Dynamo profiler | Goodput per GPU meets the cost target at the latency SLO |
+| 6. Package and register | Store image, weights, engine, serving config, and model card as one versioned unit | Container registry, model registry, OCI artifacts | Immutable, signed release |
+| 7. Stage weights | Copy weights and engines to the regions and clusters that will serve them, pre-warm node caches | Object storage, parallel file system, node-local NVMe, model streaming loaders | Cold start within target on every serving pool |
+| 8. Progressive rollout | Shadow traffic, then canary through router traffic split, then full rollout. Watch TTFT, ITL, error rate, and online quality signals. Keep the old version warm until the new one is stable | Gateway API Inference Extension, llm-d, Dynamo router, KServe, Argo Rollouts | SLO and quality hold under real traffic |
+
+Design points:
+
+- **Version the whole unit.** A served model is weights + tokenizer + engine + serving config + parallelism layout + engine version. Changing any one of them can change both quality and cost, so release them together.
+- **Gate on goodput, not peak throughput.** The performance gate uses the traffic shape seen in production (prompt and output length distribution, concurrency, prefix reuse), not a synthetic best case.
+- **Quality and performance gates loop back.** A quantization that fails the quality gate or a layout that misses the latency target goes back to optimization, not to production.
+- **Build per hardware target.** Engines built for H100 do not run optimally on GB200, and FP4 needs Blackwell. A mixed fleet needs one build and one performance profile per GPU type.
+- **Adapters have their own lighter pipeline.** LoRA adapters for tenants skip engine build and weight staging of the base model, but still go through quality gates and per-tenant rollout.
+- **Close the loop.** Production telemetry (traffic mix, cache hit rate, tail latency) feeds the next performance profiling run, so serving configs follow real demand.
+
+On Azure, the same pipeline usually runs in GitHub Actions or Azure Pipelines. Azure Container Registry holds images and OCI artifacts. Azure Machine Learning registries or Blob Storage hold versioned weights. Evaluation and profiling jobs run on GPU node pools in AKS. Azure Managed Lustre and local NVMe handle staging. The router in AKS performs the canary split.
+
+## 8. Metering and multi-tenancy
 
 Tokens are the unit of cost, so the platform meters tokens, not requests.
 
@@ -217,7 +261,7 @@ Tokens are the unit of cost, so the platform meters tokens, not requests.
 | Isolation | Separate pools for regulated tenants or fine-tuned models. LoRA adapters let many tenants share one base model pool |
 | Billing | Token counts from the serving engine (the source of truth), emitted per request with tenant, model, and latency |
 
-## 8. What matters most
+## 9. What matters most
 
 1. **Design for goodput, not peak throughput.** Pick TTFT and ITL targets per workload first, then tune batch size and concurrency to the highest throughput that still meets them.
 2. **Treat KV cache as the primary resource.** Prefix-aware routing, prefix caching, and tiered offload usually return more than adding GPUs.
@@ -226,9 +270,10 @@ Tokens are the unit of cost, so the platform meters tokens, not requests.
 5. **Start aggregated, disaggregate when the data says so.** Long prompts, high concurrency, and ITL spikes from prefill interference are the signals.
 6. **Reduce cost per token in the engine.** FP8 or FP4 quantization, speculative decoding, and right-sized tensor parallelism are the largest levers after utilization.
 7. **Make scaling fast.** Weight loading and gang scheduling decide how quickly capacity follows demand.
-8. **Measure per request.** TTFT, ITL, token counts, and cache hits per request and per tenant. Averages hide the tail that users notice.
+8. **Ship models through gates.** Every new model, quantization, or engine version passes quality and goodput gates and a canary before it takes full traffic.
+9. **Measure per request.** TTFT, ITL, token counts, and cache hits per request and per tenant. Averages hide the tail that users notice.
 
-## 9. The hardware blueprint: NVIDIA DGX SuperPOD
+## 10. The hardware blueprint: NVIDIA DGX SuperPOD
 
 The architecture above assumes GPU nodes with fast scale-up and scale-out links. NVIDIA's **DGX SuperPOD** is the reference design for building that floor of the factory on premises. The current generation is built from DGX GB200 NVL72 racks.
 
@@ -267,11 +312,11 @@ flowchart TB
 | Compute fabric | InfiniBand NDR 400 Gb/s, four ConnectX-7 NICs per tray | Cross-rack collectives, multi-rack model parallelism, cross-rack KV transfer over RDMA |
 | Storage and in-band fabric | Ethernet through BlueField-3 DPUs | Weight loading, checkpoints, datasets, without interfering with GPU traffic |
 | Out-of-band network | BMC and switch management | Hardware lifecycle, power, health |
-| Software | NVIDIA Mission Control (including Run:ai orchestration), Base Command Manager, Slurm or Kubernetes, NVIDIA AI Enterprise software such as NIM and Dynamo | Cluster provisioning, health, scheduling, and the serving stack from sections 2 to 6 |
+| Software | NVIDIA Mission Control (including Run:ai orchestration), Base Command Manager, Slurm or Kubernetes, NVIDIA AI Enterprise software such as NIM and Dynamo | Cluster provisioning, health, scheduling, and the serving stack from sections 2 to 7 |
 
 The design principle is **separation of traffic by purpose**: NVLink for scale-up inside a rack, InfiniBand for GPU traffic between racks, Ethernet for storage and management. A token factory depends on the first two for parallelism and KV transfer, and on the third for fast weight loading.
 
-## 10. Building the same thing on Azure
+## 11. Building the same thing on Azure
 
 On Azure, the hardware layer is delivered as virtual machines on the same class of systems, and the customer builds the control plane, serving stack, and gateway on top.
 
@@ -318,7 +363,7 @@ Points to plan for on Azure:
 - **Keep NVLink-domain work inside one domain.** For ND GB200 v6, place a model replica that needs wide parallelism within the 18 VMs of one NVL72 domain. Use InfiniBand for traffic between domains.
 - **Enable RDMA in Kubernetes deliberately.** Disaggregated serving and multi-node parallelism need the InfiniBand devices exposed to pods, for example through the NVIDIA Network Operator. Without it, KV transfer falls back to TCP.
 - **Stage weights close to the GPUs.** Blob to Managed Lustre to local NVMe is the usual path. Cold-start time is usually bounded by this pipeline, not by the engine.
-- **Split responsibilities.** Azure runs the physical layer that a SuperPOD owner would run. The customer still owns the serving stack, routing, autoscaling, and metering described in sections 2 to 8.
+- **Split responsibilities.** Azure runs the physical layer that a SuperPOD owner would run. The customer still owns the serving stack, routing, autoscaling, and metering described in sections 2 to 9.
 
 ## References
 
@@ -332,5 +377,8 @@ Points to plan for on Azure:
 - [Azure Managed Lustre](https://learn.microsoft.com/azure/azure-managed-lustre/)
 - [CycleCloud Workspace for Slurm](https://learn.microsoft.com/azure/cyclecloud/overview-ccws)
 - [SGLang](https://docs.sglang.ai/)
+- [NVIDIA TensorRT Model Optimizer](https://github.com/NVIDIA/TensorRT-Model-Optimizer)
+- [LM Evaluation Harness](https://github.com/EleutherAI/lm-evaluation-harness)
+- [Argo Rollouts](https://argoproj.github.io/rollouts/)
 - [Efficient Memory Management for Large Language Model Serving with PagedAttention (Kwon et al., 2023)](https://arxiv.org/abs/2309.06180)
 - [DistServe: Disaggregating Prefill and Decoding for Goodput-optimized LLM Serving (Zhong et al., 2024)](https://arxiv.org/abs/2401.09670)
